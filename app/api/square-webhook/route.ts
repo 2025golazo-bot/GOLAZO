@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-
+export const dynamic = 'force-dynamic';
 /**
  * Squareの過去売上・顧客データを一括取得するエンドポイント
  * 呼び出しURL例: GET /api/sync/square?startDate=2025-10-01T00:00:00Z
