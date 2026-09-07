@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
+
+// ビルド時のエラー（DYNAMIC_SERVER_USAGE）を防止する設定
 export const dynamic = 'force-dynamic';
-/**
- * Squareの過去売上・顧客データを一括取得するエンドポイント
- * 呼び出しURL例: GET /api/sync/square?startDate=2025-10-01T00:00:00Z
- */
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
