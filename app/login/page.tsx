@@ -1,83 +1,101 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setLoading(false);
-    if (error) {
-      setError("メールアドレスまたはパスワードが正しくありません");
-      return;
+    setError('');
+
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // ログイン成功時はトップページへリダイレクト
+      router.push('/');
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message || 'ログインに失敗しました。メールアドレスとパスワードをご確認ください。');
+    } finally {
+      setLoading(false);
     }
-    router.replace("/");
-    router.refresh();
-  }
+  };
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-8 shadow-card"
-      >
-        <h1 className="text-center text-xl font-bold text-primary-dark">
-          GYM MANAGER
-        </h1>
-        <p className="text-center text-sm text-ink/50">スタッフ用ログイン</p>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+      <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-sm border border-slate-200 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[#5e9bc4]">GYM MANAGER</h1>
+          <p className="text-xs text-slate-500 mt-1">ログインして管理画面へ進んでください</p>
+        </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg">
             {error}
-          </p>
+          </div>
         )}
 
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink/60">
-            メールアドレス
-          </label>
-          <input
-            type="email"
-            required
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-ink/60">
-            パスワード
-          </label>
-          <input
-            type="password"
-            required
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
-        >
-          {loading ? "ログイン中..." : "ログイン"}
-        </button>
-      </form>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-1">メールアドレス</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@domain.com"
+              className="w-full p-2.5 border rounded-lg text-sm bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-600 block mb-1">パスワード</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full p-2.5 border rounded-lg text-sm bg-white"
+            />
+          </div>
+
+          {/* パスワード再設定へのリンク */}
+          <div className="text-right pt-1">
+            <Link href="/forgot-password" className="text-xs text-slate-500 hover:text-[#5e9bc4] underline">
+              パスワードをお忘れの方はこちら
+            </Link>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 bg-[#5e9bc4] text-white font-bold rounded-lg shadow hover:opacity-90 transition-opacity text-sm disabled:opacity-50"
+          >
+            {loading ? 'ログイン中...' : 'ログイン'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
