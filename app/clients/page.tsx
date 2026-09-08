@@ -1,70 +1,36 @@
-import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import RealtimeWatcher from "@/components/RealtimeWatcher";
-import AlertBadge from "@/components/AlertBadge";
-import NewClientForm from "@/components/NewClientForm";
-import { formatDate } from "@/lib/utils";
-import type { ClientDetails } from "@/types/database";
+'use client';
 
-export const dynamic = "force-dynamic";
+import { useState } from 'react';
 
-export default async function ClientsPage() {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("view_client_details")
-    .select("*")
-    .order("child_name", { ascending: true });
-
-  const clients: ClientDetails[] = data || [];
+export default function ClientsPage() {
+  const [clients] = useState([
+    { id: '1', name: '山田 太郎', phone: '090-1234-5678', goal: 'ダイエット・体幹強化', lastVisit: '2026-09-01' },
+    { id: '2', name: '鈴木 花子', phone: '080-9876-5432', goal: '姿勢改善・ピラティス', lastVisit: '2026-09-02' },
+  ]);
 
   return (
-    <div className="space-y-6">
-      <RealtimeWatcher tables={["clients"]} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-ink">顧客カルテ一覧</h1>
-        <NewClientForm />
+    <main className="p-6 max-w-7xl mx-auto space-y-8 bg-gray-50 min-h-screen">
+      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+        <h1 className="text-2xl font-black text-gray-900">顧客カルテ管理</h1>
+        <p className="text-xs text-gray-500 mt-1">会員様の目標、トレーニングカルテ、コンディショニング履歴</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {clients.length === 0 && (
-          <p className="col-span-full text-center text-ink/40">
-            顧客データがありません
-          </p>
-        )}
-        {clients.map((c) => (
-          <Link
-            key={c.id}
-            href={`/clients/${c.id}`}
-            className="block rounded-2xl bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-ink">{c.child_name}</h2>
-              <span className="text-sm text-ink/50">{c.current_age}歳</span>
+      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+        <h2 className="text-lg font-bold text-gray-900">会員一覧</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {clients.map((c) => (
+            <div key={c.id} className="p-4 border rounded-xl bg-gray-50 space-y-2">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-sm text-gray-900">{c.name}</h3>
+                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">会員</span>
+              </div>
+              <p className="text-xs text-gray-600">TEL: {c.phone}</p>
+              <p className="text-xs text-gray-600">目標: {c.goal}</p>
+              <p className="text-[11px] text-gray-400">最終来店: {c.lastVisit}</p>
             </div>
-            <p className="mb-3 text-sm text-ink/60">
-              保護者: {c.parent_name || "未設定"}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {c.follow_status === "needs_follow_2weeks" && (
-                <AlertBadge tone="warning">⚠️ フォロー推奨（2週間空き）</AlertBadge>
-              )}
-              {c.follow_status === "needs_follow_1month" && (
-                <AlertBadge tone="warning">⚠️ フォロー推奨（1ヶ月空き）</AlertBadge>
-              )}
-              {c.is_ticket_last_one && (
-                <AlertBadge tone="urgent">🚨 残り1回（次回提案）</AlertBadge>
-              )}
-              {c.is_measurement_month && (
-                <AlertBadge tone="info">🎯 今月は3ヶ月測定月</AlertBadge>
-              )}
-            </div>
-            <p className="mt-3 text-xs text-ink/40">
-              次回予約日: {formatDate(c.next_reservation_date)}
-            </p>
-          </Link>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
