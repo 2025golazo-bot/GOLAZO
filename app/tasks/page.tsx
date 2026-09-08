@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Task, MeetingNote, Staff } from '../../types'; // ※フォルダ階層に合わせて適宜パスを調整してください
+import { Task, MeetingNote, Staff } from '../types';
 
 export default function TaskAndMeetingPage() {
   const [selectedMonth, setSelectedMonth] = useState('2026-09');
