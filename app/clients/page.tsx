@@ -7,10 +7,6 @@ interface Measurement {
   weight: number;
   fat: number;
   muscle: number;
-  postureImage1?: string;
-  postureImage2?: string;
-  postureImage3?: string;
-  testResultImage?: string;
 }
 
 interface Session {
@@ -18,15 +14,14 @@ interface Session {
   date: string;
   content: string;
   homework: string;
-  homeworkPhoto?: string;
   memo: string;
 }
 
 interface Client {
   id: string;
-  childName: string; // お子様のお名前
-  parentName: string; // 保護者様のお名前
-  birthday: string; // 誕生日 (年齢自動計算用)
+  childName: string;
+  parentName: string;
+  birthday: string; // 自動年齢計算用
   phone: string;
   goal: string;
   firstSessionDate: string;
@@ -37,7 +32,7 @@ interface Client {
 }
 
 export default function ClientsPage() {
-  // 年齢を自動計算する関数
+  // ① 年齢の自動計算ロジック
   const calculateAge = (birthDateStr: string) => {
     if (!birthDateStr) return '未設定';
     const birth = new Date(birthDateStr);
@@ -50,7 +45,6 @@ export default function ClientsPage() {
     return `${age}歳`;
   };
 
-  // サンプル顧客データ
   const [clients, setClients] = useState<Client[]>([
     {
       id: '1',
@@ -60,19 +54,19 @@ export default function ClientsPage() {
       phone: '080-9876-5432',
       goal: 'サッカーの俊敏性向上・体幹ブレの改善',
       firstSessionDate: '2026-03-10',
-      nextReservationDate: '2026-09-25', // 2週間〜1ヶ月チェック用
-      memo: '毎週火曜日に通うジュニア会員。体幹トレーニングに前向き。',
+      nextReservationDate: '2026-09-25',
+      memo: '毎週火曜日に通うジュニア会員。',
       measurements: [
-        { date: '2026-06-01', weight: 42.5, fat: 16.2, muscle: 33.1 }, // 3ヶ月前
-        { date: '2026-09-01', weight: 43.0, fat: 15.8, muscle: 34.0 }, // 直近計測
+        { date: '2026-06-01', weight: 42.5, fat: 16.2, muscle: 33.1 },
+        { date: '2026-09-01', weight: 43.0, fat: 15.8, muscle: 34.0 },
       ],
       sessions: [
         {
           id: 's1',
           date: '2026-09-01',
-          content: 'KOBA式体幹バランストレーニング ＆ アジリティドリル',
+          content: 'KOBA式体幹バランストレーニング',
           homework: 'フロントプランク 1分×2セット',
-          memo: '前回よりブレが少なくなっている。宿題も毎日継続中。',
+          memo: 'ブレが少なくなっている。',
         },
       ],
     },
@@ -84,8 +78,8 @@ export default function ClientsPage() {
       phone: '090-1234-5678',
       goal: '猫背改善・ダイエット',
       firstSessionDate: '2025-11-01',
-      nextReservationDate: '2026-07-10', // 予約が1ヶ月以上空いているためアラート対象の例
-      memo: 'デスクワークによる腰痛持ち。フットアライメント調整を実施。',
+      nextReservationDate: '2026-07-10',
+      memo: 'デスクワークによる腰痛持ち。',
       measurements: [
         { date: '2026-05-10', weight: 72.0, fat: 22.5, muscle: 52.0 },
       ],
@@ -95,12 +89,12 @@ export default function ClientsPage() {
 
   const [selectedClient, setSelectedClient] = useState<Client>(clients[0]);
 
-  // 新規セッション追加フォーム用 state
   const [newSessionDate, setNewSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [newSessionContent, setNewSessionContent] = useState('');
   const [newSessionHomework, setNewSessionHomework] = useState('');
   const [newSessionMemo, setNewSessionMemo] = useState('');
 
+  // 新規セッション追加
   const handleAddSession = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSessionContent) return alert('セッション内容を入力してください。');
@@ -122,42 +116,56 @@ export default function ClientsPage() {
     setNewSessionContent('');
     setNewSessionHomework('');
     setNewSessionMemo('');
-    alert('セッション記録を追加しました！');
+    alert('セッション記録を保存しました！');
   };
 
-  // 次回予約が2週間〜1ヶ月以上空いているかチェックする判定
+  // ② 予約間隔の自動判定 (2週間〜1ヶ月空きアラート)
   const checkReservationAlert = (nextDateStr: string) => {
-    if (!nextDateStr) return { alert: true, text: '⚠️ 次回予約なし' };
+    if (!nextDateStr) return { alert: true, text: '⚠️ 次回予約なし (要フォロー)' };
     const nextDate = new Date(nextDateStr);
     const today = new Date();
     const diffTime = nextDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) {
-      return { alert: true, text: '⚠️ 予約日が過ぎています（フォロー必要）' };
-    }
-    if (diffDays > 14) {
-      return { alert: true, text: `⚠️ 前回から2週間以上空いています (${diffDays}日後)` };
-    }
+    if (diffDays < 0) return { alert: true, text: '⚠️ 予約日が過ぎています' };
+    if (diffDays > 14) return { alert: true, text: `⚠️ 前回セッションから2週間以上空いています (${diffDays}日後)` };
     return { alert: false, text: `次回予約日: ${nextDateStr} (順調)` };
   };
+
+  // ③ 3ヶ月定期計測サイクルの自動判定
+  const checkMeasurementCycle = (measurements: Measurement[]) => {
+    if (!measurements || measurements.length === 0) return { alert: true, text: '🔄 初回計測が必要です' };
+    const lastMeasure = measurements[measurements.length - 1];
+    const lastDate = new Date(lastMeasure.date);
+    const today = new Date();
+    const diffDays = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 80) { // 約3ヶ月 (90日前後) 経過で自動通知
+      return { alert: true, text: `🔔 最終計測から ${diffDays}日経過：3ヶ月定期計測の時期です！` };
+    }
+    return { alert: false, text: `直近計測日: ${lastMeasure.date} (周期内)` };
+  };
+
+  const measureAlert = checkMeasurementCycle(selectedClient.measurements);
 
   return (
     <main className="p-6 max-w-7xl mx-auto space-y-8 bg-gray-50 min-h-screen">
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900">顧客カルテ管理 (Square連携)</h1>
-          <p className="text-xs text-gray-500 mt-1">会員様の目標、セッション記録、3ヶ月定期計測、フォローアップ管理</p>
+          <h1 className="text-2xl font-black text-gray-900">顧客カルテ管理 (自動更新・自動判定)</h1>
+          <p className="text-xs text-gray-500 mt-1">年齢自動計算・3ヶ月計測サイクル自動通知・予約フォロー</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左側：会員リスト */}
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3 lg:col-span-1">
           <h2 className="text-sm font-bold text-gray-900 border-b pb-2">会員一覧 ({clients.length}名)</h2>
           <div className="space-y-2 overflow-y-auto max-h-[600px]">
             {clients.map((c) => {
-              const alertInfo = checkReservationAlert(c.nextReservationDate);
+              const resAlert = checkReservationAlert(c.nextReservationDate);
+              const measureAlertItem = checkMeasurementCycle(c.measurements);
+              const needsAttention = resAlert.alert || measureAlertItem.alert;
+
               return (
                 <div
                   key={c.id}
@@ -171,18 +179,18 @@ export default function ClientsPage() {
                     <span className="text-xs font-bold text-blue-600">{calculateAge(c.birthday)}</span>
                   </div>
                   <p className="text-[11px] text-gray-500">保護者: {c.parentName}</p>
-                  <p className={`text-[10px] font-bold ${alertInfo.alert ? 'text-amber-600' : 'text-gray-400'}`}>
-                    {alertInfo.text}
-                  </p>
+                  {needsAttention && (
+                    <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">
+                      要確認アラートあり
+                    </span>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* 右側：選択された会員の詳細カルテ */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6 lg:col-span-2">
-          {/* 会員基本情報 */}
           <div className="border-b pb-4 space-y-3">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
@@ -190,16 +198,14 @@ export default function ClientsPage() {
                   {selectedClient.childName}{' '}
                   <span className="text-sm font-normal text-gray-500">({calculateAge(selectedClient.birthday)})</span>
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">保護者様名: {selectedClient.parentName} / TEL: {selectedClient.phone}</p>
+                <p className="text-xs text-gray-500 mt-0.5">保護者様: {selectedClient.parentName} / TEL: {selectedClient.phone}</p>
               </div>
-              <div className="text-right">
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-xl">
-                  初回セッション: {selectedClient.firstSessionDate}
-                </span>
-              </div>
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-xl">
+                初回: {selectedClient.firstSessionDate}
+              </span>
             </div>
 
-            {/* 予約フォローアップアラートバナー */}
+            {/* 予約フォローアップアラート */}
             <div className={`p-3 rounded-xl text-xs font-bold border ${
               checkReservationAlert(selectedClient.nextReservationDate).alert
                 ? 'bg-amber-50 text-amber-800 border-amber-200'
@@ -208,18 +214,24 @@ export default function ClientsPage() {
               {checkReservationAlert(selectedClient.nextReservationDate).text}
             </div>
 
+            {/* 3ヶ月定期計測サイクル自動判定アラート */}
+            <div className={`p-3 rounded-xl text-xs font-bold border ${
+              measureAlert.alert ? 'bg-purple-50 text-purple-800 border-purple-200' : 'bg-gray-50 text-gray-700 border-gray-200'
+            }`}>
+              {measureAlert.text}
+            </div>
+
             <div className="bg-gray-50 p-4 rounded-xl space-y-2 text-xs border">
               <p><strong className="text-gray-700">悩み・目標:</strong> <span className="text-gray-900 font-medium">{selectedClient.goal}</span></p>
               <p><strong className="text-gray-700">指導メモ:</strong> <span className="text-gray-900 font-medium">{selectedClient.memo}</span></p>
             </div>
           </div>
 
-          {/* 3ヶ月周期の定期計測セクション */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-base font-bold text-gray-900">①〜⑤ 3ヶ月定期計測・身体データ推移</h3>
               <span className="text-[11px] bg-purple-50 text-purple-700 font-bold px-2.5 py-1 rounded-lg border border-purple-200">
-                🔄 3ヶ月周期計測対象
+                🔄 3ヶ月周期自動判定
               </span>
             </div>
 
@@ -231,7 +243,7 @@ export default function ClientsPage() {
                     <th className="p-2.5 font-bold">体重 (kg)</th>
                     <th className="p-2.5 font-bold">体脂肪率 (%)</th>
                     <th className="p-2.5 font-bold">筋肉量 (kg)</th>
-                    <th className="p-2.5 font-bold">姿勢・テスト写真</th>
+                    <th className="p-2.5 font-bold">姿勢・テストデータ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -241,9 +253,7 @@ export default function ClientsPage() {
                       <td className="p-2.5 text-blue-600 font-bold">{m.weight} kg</td>
                       <td className="p-2.5 text-gray-700">{m.fat} %</td>
                       <td className="p-2.5 text-gray-700">{m.muscle} kg</td>
-                      <td className="p-2.5 text-gray-400 text-[11px]">
-                        [姿勢チェック画像3枚登録済] <br /> [テスト結果写真登録済]
-                      </td>
+                      <td className="p-2.5 text-gray-400 text-[11px]">[写真・姿勢チェック記録済]</td>
                     </tr>
                   ))}
                 </tbody>
@@ -251,7 +261,6 @@ export default function ClientsPage() {
             </div>
           </div>
 
-          {/* セッション記録追加フォーム */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
             <h3 className="text-sm font-bold text-gray-900">新規セッション記録の追加</h3>
             <form onSubmit={handleAddSession} className="space-y-3 text-xs">
@@ -269,7 +278,7 @@ export default function ClientsPage() {
                   <label className="font-bold text-gray-700">セッション内容</label>
                   <input
                     type="text"
-                    placeholder="例: 体幹トレーニング ＆ フットアライメント"
+                    placeholder="例: 体幹トレーニング"
                     value={newSessionContent}
                     onChange={(e) => setNewSessionContent(e.target.value)}
                     className="w-full mt-1 p-2 border rounded-lg bg-white"
@@ -281,16 +290,16 @@ export default function ClientsPage() {
                 <label className="font-bold text-gray-700">宿題 (写真添付可能)</label>
                 <input
                   type="text"
-                  placeholder="例: プランク 1分×2回 (写真アップロード可)"
+                  placeholder="例: プランク 1分×2回"
                   value={newSessionHomework}
                   onChange={(e) => setNewSessionHomework(e.target.value)}
                   className="w-full mt-1 p-2 border rounded-lg bg-white"
                 />
               </div>
               <div>
-                <label className="font-bold text-gray-700">メモ・気づき</label>
+                <label className="font-bold text-gray-700">メモ</label>
                 <textarea
-                  placeholder="本人のコンディションや特記事項"
+                  placeholder="本人の様子"
                   value={newSessionMemo}
                   onChange={(e) => setNewSessionMemo(e.target.value)}
                   className="w-full mt-1 p-2 border rounded-lg bg-white h-16"
@@ -302,11 +311,10 @@ export default function ClientsPage() {
             </form>
           </div>
 
-          {/* 過去のセッション履歴一覧 */}
           <div className="space-y-3">
-            <h3 className="text-base font-bold text-gray-900">過去のセッション・指導履歴</h3>
+            <h3 className="text-base font-bold text-gray-900">過去のセッション履歴</h3>
             {selectedClient.sessions.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">セッション記録はありません。</p>
+              <p className="text-xs text-gray-400 py-4 text-center">記録はありません。</p>
             ) : (
               selectedClient.sessions.map((s) => (
                 <div key={s.id} className="p-4 border rounded-xl bg-white space-y-2 shadow-sm text-xs">
