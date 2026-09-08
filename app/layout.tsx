@@ -1,10 +1,8 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import Nav from "@/components/Nav";
+import './globals.css';
 
-export const metadata: Metadata = {
-  title: "GYM MANAGER | パーソナルジム統合管理",
-  description: "パーソナルジム運営のための売上・顧客・タスク統合管理アプリ",
+export const metadata = {
+  title: 'GYM MANAGER',
+  description: 'パーソナルジム管理システム',
 };
 
 export default function RootLayout({
@@ -14,9 +12,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className="font-sans antialiased">
-        <Nav />
-        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <body>
+        {/* layout.tsx 側の header タグや nav タグを削除し、children のみにします */}
+        {children}
       </body>
     </html>
   );
