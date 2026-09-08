@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "売上管理" },
   { href: "/clients", label: "顧客カルテ" },
-  { href: "/tasks", label: "タスク・議事録" },
+  { href: "/task-manager", label: "タスク・議事録" },
   { href: "/local-info", label: "近隣情報" },
   { href: "/transactions", label: "取引一覧" },
 ];
