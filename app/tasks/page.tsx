@@ -1,9 +1,9 @@
-'use client'; //
+'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Task, MeetingNote, Staff } from '../types';
+import { Task, MeetingNote, Staff } from '../../types'; // ※フォルダ階層に合わせて適宜パスを調整してください
 
-export const TaskAndMeeting: React.FC = () => {
+export default function TaskAndMeetingPage() {
   const [selectedMonth, setSelectedMonth] = useState('2026-09');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -27,7 +27,6 @@ export const TaskAndMeeting: React.FC = () => {
     customCategory: string;
     title: string;
     content: string;
-    // キャンペーン議事録連動項目
     targetAmount: number;
     targetCount: number;
     salesProgress: string;
@@ -46,7 +45,7 @@ export const TaskAndMeeting: React.FC = () => {
     campaignProgress: 'チラシデザイン完了',
   });
 
-  // プリセットタスクの状態（カテゴリーに応じて自動展開・カスタマイズ可能）
+  // プリセットタスクの状態
   const [presetTasks, setPresetTasks] = useState<{ title: string; assignedTo: Staff; dueDate: string }[]>([
     { title: 'レジ設定', assignedTo: 'TAKA', dueDate: '2026-09-12' },
     { title: 'SNS告知準備', assignedTo: 'NANA', dueDate: '2026-09-13' },
@@ -197,7 +196,6 @@ export const TaskAndMeeting: React.FC = () => {
               />
             </div>
 
-            {/* キャンペーン議事録連動項目 */}
             {meetingForm.category === 'キャンペーン' && (
               <div className="p-3 bg-[#FFE8AB]/20 rounded-lg border border-[#FFE8AB] space-y-3">
                 <span className="text-xs font-bold text-amber-800">キャンペーン連動指標</span>
@@ -263,7 +261,6 @@ export const TaskAndMeeting: React.FC = () => {
               />
             </div>
 
-            {/* プリセットタスク自動展開＆カスタマイズ領域 */}
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-700">自動連動プリセットタスク（編集可能）</span>
@@ -320,4 +317,4 @@ export const TaskAndMeeting: React.FC = () => {
       </div>
     </div>
   );
-};
+}
