@@ -17,14 +17,19 @@ interface Payment {
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [paymentsList, setPaymentsList] = useState<Payment[]>([]);
+  const [allPayments, setAllPayments] = useState<Payment[]>([]);
 
-  // 目標金額 State（初期値: 12,000,000）
+  // 日付選択 State (初期値: 現在の年月)
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
+
+  // 目標金額 State
   const [annualTarget, setAnnualTarget] = useState<number>(12000000);
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [inputTarget, setInputTarget] = useState<string>('12000000');
 
-  // 集計データ用 State
+  // 集計データ State
   const [metrics, setMetrics] = useState({
     dailySales: 0,
     dailyCount: 0,
@@ -34,7 +39,10 @@ export default function Home() {
     yearlyCount: 0,
   });
 
-  // 保存されている目標金額をブラウザから読み込み
+  // 選択された年月でフィルタリングされた取引一覧
+  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
+
+  // ローカルストレージから目標金額読み込み
   useEffect(() => {
     const savedTarget = localStorage.getItem('GOLAZO_ANNUAL_TARGET');
     if (savedTarget) {
@@ -58,6 +66,7 @@ export default function Home() {
     }
   };
 
+  // Square データ取得
   const handleSync = useCallback(async () => {
     setLoading(true);
     setMessage('Square データを同期・集計中...');
@@ -67,56 +76,10 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success && Array.isArray(data.payments)) {
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const currentYear = now.getFullYear();
-
-        let daily = 0, dCount = 0;
-        let monthly = 0, mCount = 0;
-        let yearly = 0, yCount = 0;
-
         const sortedPayments = [...data.payments].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-
-        sortedPayments.forEach((p: Payment) => {
-          const createdAt = p.created_at;
-          if (!createdAt) return;
-
-          const amount = p.amount_money?.amount ? Number(p.amount_money.amount) : 0;
-          const dateStr = createdAt.split('T')[0];
-          const yearMonth = dateStr.substring(0, 7);
-          const year = Number(dateStr.substring(0, 4));
-
-          // 日報集計
-          if (dateStr === todayStr) {
-            daily += amount;
-            dCount++;
-          }
-          // 月報集計
-          if (yearMonth === currentYearMonth) {
-            monthly += amount;
-            mCount++;
-          }
-          // 年度集計
-          if (year === currentYear) {
-            yearly += amount;
-            yCount++;
-          }
-        });
-
-        setMetrics({
-          dailySales: daily,
-          dailyCount: dCount,
-          monthlySales: monthly,
-          monthlyCount: mCount,
-          yearlySales: yearly,
-          yearlyCount: yCount,
-        });
-
-        setPaymentsList(sortedPayments);
-
+        setAllPayments(sortedPayments);
         setMessage(
           `同期完了: 顧客 ${data.summary.fetchedCustomersCount} 件 / 決済 ${data.summary.fetchedPaymentsCount} 件`
         );
@@ -135,7 +98,59 @@ export default function Home() {
     handleSync();
   }, [handleSync]);
 
-  // 目標達成率の計算
+  // 選択された年月に基づいて集計・フィルタリングを実行
+  useEffect(() => {
+    if (allPayments.length === 0) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetYearMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+
+    let daily = 0, dCount = 0;
+    let monthly = 0, mCount = 0;
+    let yearly = 0, yCount = 0;
+
+    const monthlyList: Payment[] = [];
+
+    allPayments.forEach((p) => {
+      const createdAt = p.created_at;
+      if (!createdAt) return;
+
+      const amount = p.amount_money?.amount ? Number(p.amount_money.amount) : 0;
+      const dateStr = createdAt.split('T')[0];
+      const yearMonth = dateStr.substring(0, 7);
+      const year = Number(dateStr.substring(0, 4));
+
+      // 本日の売上（今日の付く場合のみ）
+      if (dateStr === todayStr) {
+        daily += amount;
+        dCount++;
+      }
+      // 選択月の売上
+      if (yearMonth === targetYearMonth) {
+        monthly += amount;
+        mCount++;
+        monthlyList.push(p);
+      }
+      // 選択年度の売上
+      if (year === selectedYear) {
+        yearly += amount;
+        yCount++;
+      }
+    });
+
+    setMetrics({
+      dailySales: daily,
+      dailyCount: dCount,
+      monthlySales: monthly,
+      monthlyCount: mCount,
+      yearlySales: yearly,
+      yearlyCount: yCount,
+    });
+
+    setFilteredPayments(monthlyList);
+  }, [allPayments, selectedYear, selectedMonth]);
+
+  // 目標達成率
   const achievementRate = annualTarget > 0 
     ? Math.min(Math.round((metrics.yearlySales / annualTarget) * 100), 100) 
     : 0;
@@ -161,11 +176,42 @@ export default function Home() {
         </div>
       </div>
 
+      {/* 期間選択フィルター */}
+      <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <span className="text-sm font-semibold text-gray-700">表示対象期間:</span>
+        
+        {/* 年選択 */}
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(Number(e.target.value))}
+          className="px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:border-blue-500"
+        >
+          {[2024, 2025, 2026, 2027].map((y) => (
+            <option key={y} value={y}>
+              {y} 年
+            </option>
+          ))}
+        </select>
+
+        {/* 月選択 */}
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(Number(e.target.value))}
+          className="px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:border-blue-500"
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+            <option key={m} value={m}>
+              {m} 月
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* 指標カードグリッド */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* 日報カード */}
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm font-medium text-gray-500">本日の売上（日報）</p>
+          <p className="text-sm font-medium text-gray-500">本日の売上（今日）</p>
           <h3 className="text-2xl font-bold text-gray-900 mt-2">
             ¥{metrics.dailySales.toLocaleString()}
           </h3>
@@ -174,7 +220,9 @@ export default function Home() {
 
         {/* 月報カード */}
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm font-medium text-gray-500">今月の売上（月報）</p>
+          <p className="text-sm font-medium text-gray-500">
+            {selectedYear}年{selectedMonth}月の売上
+          </p>
           <h3 className="text-2xl font-bold text-blue-600 mt-2">
             ¥{metrics.monthlySales.toLocaleString()}
           </h3>
@@ -183,17 +231,17 @@ export default function Home() {
 
         {/* 年度売上カード */}
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm font-medium text-gray-500">今年度の累計売上</p>
+          <p className="text-sm font-medium text-gray-500">{selectedYear}年度 累計売上</p>
           <h3 className="text-2xl font-bold text-gray-900 mt-2">
             ¥{metrics.yearlySales.toLocaleString()}
           </h3>
           <p className="text-xs text-gray-500 mt-1">件数: {metrics.yearlyCount} 件</p>
         </div>
 
-        {/* 目標達成率カード（編集機能付き） */}
+        {/* 目標達成率カード */}
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">年間目標達成率</p>
+            <p className="text-sm font-medium text-gray-500">{selectedYear}年 目標達成率</p>
             {!isEditingTarget && (
               <button
                 onClick={() => setIsEditingTarget(true)}
@@ -214,7 +262,6 @@ export default function Home() {
             ></div>
           </div>
 
-          {/* 目標金額表示・編集フォーム */}
           <div className="mt-3 text-xs">
             {isEditingTarget ? (
               <div className="flex items-center gap-2 mt-1">
@@ -253,8 +300,10 @@ export default function Home() {
       {/* 直近の取引一覧テーブル */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">直近の取引一覧</h2>
-          <span className="text-xs text-gray-500">最新20件表示</span>
+          <h2 className="text-lg font-bold text-gray-900">
+            {selectedYear}年{selectedMonth}月の取引一覧
+          </h2>
+          <span className="text-xs text-gray-500">{filteredPayments.length} 件</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -268,14 +317,14 @@ export default function Home() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {paymentsList.length === 0 ? (
+              {filteredPayments.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
-                    {loading ? 'データ読み込み中...' : '取引データがありません。'}
+                    {loading ? 'データ読み込み中...' : '該当する取引データがありません。'}
                   </td>
                 </tr>
               ) : (
-                paymentsList.slice(0, 20).map((payment) => {
+                filteredPayments.map((payment) => {
                   const dateFormatted = new Date(payment.created_at).toLocaleString('ja-JP', {
                     year: 'numeric',
                     month: '2-digit',
