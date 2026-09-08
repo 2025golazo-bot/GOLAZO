@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Task, MeetingNote, Staff } from '../types';
+import { Task, MeetingNote, Staff } from '../../types';
 
 export default function TaskAndMeetingPage() {
   const [selectedMonth, setSelectedMonth] = useState('2026-09');
