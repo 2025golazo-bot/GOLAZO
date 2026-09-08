@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 
-// セッションの型定義（photo に string | null を許容）
+// セッションの型定義
 interface Session {
   id: string;
   date: string;
@@ -29,7 +29,9 @@ function calculateAge(birthdateStr: string) {
   return `${years}歳${months < 0 ? months + 12 : months}ヶ月`;
 }
 
-export default function StudentDetail() {
+export default function StudentDetail({ params }: { params: { id: string } }) {
+  const studentId = params?.id || 's-001';
+
   const [activeTab, setActiveTab] = useState<'session' | 'measurement' | 'search'>('session');
 
   const parentData = {
@@ -42,7 +44,7 @@ export default function StudentDetail() {
   };
 
   const [student, setStudent] = useState({
-    id: 's-001',
+    id: studentId,
     name: '藤田 陸',
     kana: 'フジタ リク',
     birthdate: '2015-05-12',
@@ -53,7 +55,6 @@ export default function StudentDetail() {
     memo: '右足首捻挫の既往歴あり'
   });
 
-  // Session[] 型を明示指定
   const [sessions, setSessions] = useState<Session[]>([
     { id: 'ses-1', date: '2026-08-10', staff: '藤田 渉仁', content: 'KOBA式体幹トレーニング・リアクションアジリティ', homework: '片足バランス1分×2', photo: null }
   ]);
@@ -101,7 +102,7 @@ export default function StudentDetail() {
       <div className="bg-white rounded-lg p-5 shadow-sm border border-slate-200 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div>
-            <span className="text-xs text-slate-400 font-bold">{student.kana}</span>
+            <span className="text-xs text-slate-400 font-bold">{student.kana} (ID: {student.id})</span>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
               {student.name}
               <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
