@@ -85,42 +85,44 @@ export default function SalesPage() {
     { id: 'm-4', parentName: '鈴木 一郎', studentName: '鈴木 拓海', totalPurchased: 5, remaining: 1 },
   ]);
 
-  // --- 集計ロジック ---
+  // --- 集計ヘルパー関数 (担当者別内訳算出) ---
+  const calcStaffBreakdown = (records: SaleRecord[]) => {
+    let taka = 0;
+    let nana = 0;
+    records.forEach(s => {
+      if (s.staff === 'TAKA') taka += s.amount;
+      if (s.staff === 'NANA') nana += s.amount;
+    });
+    const total = taka + nana;
+    return {
+      taka,
+      nana,
+      takaRate: total > 0 ? ((taka / total) * 100).toFixed(0) : '0',
+      nanaRate: total > 0 ? ((nana / total) * 100).toFixed(0) : '0',
+    };
+  };
+
+  // --- 各領域の集計 ---
 
   // 1. 本日売上
-  const todaySales = useMemo(() => {
-    return salesHistory
-      .filter(s => s.date === todayStr)
-      .reduce((sum, s) => sum + s.amount, 0);
-  }, [salesHistory]);
+  const todaySalesRecords = useMemo(() => salesHistory.filter(s => s.date === todayStr), [salesHistory, todayStr]);
+  const todaySales = useMemo(() => todaySalesRecords.reduce((sum, s) => sum + s.amount, 0), [todaySalesRecords]);
 
-  // 2. 今月売上 (2026年10月固定計算)
-  const currentMonthSales = useMemo(() => {
-    return salesHistory
-      .filter(s => s.date.startsWith('2026-10'))
-      .reduce((sum, s) => sum + s.amount, 0);
-  }, [salesHistory]);
+  // 2. 今月売上 (2026年10月固定計算) & 担当者別
+  const currentMonthSalesRecords = useMemo(() => salesHistory.filter(s => s.date.startsWith('2026-10')), [salesHistory]);
+  const currentMonthSales = useMemo(() => currentMonthSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentMonthSalesRecords]);
+  const currentMonthStaff = useMemo(() => calcStaffBreakdown(currentMonthSalesRecords), [currentMonthSalesRecords]);
 
-  // 3. 今年度売上 (2026年度: 2026-04 〜 2027-03)
-  const currentYearSales = useMemo(() => {
-    return salesHistory
-      .filter(s => s.date >= '2026-04-01' && s.date <= '2027-03-31')
-      .reduce((sum, s) => sum + s.amount, 0);
-  }, [salesHistory]);
+  // 3. 今年度売上 (2026年度: 2026-04 〜 2027-03) & 担当者別
+  const currentYearSalesRecords = useMemo(() => salesHistory.filter(s => s.date >= '2026-04-01' && s.date <= '2027-03-31'), [salesHistory]);
+  const currentYearSales = useMemo(() => currentYearSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentYearSalesRecords]);
+  const currentYearStaff = useMemo(() => calcStaffBreakdown(currentYearSalesRecords), [currentYearSalesRecords]);
 
-  // 今月回数券販売数
-  const monthlyTicketCount = useMemo(() => {
-    return salesHistory
-      .filter(s => s.date.startsWith('2026-10') && s.productName.includes('回券'))
-      .length;
-  }, [salesHistory]);
+  // 今月回数券販売数 & 体験者数
+  const monthlyTicketCount = useMemo(() => currentMonthSalesRecords.filter(s => s.productName.includes('回券')).length, [currentMonthSalesRecords]);
+  const monthlyTrialCount = useMemo(() => trialClients.filter(t => t.date.startsWith('2026-10')).length, [trialClients]);
 
-  // 今月体験者数
-  const monthlyTrialCount = useMemo(() => {
-    return trialClients.filter(t => t.date.startsWith('2026-10')).length;
-  }, [trialClients]);
-
-  // 4. 期間指定フィルター（指定開始日〜終了日）での集計
+  // 4. 期間指定フィルター（設定期間）での集計 & 担当者別
   const filteredSalesByDate = useMemo(() => {
     return salesHistory.filter(s => s.date >= startDate && s.date <= endDate);
   }, [salesHistory, startDate, endDate]);
@@ -128,6 +130,8 @@ export default function SalesPage() {
   const filteredTotalAmount = useMemo(() => {
     return filteredSalesByDate.reduce((sum, s) => sum + s.amount, 0);
   }, [filteredSalesByDate]);
+
+  const filteredStaffSummary = useMemo(() => calcStaffBreakdown(filteredSalesByDate), [filteredSalesByDate]);
 
   // 商品別カウント（件数 & 金額）
   const productSummary = useMemo(() => {
@@ -142,18 +146,7 @@ export default function SalesPage() {
     return map;
   }, [filteredSalesByDate]);
 
-  // 5. 担当者別 売上集計 (期間内)
-  const staffSummary = useMemo(() => {
-    let taka = 0;
-    let nana = 0;
-    filteredSalesByDate.forEach(s => {
-      if (s.staff === 'TAKA') taka += s.amount;
-      if (s.staff === 'NANA') nana += s.amount;
-    });
-    return { taka, nana };
-  }, [filteredSalesByDate]);
-
-  // 6. 体験者コンバージョン（成約）率計算
+  // 5. 体験者コンバージョン（成約）率計算
   const trialConversionStats = useMemo(() => {
     const total = trialClients.length;
     const converted = trialClients.filter(t => t.converted).length;
@@ -161,7 +154,7 @@ export default function SalesPage() {
     return { total, converted, rate };
   }, [trialClients]);
 
-  // 7. 全体回数券消化率
+  // 6. 全体回数券消化率
   const ticketOverallStats = useMemo(() => {
     const totalPurchased = memberTickets.reduce((sum, m) => sum + m.totalPurchased, 0);
     const totalRemaining = memberTickets.reduce((sum, m) => sum + m.remaining, 0);
@@ -170,13 +163,14 @@ export default function SalesPage() {
     return { totalPurchased, totalRemaining, totalUsed, usedRate };
   }, [memberTickets]);
 
-  // 8. 過去アーカイブ売上（選択された年月）
-  const archiveSales = useMemo(() => {
+  // 7. 過去アーカイブ売上（選択された年月） & 担当者別
+  const archiveSalesRecords = useMemo(() => {
     const prefix = `${selectedArchiveYear}-${selectedArchiveMonth.padStart(2, '0')}`;
-    return salesHistory
-      .filter(s => s.date.startsWith(prefix))
-      .reduce((sum, s) => sum + s.amount, 0);
+    return salesHistory.filter(s => s.date.startsWith(prefix));
   }, [salesHistory, selectedArchiveYear, selectedArchiveMonth]);
+
+  const archiveSales = useMemo(() => archiveSalesRecords.reduce((sum, s) => sum + s.amount, 0), [archiveSalesRecords]);
+  const archiveStaffSummary = useMemo(() => calcStaffBreakdown(archiveSalesRecords), [archiveSalesRecords]);
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800">
@@ -229,23 +223,23 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 1. 売上サマリー & 目標達成プログレスバー */}
+        {/* 1. 売上サマリー & 目標達成プログレスバー (担当者毎内訳付き) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* 本日売上 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-2">
+          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Today's Sales</span>
             <div className="flex justify-between items-baseline">
               <h2 className="text-3xl font-extrabold text-slate-800">¥{todaySales.toLocaleString()}</h2>
               <span className="text-xs font-bold text-slate-500">{todayStr}</span>
             </div>
-            <p className="text-[11px] text-slate-400">Square決済完了件数: {salesHistory.filter(s => s.date === todayStr).length} 件</p>
+            <p className="text-[11px] text-slate-400">Square決済完了件数: {todaySalesRecords.length} 件</p>
           </div>
 
-          {/* 今月売上 & 達成率プログレスバー */}
+          {/* 今月売上 (月別) & 担当者毎売上 */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
             <div className="flex justify-between items-baseline">
-              <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">Monthly Progress</span>
+              <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">Monthly Progress (今月)</span>
               <span className="text-xs font-bold bg-sky-100 text-[#5e9bc4] px-2 py-0.5 rounded">
                 達成率: {((currentMonthSales / (monthlyTarget || 1)) * 100).toFixed(1)}%
               </span>
@@ -255,22 +249,32 @@ export default function SalesPage() {
               <span className="text-xs text-slate-400">/ ¥{monthlyTarget.toLocaleString()}</span>
             </div>
             {/* プログレスバー */}
-            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
               <div
-                className="bg-[#5e9bc4] h-2.5 rounded-full transition-all duration-500"
+                className="bg-[#5e9bc4] h-2 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, (currentMonthSales / (monthlyTarget || 1)) * 100)}%` }}
               ></div>
             </div>
+
+            {/* 担当者毎売上（今月） */}
+            <div className="bg-sky-50/60 p-2.5 rounded border border-sky-100 text-xs space-y-1 mt-2">
+              <span className="font-bold text-slate-600 block text-[11px]">👤 今月の担当者別売上</span>
+              <div className="flex justify-between text-slate-700 font-semibold">
+                <span className="text-sky-800">TAKA: ¥{currentMonthStaff.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({currentMonthStaff.takaRate}%)</span></span>
+                <span className="text-pink-800">NANA: ¥{currentMonthStaff.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({currentMonthStaff.nanaRate}%)</span></span>
+              </div>
+            </div>
+
             <div className="flex justify-between text-[11px] text-slate-500 pt-1">
               <span>🎟️ 回数券販売: <strong>{monthlyTicketCount}</strong> 件</span>
               <span>👟 体験者数: <strong>{monthlyTrialCount}</strong> 名</span>
             </div>
           </div>
 
-          {/* 今年度売上 & 達成率プログレスバー */}
+          {/* 今年度売上 (年度) & 担当者毎売上 */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
             <div className="flex justify-between items-baseline">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Annual Progress</span>
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Annual Progress (今年度)</span>
               <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
                 達成率: {((currentYearSales / (yearlyTarget || 1)) * 100).toFixed(1)}%
               </span>
@@ -280,28 +284,38 @@ export default function SalesPage() {
               <span className="text-xs text-slate-400">/ ¥{yearlyTarget.toLocaleString()}</span>
             </div>
             {/* プログレスバー */}
-            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
               <div
-                className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
+                className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, (currentYearSales / (yearlyTarget || 1)) * 100)}%` }}
               ></div>
             </div>
+
+            {/* 担当者毎売上（今年度） */}
+            <div className="bg-emerald-50/60 p-2.5 rounded border border-emerald-100 text-xs space-y-1 mt-2">
+              <span className="font-bold text-slate-600 block text-[11px]">👤 今年度の担当者別売上</span>
+              <div className="flex justify-between text-slate-700 font-semibold">
+                <span className="text-sky-800">TAKA: ¥{currentYearStaff.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({currentYearStaff.takaRate}%)</span></span>
+                <span className="text-pink-800">NANA: ¥{currentYearStaff.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({currentYearStaff.nanaRate}%)</span></span>
+              </div>
+            </div>
+
             <p className="text-[11px] text-slate-400">2026年度 累計実績 (4月〜翌3月)</p>
           </div>
 
         </div>
 
-        {/* 2. 任意期間指定フィルター（何日〜何日）& 販売商品内訳 & 明細一覧 */}
+        {/* 2. 任意設定期間フィルター（何日〜何日）& 担当者毎売上 & 販売商品内訳 */}
         <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
             <div>
-              <h3 className="font-bold text-slate-800 text-sm">📅 期間指定 売上 & 商品購入明細分析</h3>
-              <p className="text-[11px] text-slate-400">指定した期間内の売上合計・商品別販売件数・購入者を一覧表示します</p>
+              <h3 className="font-bold text-slate-800 text-sm">📅 設定期間 売上 & 担当者毎分析</h3>
+              <p className="text-[11px] text-slate-400">指定した期間内の売上合計・担当者毎の内訳・商品別販売件数を集計します</p>
             </div>
 
             {/* 期間選択カレンダー */}
             <div className="flex items-center gap-2 text-xs bg-slate-50 p-2 rounded border border-slate-200">
-              <span className="font-bold text-slate-600">期日選択:</span>
+              <span className="font-bold text-slate-600">設定期間:</span>
               <input
                 type="date"
                 value={startDate}
@@ -318,25 +332,46 @@ export default function SalesPage() {
             </div>
           </div>
 
-          {/* 指定期間のサマリー ＆ 商品内訳カード */}
+          {/* 指定期間のサマリー ＆ 担当者毎売上カード */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 期間内 合計売上 & 担当者比率 */}
+            
+            {/* 設定期間内の売上合計 & 担当者毎売上（グラフィカル表示） */}
             <div className="bg-sky-50/50 p-4 rounded-lg border border-sky-100 space-y-3">
-              <span className="text-xs font-bold text-slate-500 block">指定期間内の売上合計</span>
+              <span className="text-xs font-bold text-slate-500 block">設定期間内の売上合計</span>
               <p className="text-2xl font-extrabold text-[#5e9bc4]">¥{filteredTotalAmount.toLocaleString()}</p>
 
-              <div className="border-t border-sky-200 pt-2 space-y-1 text-xs">
-                <span className="font-bold text-slate-600 block">👨‍🏫 担当者別 売上貢献</span>
-                <div className="flex justify-between text-slate-700">
-                  <span>TAKA: <strong>¥{staffSummary.taka.toLocaleString()}</strong></span>
-                  <span>NANA: <strong>¥{staffSummary.nana.toLocaleString()}</strong></span>
+              {/* 担当者毎売上カード */}
+              <div className="border-t border-sky-200 pt-2 space-y-2 text-xs">
+                <span className="font-bold text-slate-700 block">👨‍🏫 担当者毎売上 (設定期間内)</span>
+                
+                {/* TAKA */}
+                <div className="space-y-0.5">
+                  <div className="flex justify-between items-center text-slate-700 font-bold">
+                    <span className="text-sky-800">TAKA</span>
+                    <span>¥{filteredStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({filteredStaffSummary.takaRate}%)</span></span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-sky-500 h-1.5" style={{ width: `${filteredStaffSummary.takaRate}%` }}></div>
+                  </div>
                 </div>
+
+                {/* NANA */}
+                <div className="space-y-0.5 pt-1">
+                  <div className="flex justify-between items-center text-slate-700 font-bold">
+                    <span className="text-pink-800">NANA</span>
+                    <span>¥{filteredStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({filteredStaffSummary.nanaRate}%)</span></span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-pink-400 h-1.5" style={{ width: `${filteredStaffSummary.nanaRate}%` }}></div>
+                  </div>
+                </div>
+
               </div>
             </div>
 
             {/* 購入商品の件数サマリー */}
             <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
-              <span className="text-xs font-bold text-slate-600 block">🛍️ 期間内の商品別 販売件数・内訳</span>
+              <span className="text-xs font-bold text-slate-600 block">🛍️ 設定期間内の商品別 販売件数・内訳</span>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {Object.keys(productSummary).length > 0 ? (
                   Object.entries(productSummary).map(([pName, data]) => (
@@ -497,7 +532,7 @@ export default function SalesPage() {
 
         </div>
 
-        {/* 4. 下部：回数券消化進捗 & 過去売上アーカイブ */}
+        {/* 4. 下部：回数券消化進捗 & 過去売上アーカイブ (担当者毎内訳付き) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* 回数券消化進捗 (2カラム分) */}
@@ -559,11 +594,11 @@ export default function SalesPage() {
             </table>
           </div>
 
-          {/* 過去の売上（月・年）アーカイブ閲覧 */}
+          {/* 過去の売上（月・年）アーカイブ閲覧 & 担当者毎売上 */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2">
-              <h3 className="font-bold text-slate-800 text-sm">📁 過去売上アーカイブ</h3>
-              <p className="text-[11px] text-slate-400">年月を選択して過去実績を照会</p>
+              <h3 className="font-bold text-slate-800 text-sm">📁 過去売上アーカイブ (担当者毎)</h3>
+              <p className="text-[11px] text-slate-400">年月を選択して過去実績・担当者内訳を照会</p>
             </div>
 
             <div className="space-y-3 text-xs">
@@ -593,14 +628,26 @@ export default function SalesPage() {
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-center space-y-1">
-                <span className="text-[11px] font-bold text-slate-500 block">
-                  {selectedArchiveYear}年 {parseInt(selectedArchiveMonth, 10)}月 実績売上
-                </span>
-                <p className="text-2xl font-extrabold text-slate-800">
-                  ¥{archiveSales.toLocaleString()}
-                </p>
+              {/* 選択した年月の合計売上 & 担当者毎売上 */}
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
+                <div className="text-center">
+                  <span className="text-[11px] font-bold text-slate-500 block">
+                    {selectedArchiveYear}年 {parseInt(selectedArchiveMonth, 10)}月 実績売上
+                  </span>
+                  <p className="text-2xl font-extrabold text-slate-800">
+                    ¥{archiveSales.toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-200 pt-2 space-y-1">
+                  <span className="font-bold text-slate-600 block text-[10px]">👤 担当者毎売上</span>
+                  <div className="flex justify-between font-bold text-[11px]">
+                    <span className="text-sky-800">TAKA: ¥{archiveStaffSummary.taka.toLocaleString()}</span>
+                    <span className="text-pink-800">NANA: ¥{archiveStaffSummary.nana.toLocaleString()}</span>
+                  </div>
+                </div>
               </div>
+
             </div>
           </div>
 
