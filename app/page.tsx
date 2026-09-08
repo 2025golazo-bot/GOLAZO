@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 
+// ==========================================
 // --- 型定義 ---
+// ==========================================
+
+// 1. 売上・カルテ用型定義 (既存維持)
 interface TransactionItem {
   id: string;
   date: string;
@@ -64,6 +68,9 @@ interface ClientProfile {
   measurements: MeasurementRecord[];
 }
 
+// 2. 新規機能用型定義
+type TaskStatus = '未着手' | '進行中' | '完了';
+
 interface TaskItem {
   id: string;
   title: string;
@@ -72,7 +79,7 @@ interface TaskItem {
   dueDate: string;
   repeat: 'none' | 'weekly' | 'monthly';
   isImportant: boolean;
-  completed: boolean;
+  status: TaskStatus;
 }
 
 interface MeetingNote {
@@ -81,11 +88,12 @@ interface MeetingNote {
   title: string;
   category: string;
   content: string;
+  checklist?: { id: string; text: string; completed: boolean }[];
 }
 
 interface LocalInfoItem {
   id: string;
-  name: string; // 学校・チーム名
+  name: string;
   district: '板橋区' | '北区' | 'その他';
   eventName: string;
   url: string;
@@ -93,9 +101,18 @@ interface LocalInfoItem {
   memo: string;
 }
 
+interface VendorItem {
+  id: string;
+  name: string;
+  usageDetail: string;
+  contactStaff: string;
+  url: string;
+  memo: string;
+}
+
 export default function IntegratedApp() {
-  // メインタブ ('transactions' | 'clients' | 'tasks' | 'local' | 'transactions_list')
-  const [activeTab, setActiveTab] = useState<'transactions' | 'clients' | 'tasks' | 'local' | 'transactions_list'>('transactions');
+  // メインタブ ('transactions' | 'clients' | 'tasks' | 'local' | 'vendors')
+  const [activeTab, setActiveTab] = useState<'transactions' | 'clients' | 'tasks' | 'local' | 'vendors'>('transactions');
 
   // --- 共通: Squareデータ手動同期 ---
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -110,7 +127,9 @@ export default function IntegratedApp() {
     }, 1000);
   };
 
-  // --- 1. 売上管理の状態 ---
+  // ==========================================
+  // --- 1. 売上管理の状態 (既存維持) ---
+  // ==========================================
   const [monthlyTarget, setMonthlyTarget] = useState<number>(500000);
   const [isEditingTarget, setIsEditingTarget] = useState<boolean>(false);
   const [tempTarget, setTempTarget] = useState<string>(monthlyTarget.toString());
@@ -124,17 +143,9 @@ export default function IntegratedApp() {
     { id: '4', date: '2026-04-02', client: '高橋 一郎', item: '体験トレーニング', amount: 3000, staff: 'TAKA', type: '体験', campaign: 'SNS初回特典' },
   ]);
 
-  const [tickets] = useState<TicketProgress[]>([
-    { id: '1', client: '鈴木 蓮', name: 'ジュニア体幹 4回券', total: 4, remaining: 1 },
-    { id: '2', client: '山田 太郎', name: 'パーソナル 8回券', total: 8, remaining: 5 },
-  ]);
-
-  const [trials] = useState<TrialClient[]>([
-    { id: '1', date: '2026-09-02', name: '高橋 一郎', age: 35, staff: 'TAKA', converted: true },
-    { id: '2', date: '2026-09-06', name: '渡辺 美咲', age: 28, staff: 'NANA', converted: false },
-  ]);
-
-  // --- 2. 顧客カルテの状態 ---
+  // ==========================================
+  // --- 2. 顧客カルテの状態 (既存維持) ---
+  // ==========================================
   const [clients, setClients] = useState<ClientProfile[]>([
     {
       id: 'c1',
@@ -181,7 +192,6 @@ export default function IntegratedApp() {
   const [clientSubTab, setClientSubTab] = useState<'info' | 'sessions' | 'measurements'>('info');
   const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
 
-  // 新規セッション・測定入力
   const [newSessionDate, setNewSessionDate] = useState('2026-09-08');
   const [newSessionContent, setNewSessionContent] = useState('');
   const [newSessionHomework, setNewSessionHomework] = useState('');
@@ -192,17 +202,19 @@ export default function IntegratedApp() {
   const [newBodyFat, setNewBodyFat] = useState<string>('');
   const [newMuscleMass, setNewMuscleMass] = useState<string>('');
 
+  // ==========================================
   // --- 3. タスク・議事録の状態 ---
+  // ==========================================
   const [taskSubTab, setTaskSubTab] = useState<'tasks' | 'notes'>('tasks');
   const [taskMonthFilter, setTaskMonthFilter] = useState<string>('2026-09');
   const [taskGlobalSearch, setTaskGlobalSearch] = useState<string>('');
+  const [taskViewMode, setTaskViewMode] = useState<'list' | 'calendar'>('list');
 
   const [tasks, setTasks] = useState<TaskItem[]>([
-    { id: '1', title: 'ジュニア体幹クリニックの告知Instagram投稿作成', category: 'SNS', staff: 'TAKA', dueDate: '2026-09-10', repeat: 'none', isImportant: true, completed: false },
-    { id: '2', title: '3ヶ月定期計測の対象者への連絡', category: '顧客フォロー', staff: 'NANA', dueDate: '2026-09-12', repeat: 'monthly', isImportant: false, completed: false },
+    { id: '1', title: 'ジュニア体幹クリニックの告知Instagram投稿作成', category: 'SNS', staff: 'TAKA', dueDate: '2026-09-10', repeat: 'none', isImportant: true, status: '進行中' },
+    { id: '2', title: '3ヶ月定期計測の対象者への連絡', category: '顧客フォロー', staff: 'NANA', dueDate: '2026-09-12', repeat: 'monthly', isImportant: false, status: '未着手' },
   ]);
 
-  // タスク追加フォーム
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState('SNS');
   const [customTaskCategory, setCustomTaskCategory] = useState('');
@@ -213,19 +225,31 @@ export default function IntegratedApp() {
 
   // 議事録
   const [meetingNotes, setMeetingNotes] = useState<MeetingNote[]>([
-    { id: '1', date: '2026-09-01', title: '9月秋の体幹体験キャンペーンMT', category: 'キャンペーン', content: 'ターゲット：近隣小学生。特典：体験料無料＆ボトルプレゼント。' }
+    {
+      id: '1',
+      date: '2026-09-01',
+      title: '9月秋の体幹体験キャンペーンMT',
+      category: 'キャンペーン',
+      content: 'ターゲット：近隣小学生。特典：体験料無料＆ボトルプレゼント。',
+      checklist: [
+        { id: 'chk1', text: 'レジ設定', completed: true },
+        { id: 'chk2', text: 'SNS告知準備', completed: false },
+        { id: 'chk3', text: 'チラシ準備', completed: false }
+      ]
+    }
   ]);
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteCategory, setNewNoteCategory] = useState('キャンペーン');
   const [customNoteCategory, setCustomNoteCategory] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
 
-  // キャンペーンプリセットタスク
   const campaignPresetTasks = [
     'レジ設定', 'SNS告知準備', 'SNS投稿予約', 'チラシ準備', 'チラシ掲示', '報告書作成'
   ];
 
+  // ==========================================
   // --- 4. 近隣情報の状態 ---
+  // ==========================================
   const [localInfos, setLocalInfos] = useState<LocalInfoItem[]>([
     { id: 'l1', name: '板橋第一小学校', district: '板橋区', eventName: '秋季運動会', url: 'https://example.com/itabashi1', contactStaff: 'TAKA', memo: '保護者へのチラシ配布可否要確認' },
     { id: 'l2', name: '赤羽FCジュニア', district: '北区', eventName: '市民大会予選', url: 'https://example.com/akabane-fc', contactStaff: 'NANA', memo: 'コーチへ挨拶訪問予定' }
@@ -238,7 +262,23 @@ export default function IntegratedApp() {
   const [newLocalStaff, setNewLocalStaff] = useState('TAKA');
   const [newLocalMemo, setNewLocalMemo] = useState('');
 
-  // --- 計算関数 ---
+  // ==========================================
+  // --- 5. 取引一覧（業者・設備）の状態 ---
+  // ==========================================
+  const [vendors, setVendors] = useState<VendorItem[]>([
+    { id: 'v1', name: '株式会社フィットネス機器', usageDetail: '体幹測定マシン・保守メンテ', contactStaff: '山田太郎', url: 'https://example.com/vendor1', memo: '年1回の定期点検契約中（10月実施予定）' },
+    { id: 'v2', name: 'Square決済サービス', usageDetail: 'キャッシュレス決済・POSシステム', contactStaff: 'カスタマーサポート', url: 'https://squareup.com', memo: 'カード決済手数料 3.25%' }
+  ]);
+  const [vendorSearchQuery, setVendorSearchQuery] = useState('');
+  const [newVendorName, setNewVendorName] = useState('');
+  const [newVendorUsage, setNewVendorUsage] = useState('');
+  const [newVendorStaff, setNewVendorStaff] = useState('');
+  const [newVendorUrl, setNewVendorUrl] = useState('');
+  const [newVendorMemo, setNewVendorMemo] = useState('');
+
+  // ==========================================
+  // --- ロジック・計算関数 (既存維持) ---
+  // ==========================================
   const calculateAge = (birthDateStr: string) => {
     if (!birthDateStr) return 0;
     const today = new Date('2026-09-08');
@@ -269,7 +309,6 @@ export default function IntegratedApp() {
     };
   };
 
-  // 売上計算
   const filteredByMonth = transactions.filter(t => t.date.startsWith(selectedMonth));
   const filteredByYear = transactions.filter(t => t.date.startsWith(selectedYear));
   const monthlySales = filteredByMonth.reduce((sum, t) => sum + t.amount, 0);
@@ -289,38 +328,38 @@ export default function IntegratedApp() {
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
-      {/* 最上部：グローバル青ヘッダーナビゲーション */}
-      <header className="bg-[#487399] text-white px-6 py-3 flex items-center justify-between shadow-md">
+      {/* 最上部：グローバルナビゲーションバー（ブランドカラー #5e9bc4） */}
+      <header className="bg-[#5e9bc4] text-white px-6 py-3 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-8">
-          <span className="font-bold text-lg tracking-wider">GYM MANAGER</span>
+          <span className="font-bold text-lg tracking-wider border-r border-white/20 pr-6">GYM MANAGER</span>
           <nav className="flex items-center gap-2 text-sm font-medium">
             <button
               onClick={() => setActiveTab('transactions')}
-              className={`px-3 py-1.5 rounded transition-all ${activeTab === 'transactions' ? 'bg-white text-[#487399] font-bold shadow-sm' : 'text-blue-100 hover:bg-white/10'}`}
+              className={`px-3.5 py-1.5 rounded-lg transition-all ${activeTab === 'transactions' ? 'bg-[#FFE8AB] text-[#335570] font-bold shadow-sm' : 'text-blue-50 hover:bg-white/10'}`}
             >
               売上管理
             </button>
             <button
               onClick={() => setActiveTab('clients')}
-              className={`px-3 py-1.5 rounded transition-all ${activeTab === 'clients' ? 'bg-white text-[#487399] font-bold shadow-sm' : 'text-blue-100 hover:bg-white/10'}`}
+              className={`px-3.5 py-1.5 rounded-lg transition-all ${activeTab === 'clients' ? 'bg-[#FFE8AB] text-[#335570] font-bold shadow-sm' : 'text-blue-50 hover:bg-white/10'}`}
             >
               顧客カルテ
             </button>
             <button
               onClick={() => setActiveTab('tasks')}
-              className={`px-3 py-1.5 rounded transition-all ${activeTab === 'tasks' ? 'bg-white text-[#487399] font-bold shadow-sm' : 'text-blue-100 hover:bg-white/10'}`}
+              className={`px-3.5 py-1.5 rounded-lg transition-all ${activeTab === 'tasks' ? 'bg-[#FFE8AB] text-[#335570] font-bold shadow-sm' : 'text-blue-50 hover:bg-white/10'}`}
             >
               タスク・議事録
             </button>
             <button
               onClick={() => setActiveTab('local')}
-              className={`px-3 py-1.5 rounded transition-all ${activeTab === 'local' ? 'bg-white text-[#487399] font-bold shadow-sm' : 'text-blue-100 hover:bg-white/10'}`}
+              className={`px-3.5 py-1.5 rounded-lg transition-all ${activeTab === 'local' ? 'bg-[#FFE8AB] text-[#335570] font-bold shadow-sm' : 'text-blue-50 hover:bg-white/10'}`}
             >
               近隣情報
             </button>
             <button
-              onClick={() => setActiveTab('transactions_list')}
-              className={`px-3 py-1.5 rounded transition-all ${activeTab === 'transactions_list' ? 'bg-white text-[#487399] font-bold shadow-sm' : 'text-blue-100 hover:bg-white/10'}`}
+              onClick={() => setActiveTab('vendors')}
+              className={`px-3.5 py-1.5 rounded-lg transition-all ${activeTab === 'vendors' ? 'bg-[#FFE8AB] text-[#335570] font-bold shadow-sm' : 'text-blue-50 hover:bg-white/10'}`}
             >
               取引一覧
             </button>
@@ -329,26 +368,35 @@ export default function IntegratedApp() {
       </header>
 
       <main className="p-6 max-w-7xl mx-auto space-y-8">
-        {/* コンテンツエリア内ヘッダー：GYM MANAGER横タブを削除しSquare連携状態とボタンのみ配置 */}
+        {/* コンテンツエリア内サブヘッダー */}
         <div className="bg-white px-6 py-4 rounded-2xl border border-gray-200 shadow-sm flex justify-between items-center">
           <div className="flex items-center gap-4">
             <span className="font-black text-gray-900 text-lg">GYM MANAGER</span>
+            <span className="text-xs font-bold text-[#5e9bc4] bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+              {activeTab === 'transactions' && '売上管理'}
+              {activeTab === 'clients' && '顧客カルテ'}
+              {activeTab === 'tasks' && 'タスク・議事録管理'}
+              {activeTab === 'local' && '近隣地域情報情報'}
+              {activeTab === 'vendors' && '取引先・設備業者管理'}
+            </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 bg-blue-50 text-blue-700 font-bold rounded-lg text-xs border border-blue-100">
+            <span className="px-3 py-1.5 bg-blue-50 text-[#5e9bc4] font-bold rounded-lg text-xs border border-blue-100">
               {syncMessage}
             </span>
             <button
               onClick={handleSquareSync}
               disabled={isSyncing}
-              className="px-3 py-1.5 bg-gray-900 text-white font-bold rounded-lg text-xs hover:bg-gray-800 transition-all shadow-sm"
+              className="px-3.5 py-1.5 bg-gray-900 text-white font-bold rounded-lg text-xs hover:bg-gray-800 transition-all shadow-sm"
             >
               {isSyncing ? '同期中...' : 'Squareデータ手動更新'}
             </button>
           </div>
         </div>
 
-        {/* --- Tab 1: 売上管理画面 --- */}
+        {/* ==========================================
+            PAGE 1: 売上管理画面 (既存維持)
+           ========================================== */}
         {activeTab === 'transactions' && (
           <div className="space-y-8">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
@@ -397,7 +445,7 @@ export default function IntegratedApp() {
                             setMonthlyTarget(Number(tempTarget) || 0);
                             setIsEditingTarget(false);
                           }}
-                          className="px-2 py-0.5 bg-blue-600 text-white rounded text-[10px]"
+                          className="px-2 py-0.5 bg-[#5e9bc4] text-white rounded text-[10px]"
                         >
                           保存
                         </button>
@@ -405,7 +453,7 @@ export default function IntegratedApp() {
                     ) : (
                       <button
                         onClick={() => setIsEditingTarget(true)}
-                        className="text-blue-600 hover:underline"
+                        className="text-[#5e9bc4] hover:underline"
                       >
                         ¥{monthlyTarget.toLocaleString()} (変更)
                       </button>
@@ -422,7 +470,7 @@ export default function IntegratedApp() {
               </div>
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
                 <p className="text-xs font-bold text-gray-400">今月の売上 ({selectedMonth})</p>
-                <p className="text-2xl font-black text-blue-600">¥{monthlySales.toLocaleString()}</p>
+                <p className="text-2xl font-black text-[#5e9bc4]">¥{monthlySales.toLocaleString()}</p>
               </div>
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
                 <p className="text-xs font-bold text-gray-400">体験者数 / 回数券販売</p>
@@ -431,10 +479,10 @@ export default function IntegratedApp() {
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-2">
                 <div className="flex justify-between text-xs font-bold">
                   <span className="text-gray-400">月間目標達成率</span>
-                  <span className="text-blue-600">{achievementRate}%</span>
+                  <span className="text-[#5e9bc4]">{achievementRate}%</span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2.5">
-                  <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${achievementRate}%` }}></div>
+                  <div className="bg-[#5e9bc4] h-2.5 rounded-full transition-all duration-500" style={{ width: `${achievementRate}%` }}></div>
                 </div>
               </div>
             </div>
@@ -461,7 +509,7 @@ export default function IntegratedApp() {
                           <td className="p-3 font-bold text-gray-900">{t.client}</td>
                           <td className="p-3 text-gray-700">{t.item}</td>
                           <td className="p-3"><span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-600">{t.type}</span></td>
-                          <td className="p-3"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.staff === 'TAKA' ? 'bg-indigo-50 text-indigo-700' : 'bg-pink-50 text-pink-700'}`}>{t.staff}</span></td>
+                          <td className="p-3"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.staff === 'TAKA' ? 'bg-[#5e9bc4]/20 text-[#2c5370]' : 'bg-pink-100 text-pink-700'}`}>{t.staff}</span></td>
                           <td className="p-3 text-right font-black text-gray-900">¥{t.amount.toLocaleString()}</td>
                         </tr>
                       ))}
@@ -474,9 +522,9 @@ export default function IntegratedApp() {
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
                   <h2 className="text-base font-bold text-gray-900">担当者別売上比率</h2>
                   <div className="space-y-3 text-xs">
-                    <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 flex justify-between items-center">
-                      <span className="font-bold text-indigo-900">TAKA 担当</span>
-                      <span className="font-black text-indigo-700 text-sm">¥{takaSales.toLocaleString()}</span>
+                    <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 flex justify-between items-center">
+                      <span className="font-bold text-[#2c5370]">TAKA 担当</span>
+                      <span className="font-black text-[#5e9bc4] text-sm">¥{takaSales.toLocaleString()}</span>
                     </div>
                     <div className="p-3 rounded-xl bg-pink-50/50 border border-pink-100 flex justify-between items-center">
                       <span className="font-bold text-pink-900">NANA 担当</span>
@@ -489,7 +537,9 @@ export default function IntegratedApp() {
           </div>
         )}
 
-        {/* --- Tab 2: 顧客カルテ画面 --- */}
+        {/* ==========================================
+            PAGE 2: 顧客カルテ画面 (既存維持)
+           ========================================== */}
         {activeTab === 'clients' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
@@ -509,7 +559,7 @@ export default function IntegratedApp() {
                     <div
                       key={c.id}
                       onClick={() => setSelectedClientId(c.id)}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all text-xs space-y-1.5 ${isSelected ? 'border-blue-600 bg-blue-50/40 shadow-sm' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all text-xs space-y-1.5 ${isSelected ? 'border-[#5e9bc4] bg-blue-50/40 shadow-sm' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
                     >
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-gray-900 text-sm">{c.childName} <span className="text-[11px] text-gray-500 font-normal">({calculateAge(c.birthDate)}歳)</span></span>
@@ -603,7 +653,7 @@ export default function IntegratedApp() {
                         {currentClient.tickets.map((tk, idx) => (
                           <div key={idx} className="p-2 bg-white rounded border flex justify-between">
                             <span className="font-bold">{tk.name}</span>
-                            <span className="text-blue-600 font-bold">残り {tk.remaining}回 / 全{tk.total}回</span>
+                            <span className="text-[#5e9bc4] font-bold">残り {tk.remaining}回 / 全{tk.total}回</span>
                           </div>
                         ))}
                       </div>
@@ -702,7 +752,7 @@ export default function IntegratedApp() {
                         setNewSessionHomework('');
                         setNewSessionImagePreview('');
                       }}
-                      className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700"
+                      className="px-4 py-2 bg-[#5e9bc4] text-white font-bold rounded-lg hover:bg-[#4a83ab]"
                     >
                       保存する
                     </button>
@@ -714,7 +764,7 @@ export default function IntegratedApp() {
                       <div key={s.id} className="p-3 border rounded-xl bg-white space-y-1">
                         <p className="text-gray-400 font-bold">{s.date}</p>
                         <p className="font-bold text-gray-900">{s.content}</p>
-                        {s.homeworkContent && <p className="text-blue-600 bg-blue-50 p-1.5 rounded">宿題: {s.homeworkContent}</p>}
+                        {s.homeworkContent && <p className="text-[#5e9bc4] bg-blue-50 p-1.5 rounded">宿題: {s.homeworkContent}</p>}
                       </div>
                     ))}
                   </div>
@@ -755,7 +805,7 @@ export default function IntegratedApp() {
                           setClients(clients.map(c => c.id === currentClient.id ? { ...c, measurements: [...c.measurements, newM] } : c));
                           setNewWeight('');
                         }}
-                        className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700"
+                        className="px-4 py-2 bg-[#5e9bc4] text-white font-bold rounded-lg hover:bg-[#4a83ab]"
                       >
                         追加する
                       </button>
@@ -779,7 +829,7 @@ export default function IntegratedApp() {
                               <div className="p-2 bg-gray-50 rounded">
                                 <p className="text-gray-400">筋肉量</p>
                                 <p className="font-black">{m.muscleMass} kg</p>
-                                {idx > 0 && <p className="text-[10px] text-blue-600 font-bold">初回比: +{(m.muscleMass - firstM.muscleMass).toFixed(1)}kg</p>}
+                                {idx > 0 && <p className="text-[10px] text-[#5e9bc4] font-bold">初回比: +{(m.muscleMass - firstM.muscleMass).toFixed(1)}kg</p>}
                               </div>
                             </div>
                             <div className="p-3 border-2 border-dashed rounded bg-gray-50 text-center text-gray-400">
@@ -796,74 +846,110 @@ export default function IntegratedApp() {
           </div>
         )}
 
-        {/* --- Tab 3: タスク・議事録画面 --- */}
+        {/* ==========================================
+            新規ページ 1: タスク・議事録画面 (/tasks 相当)
+           ========================================== */}
         {activeTab === 'tasks' && (
           <div className="space-y-6">
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 flex flex-wrap justify-between items-center gap-4">
-              <div className="flex gap-2 text-xs font-bold">
-                <button
-                  onClick={() => setTaskSubTab('tasks')}
-                  className={`px-3 py-1.5 rounded-lg ${taskSubTab === 'tasks' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}
-                >
-                  タスク管理
-                </button>
-                <button
-                  onClick={() => setTaskSubTab('notes')}
-                  className={`px-3 py-1.5 rounded-lg ${taskSubTab === 'notes' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}
-                >
-                  議事録管理
-                </button>
+            {/* 上部フィルター ＆ 検索バー */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl text-xs font-bold">
+                  <button
+                    onClick={() => setTaskSubTab('tasks')}
+                    className={`px-4 py-2 rounded-lg transition-all ${taskSubTab === 'tasks' ? 'bg-[#5e9bc4] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  >
+                    タスク管理
+                  </button>
+                  <button
+                    onClick={() => setTaskSubTab('notes')}
+                    className={`px-4 py-2 rounded-lg transition-all ${taskSubTab === 'notes' ? 'bg-[#5e9bc4] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  >
+                    議事録管理
+                  </button>
+                </div>
+
+                {taskSubTab === 'tasks' && (
+                  <div className="flex gap-1 bg-gray-100 p-1 rounded-xl text-xs font-bold">
+                    <button
+                      onClick={() => setTaskViewMode('list')}
+                      className={`px-3 py-1.5 rounded-lg ${taskViewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      リスト表示
+                    </button>
+                    <button
+                      onClick={() => setTaskViewMode('calendar')}
+                      className={`px-3 py-1.5 rounded-lg ${taskViewMode === 'calendar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                    >
+                      カレンダー表示
+                    </button>
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center gap-3 text-xs">
-                <input
-                  type="month"
-                  value={taskMonthFilter}
-                  onChange={(e) => setTaskMonthFilter(e.target.value)}
-                  className="p-1.5 border rounded-lg bg-gray-50"
-                />
-                <input
-                  type="text"
-                  placeholder="全体キーワード検索..."
-                  value={taskGlobalSearch}
-                  onChange={(e) => setTaskGlobalSearch(e.target.value)}
-                  className="p-1.5 border rounded-lg bg-gray-50 w-48"
-                />
+                <div>
+                  <input
+                    type="month"
+                    value={taskMonthFilter}
+                    onChange={(e) => setTaskMonthFilter(e.target.value)}
+                    className="p-2 border rounded-xl bg-gray-50 font-bold"
+                  />
+                </div>
+                {/* リアルタイム全体検索バー */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="タスク・議事録の全体検索..."
+                    value={taskGlobalSearch}
+                    onChange={(e) => setTaskGlobalSearch(e.target.value)}
+                    className="p-2 pl-8 border rounded-xl bg-gray-50 w-64 focus:bg-white focus:ring-2 focus:ring-[#5e9bc4] transition-all"
+                  />
+                  <span className="absolute left-2.5 top-2.5 text-gray-400">🔍</span>
+                </div>
               </div>
             </div>
 
+            {/* SubTab 1: タスク管理 */}
             {taskSubTab === 'tasks' ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 新規タスク作成フォーム */}
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 text-xs">
-                  <h2 className="text-base font-bold text-gray-900">新規タスク登録</h2>
-                  <div className="space-y-3">
+                  <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#5e9bc4]"></span>
+                    新規タスク追加
+                  </h2>
+                  <div className="space-y-3.5">
                     <div>
                       <label className="block text-gray-500 mb-1 font-bold">タスク内容</label>
                       <input
                         type="text"
                         value={newTaskTitle}
                         onChange={(e) => setNewTaskTitle(e.target.value)}
-                        placeholder="タスク名を入力..."
-                        className="w-full p-2 border rounded-xl bg-gray-50"
+                        placeholder="例: チラシの印刷・配布準備"
+                        className="w-full p-2.5 border rounded-xl bg-gray-50 focus:bg-white"
                       />
                     </div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-gray-500 mb-1 font-bold">担当者</label>
+                        <label className="block text-gray-500 mb-1 font-bold">担当者選択</label>
                         <select
                           value={newTaskStaff}
                           onChange={(e) => setNewTaskStaff(e.target.value as 'TAKA' | 'NANA')}
-                          className="w-full p-2 border rounded-xl bg-gray-50"
+                          className="w-full p-2.5 border rounded-xl bg-gray-50 font-bold"
                         >
                           <option value="TAKA">TAKA (インディゴ)</option>
                           <option value="NANA">NANA (ピンク)</option>
                         </select>
                       </div>
+
                       <div>
                         <label className="block text-gray-500 mb-1 font-bold">カテゴリー</label>
                         <select
                           value={newTaskCategory}
                           onChange={(e) => setNewTaskCategory(e.target.value)}
-                          className="w-full p-2 border rounded-xl bg-gray-50"
+                          className="w-full p-2.5 border rounded-xl bg-gray-50"
                         >
                           <option value="SNS">SNS</option>
                           <option value="顧客フォロー">顧客フォロー</option>
@@ -872,15 +958,19 @@ export default function IntegratedApp() {
                         </select>
                       </div>
                     </div>
+
                     {newTaskCategory === 'その他' && (
-                      <input
-                        type="text"
-                        placeholder="カテゴリーを手入力..."
-                        value={customTaskCategory}
-                        onChange={(e) => setCustomTaskCategory(e.target.value)}
-                        className="w-full p-2 border rounded-xl bg-gray-50"
-                      />
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="カテゴリーを手入力..."
+                          value={customTaskCategory}
+                          onChange={(e) => setCustomTaskCategory(e.target.value)}
+                          className="w-full p-2.5 border rounded-xl bg-gray-50"
+                        />
+                      </div>
                     )}
+
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-gray-500 mb-1 font-bold">期日</label>
@@ -888,37 +978,42 @@ export default function IntegratedApp() {
                           type="date"
                           value={newTaskDueDate}
                           onChange={(e) => setNewTaskDueDate(e.target.value)}
-                          className="w-full p-2 border rounded-xl bg-gray-50"
+                          className="w-full p-2.5 border rounded-xl bg-gray-50"
                         />
                       </div>
+
                       <div>
                         <label className="block text-gray-500 mb-1 font-bold">繰り返し設定</label>
                         <select
                           value={newTaskRepeat}
                           onChange={(e) => setNewTaskRepeat(e.target.value as any)}
-                          className="w-full p-2 border rounded-xl bg-gray-50"
+                          className="w-full p-2.5 border rounded-xl bg-gray-50"
                         >
-                          <option value="none">単発</option>
-                          <option value="weekly">毎週</option>
-                          <option value="monthly">毎月</option>
+                          <option value="none">なし (単発)</option>
+                          <option value="weekly">毎週自動登録</option>
+                          <option value="monthly">毎月自動登録</option>
                         </select>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 pt-1">
+
+                    <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl flex items-center justify-between">
+                      <label htmlFor="important" className="font-bold text-red-700 cursor-pointer">
+                        🚨 重要フラグ（赤色強調）
+                      </label>
                       <input
                         type="checkbox"
                         id="important"
                         checked={newTaskImportant}
                         onChange={(e) => setNewTaskImportant(e.target.checked)}
-                        className="w-4 h-4 text-red-600 rounded"
+                        className="w-4 h-4 text-red-600 rounded cursor-pointer"
                       />
-                      <label htmlFor="important" className="font-bold text-red-600">重要フラグを設定する</label>
                     </div>
+
                     <button
                       onClick={() => {
                         if (!newTaskTitle) return;
                         const finalCat = newTaskCategory === 'その他' ? (customTaskCategory || 'その他') : newTaskCategory;
-                        setTasks([...tasks, {
+                        const newT: TaskItem = {
                           id: String(Date.now()),
                           title: newTaskTitle,
                           category: finalCat,
@@ -926,72 +1021,144 @@ export default function IntegratedApp() {
                           dueDate: newTaskDueDate,
                           repeat: newTaskRepeat,
                           isImportant: newTaskImportant,
-                          completed: false
-                        }]);
+                          status: '未着手'
+                        };
+                        setTasks([...tasks, newT]);
                         setNewTaskTitle('');
                       }}
-                      className="w-full py-2.5 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800"
+                      className="w-full py-3 bg-[#5e9bc4] text-white font-bold rounded-xl hover:bg-[#4a83ab] transition-all shadow-sm"
                     >
-                      タスクを追加
+                      タスクを登録する
                     </button>
                   </div>
                 </div>
 
+                {/* タスク一覧表示 */}
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 lg:col-span-2">
-                  <h2 className="text-base font-bold text-gray-900">タスク一覧 (月別・キーワード絞り込み)</h2>
-                  <div className="space-y-3">
-                    {tasks
-                      .filter(t => t.dueDate.startsWith(taskMonthFilter))
-                      .filter(t => t.title.toLowerCase().includes(taskGlobalSearch.toLowerCase()) || t.category.toLowerCase().includes(taskGlobalSearch.toLowerCase()))
-                      .map(t => (
-                        <div
-                          key={t.id}
-                          className={`p-3.5 border rounded-xl flex items-center justify-between text-xs transition-all ${t.isImportant ? 'border-red-300 bg-red-50/30' : 'bg-gray-50 border-gray-200'}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={t.completed}
-                              onChange={() => setTasks(tasks.map(tk => tk.id === t.id ? { ...tk, completed: !tk.completed } : tk))}
-                              className="w-4 h-4 rounded text-blue-600"
-                            />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                {t.isImportant && <span className="px-1.5 py-0.5 bg-red-600 text-white font-black rounded text-[9px]">重要</span>}
-                                <p className={`font-bold ${t.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{t.title}</p>
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-base font-bold text-gray-900">
+                      タスク一覧 ({taskMonthFilter})
+                    </h2>
+                    <span className="text-xs text-gray-400 font-bold">
+                      全 {tasks.filter(t => t.dueDate.startsWith(taskMonthFilter)).length} 件
+                    </span>
+                  </div>
+
+                  {taskViewMode === 'list' ? (
+                    <div className="space-y-3">
+                      {tasks
+                        .filter(t => t.dueDate.startsWith(taskMonthFilter))
+                        .filter(t =>
+                          t.title.toLowerCase().includes(taskGlobalSearch.toLowerCase()) ||
+                          t.category.toLowerCase().includes(taskGlobalSearch.toLowerCase()) ||
+                          t.staff.toLowerCase().includes(taskGlobalSearch.toLowerCase())
+                        )
+                        .map(t => (
+                          <div
+                            key={t.id}
+                            className={`p-4 border rounded-2xl transition-all flex flex-wrap md:flex-nowrap items-center justify-between gap-3 text-xs ${
+                              t.isImportant ? 'border-red-300 bg-red-50/40' : 'bg-gray-50 border-gray-200 hover:bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* スタッフバッジ */}
+                              <span className={`px-2.5 py-1 rounded-lg font-black text-[11px] ${
+                                t.staff === 'TAKA' ? 'bg-[#5e9bc4] text-white' : 'bg-pink-500 text-white'
+                              }`}>
+                                {t.staff}
+                              </span>
+
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  {t.isImportant && (
+                                    <span className="px-1.5 py-0.5 bg-red-600 text-white font-black rounded text-[9px]">
+                                      重要
+                                    </span>
+                                  )}
+                                  <p className={`font-bold ${t.status === '完了' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                    {t.title}
+                                  </p>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  期日: {t.dueDate} {t.repeat !== 'none' && `(${t.repeat === 'weekly' ? '毎週' : '毎月'})`} | カテゴリー: {t.category}
+                                </p>
                               </div>
-                              <p className="text-[10px] text-gray-400 mt-0.5">期日: {t.dueDate} | 繰り返し: {t.repeat === 'weekly' ? '毎週' : t.repeat === 'monthly' ? '毎月' : 'なし'}</p>
+                            </div>
+
+                            {/* ステータス切替 */}
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={t.status}
+                                onChange={(e) => setTasks(tasks.map(tk => tk.id === t.id ? { ...tk, status: e.target.value as TaskStatus } : tk))}
+                                className={`p-1.5 border rounded-lg font-bold text-[11px] ${
+                                  t.status === '完了' ? 'bg-green-100 text-green-800' : t.status === '進行中' ? 'bg-amber-100 text-amber-800' : 'bg-white text-gray-700'
+                                }`}
+                              >
+                                <option value="未着手">未着手</option>
+                                <option value="進行中">進行中</option>
+                                <option value="完了">完了</option>
+                              </select>
+                              <button
+                                onClick={() => setTasks(tasks.filter(tk => tk.id !== t.id))}
+                                className="text-gray-400 hover:text-red-500 text-xs px-1"
+                              >
+                                ✕
+                              </button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.staff === 'TAKA' ? 'bg-indigo-100 text-indigo-800' : 'bg-pink-100 text-pink-800'}`}>
-                              {t.staff}
-                            </span>
-                            <span className="px-2 py-0.5 bg-gray-200 text-gray-700 font-bold rounded text-[10px]">{t.category}</span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+                        ))}
+                    </div>
+                  ) : (
+                    /* カレンダービュー */
+                    <div className="p-4 border rounded-2xl bg-gray-50 text-center space-y-3">
+                      <p className="font-bold text-gray-600 text-xs">📅 月間カレンダー表示 ({taskMonthFilter})</p>
+                      <div className="grid grid-cols-7 gap-1 text-[11px]">
+                        {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
+                          <div key={i} className="p-1 bg-gray-200 font-bold text-gray-600 rounded">{d}</div>
+                        ))}
+                        {Array.from({ length: 30 }).map((_, i) => {
+                          const dayNum = String(i + 1).padStart(2, '0');
+                          const dateStr = `${taskMonthFilter}-${dayNum}`;
+                          const dayTasks = tasks.filter(t => t.dueDate === dateStr);
+                          return (
+                            <div key={i} className="min-h-[50px] p-1 bg-white border rounded text-left flex flex-col justify-between">
+                              <span className="font-bold text-gray-400">{i + 1}</span>
+                              {dayTasks.map(dt => (
+                                <span key={dt.id} className={`text-[9px] p-0.5 rounded truncate font-bold ${dt.staff === 'TAKA' ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800'}`}>
+                                  {dt.title}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
+              /* SubTab 2: 議事録管理 */
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 text-xs">
-                  <h2 className="text-base font-bold text-gray-900">議事録の新規作成</h2>
+                  <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#FFE8AB]"></span>
+                    議事録の新規作成
+                  </h2>
                   <div className="space-y-3">
                     <input
                       type="text"
-                      placeholder="議題・タイトル..."
+                      placeholder="議題・ミーティング名..."
                       value={newNoteTitle}
                       onChange={(e) => setNewNoteTitle(e.target.value)}
-                      className="w-full p-2 border rounded-xl bg-gray-50"
+                      className="w-full p-2.5 border rounded-xl bg-gray-50 font-bold"
                     />
+
                     <div>
                       <label className="block text-gray-500 mb-1 font-bold">カテゴリー</label>
                       <select
                         value={newNoteCategory}
                         onChange={(e) => setNewNoteCategory(e.target.value)}
-                        className="w-full p-2 border rounded-xl bg-gray-50"
+                        className="w-full p-2.5 border rounded-xl bg-gray-50 font-bold"
                       >
                         <option value="キャンペーン">キャンペーン</option>
                         <option value="週MT">週MT</option>
@@ -999,33 +1166,37 @@ export default function IntegratedApp() {
                         <option value="その他">その他 (手入力)</option>
                       </select>
                     </div>
+
                     {newNoteCategory === 'その他' && (
                       <input
                         type="text"
                         placeholder="カテゴリーを手入力..."
                         value={customNoteCategory}
                         onChange={(e) => setCustomNoteCategory(e.target.value)}
-                        className="w-full p-2 border rounded-xl bg-gray-50"
+                        className="w-full p-2.5 border rounded-xl bg-gray-50"
                       />
                     )}
+
                     {newNoteCategory === 'キャンペーン' && (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                        <p className="font-bold text-amber-900">キャンペーン定型タスクの自動展開</p>
-                        <p className="text-[10px] text-amber-700">登録時に以下のタスクを一覧に自動追加します：</p>
+                      <div className="p-3 bg-[#FFE8AB]/30 border border-amber-200 rounded-xl space-y-1.5">
+                        <p className="font-bold text-amber-900">✨ キャンペーン用プリセットチェックリスト自動展開</p>
+                        <p className="text-[10px] text-amber-700">保存時に以下の関連タスクが初期設定として組み込まれます：</p>
                         <div className="flex flex-wrap gap-1">
                           {campaignPresetTasks.map((pt, i) => (
-                            <span key={i} className="px-2 py-0.5 bg-white border text-[10px] rounded text-gray-700">{pt}</span>
+                            <span key={i} className="px-2 py-0.5 bg-white border text-[10px] rounded font-bold text-gray-700">{pt}</span>
                           ))}
                         </div>
                       </div>
                     )}
+
                     <textarea
-                      rows={4}
-                      placeholder="決定事項、メモ..."
+                      rows={5}
+                      placeholder="会議の決定事項、メモ..."
                       value={newNoteContent}
                       onChange={(e) => setNewNoteContent(e.target.value)}
-                      className="w-full p-2 border rounded-xl bg-gray-50"
+                      className="w-full p-2.5 border rounded-xl bg-gray-50"
                     />
+
                     <button
                       onClick={() => {
                         if (!newNoteTitle) return;
@@ -1035,28 +1206,14 @@ export default function IntegratedApp() {
                           date: '2026-09-08',
                           title: newNoteTitle,
                           category: finalCat,
-                          content: newNoteContent
+                          content: newNoteContent,
+                          checklist: newNoteCategory === 'キャンペーン' ? campaignPresetTasks.map((pt, idx) => ({ id: `chk_${idx}`, text: pt, completed: false })) : []
                         };
                         setMeetingNotes([newNote, ...meetingNotes]);
-
-                        if (newNoteCategory === 'キャンペーン') {
-                          const generatedTasks: TaskItem[] = campaignPresetTasks.map((pt, idx) => ({
-                            id: String(Date.now() + idx),
-                            title: `[${newNoteTitle}] ${pt}`,
-                            category: 'キャンペーン',
-                            staff: 'TAKA',
-                            dueDate: '2026-09-15',
-                            repeat: 'none',
-                            isImportant: false,
-                            completed: false
-                          }));
-                          setTasks([...tasks, ...generatedTasks]);
-                        }
-
                         setNewNoteTitle('');
                         setNewNoteContent('');
                       }}
-                      className="w-full py-2.5 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800"
+                      className="w-full py-3 bg-[#5e9bc4] text-white font-bold rounded-xl hover:bg-[#4a83ab] transition-all shadow-sm"
                     >
                       議事録を保存する
                     </button>
@@ -1066,16 +1223,74 @@ export default function IntegratedApp() {
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 lg:col-span-2">
                   <h2 className="text-base font-bold text-gray-900">議事録一覧</h2>
                   <div className="space-y-4">
-                    {meetingNotes.map(note => (
-                      <div key={note.id} className="p-4 border rounded-2xl bg-white space-y-2 text-xs shadow-sm">
-                        <div className="flex justify-between items-center">
-                          <span className="font-black text-sm text-gray-900">{note.title}</span>
-                          <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold rounded text-[10px]">{note.category}</span>
+                    {meetingNotes
+                      .filter(n =>
+                        n.title.toLowerCase().includes(taskGlobalSearch.toLowerCase()) ||
+                        n.content.toLowerCase().includes(taskGlobalSearch.toLowerCase()) ||
+                        n.category.toLowerCase().includes(taskGlobalSearch.toLowerCase())
+                      )
+                      .map(note => (
+                        <div key={note.id} className="p-5 border rounded-2xl bg-white space-y-3 text-xs shadow-sm">
+                          <div className="flex justify-between items-center border-b pb-2">
+                            <span className="font-black text-sm text-gray-900">{note.title}</span>
+                            <span className="px-2.5 py-0.5 bg-[#FFE8AB] text-[#553c00] font-bold rounded-full text-[10px]">{note.category}</span>
+                          </div>
+                          <p className="text-gray-400 font-bold">{note.date}</p>
+                          <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+
+                          {/* 関連タスク自動展開リスト */}
+                          {note.checklist && note.checklist.length > 0 && (
+                            <div className="p-3 bg-gray-50 border rounded-xl space-y-2 mt-2">
+                              <p className="font-bold text-gray-700">📋 デフォルトチェックリスト・タスク連動</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {note.checklist.map(item => (
+                                  <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.completed}
+                                      onChange={() => {
+                                        setMeetingNotes(meetingNotes.map(mn => {
+                                          if (mn.id === note.id && mn.checklist) {
+                                            return {
+                                              ...mn,
+                                              checklist: mn.checklist.map(c => c.id === item.id ? { ...c, completed: !c.completed } : c)
+                                            };
+                                          }
+                                          return mn;
+                                        }));
+                                      }}
+                                    />
+                                    <span className={item.completed ? 'line-through text-gray-400' : 'font-bold'}>{item.text}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* タスクへ反映ボタン */}
+                          <div className="pt-2 flex justify-end">
+                            <button
+                              onClick={() => {
+                                const newT: TaskItem = {
+                                  id: String(Date.now()),
+                                  title: `[議事録連携] ${note.title}`,
+                                  category: note.category,
+                                  staff: 'TAKA',
+                                  dueDate: '2026-09-15',
+                                  repeat: 'none',
+                                  isImportant: false,
+                                  status: '未着手'
+                                };
+                                setTasks([...tasks, newT]);
+                                alert('タスク管理へ連携タスクを登録しました！');
+                              }}
+                              className="px-3 py-1.5 bg-[#5e9bc4] text-white font-bold rounded-lg hover:bg-[#4a83ab] transition-all shadow-sm text-[11px]"
+                            >
+                              ＋ タスク管理へ反映
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-gray-400 font-bold">{note.date}</p>
-                        <p className="text-gray-700 whitespace-pre-wrap">{note.content}</p>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               </div>
@@ -1083,55 +1298,65 @@ export default function IntegratedApp() {
           </div>
         )}
 
-        {/* --- Tab 4: 近隣情報画面 --- */}
+        {/* ==========================================
+            新規ページ 2: 近隣情報画面 (/local-info 相当)
+           ========================================== */}
         {activeTab === 'local' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 text-xs">
-              <h2 className="text-base font-bold text-gray-900">近隣情報・イベントの新規追加</h2>
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#5e9bc4]"></span>
+                近隣校・チームの追加
+              </h2>
               <div className="space-y-3">
                 <div>
                   <label className="block text-gray-500 mb-1 font-bold">学校・スポーツチーム名</label>
                   <input
                     type="text"
-                    placeholder="例: 板橋区立第一小学校"
+                    placeholder="例: 板橋区立第一小学校, 赤羽FC"
                     value={newLocalName}
                     onChange={(e) => setNewLocalName(e.target.value)}
-                    className="w-full p-2 border rounded-xl bg-gray-50"
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
                   />
                 </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-gray-500 mb-1 font-bold">対象区</label>
                     <select
                       value={newLocalDistrict}
                       onChange={(e) => setNewLocalDistrict(e.target.value as any)}
-                      className="w-full p-2 border rounded-xl bg-gray-50"
+                      className="w-full p-2.5 border rounded-xl bg-gray-50 font-bold"
                     >
                       <option value="板橋区">板橋区</option>
                       <option value="北区">北区</option>
                       <option value="その他">その他</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="block text-gray-500 mb-1 font-bold">担当者名</label>
+                    <label className="block text-gray-500 mb-1 font-bold">担当関係者</label>
                     <input
                       type="text"
                       value={newLocalStaff}
                       onChange={(e) => setNewLocalStaff(e.target.value)}
-                      className="w-full p-2 border rounded-xl bg-gray-50"
+                      placeholder="担当者名..."
+                      className="w-full p-2.5 border rounded-xl bg-gray-50"
                     />
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-gray-500 mb-1 font-bold">イベント名</label>
                   <input
                     type="text"
-                    placeholder="例: 秋季運動会、体験会"
+                    placeholder="例: 秋季運動会, 体験大会"
                     value={newLocalEvent}
                     onChange={(e) => setNewLocalEvent(e.target.value)}
-                    className="w-full p-2 border rounded-xl bg-gray-50"
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
                   />
                 </div>
+
                 <div>
                   <label className="block text-gray-500 mb-1 font-bold">詳細URL (外部リンク)</label>
                   <input
@@ -1139,19 +1364,21 @@ export default function IntegratedApp() {
                     placeholder="https://..."
                     value={newLocalUrl}
                     onChange={(e) => setNewLocalUrl(e.target.value)}
-                    className="w-full p-2 border rounded-xl bg-gray-50"
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-gray-500 mb-1 font-bold">メモ</label>
+                  <label className="block text-gray-500 mb-1 font-bold">メモ (自由記述)</label>
                   <textarea
-                    rows={2}
-                    placeholder="チラシ配布の可否や挨拶予定など..."
+                    rows={3}
+                    placeholder="チラシ配布の許可状況や挨拶のメモ..."
                     value={newLocalMemo}
                     onChange={(e) => setNewLocalMemo(e.target.value)}
-                    className="w-full p-2 border rounded-xl bg-gray-50"
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
                   />
                 </div>
+
                 <button
                   onClick={() => {
                     if (!newLocalName) return;
@@ -1169,22 +1396,22 @@ export default function IntegratedApp() {
                     setNewLocalUrl('');
                     setNewLocalMemo('');
                   }}
-                  className="w-full py-2.5 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800"
+                  className="w-full py-3 bg-[#5e9bc4] text-white font-bold rounded-xl hover:bg-[#4a83ab] transition-all shadow-sm"
                 >
-                  情報を追加
+                  近隣情報を登録
                 </button>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 lg:col-span-2">
               <div className="flex flex-wrap justify-between items-center gap-4">
-                <h2 className="text-base font-bold text-gray-900">近隣情報一覧</h2>
+                <h2 className="text-base font-bold text-gray-900">地域校・スポーツチーム情報一覧</h2>
                 <input
                   type="text"
-                  placeholder="学校名、イベント名、メモで検索..."
+                  placeholder="学校名・イベント名・メモでリアルタイム検索..."
                   value={localSearchQuery}
                   onChange={(e) => setLocalSearchQuery(e.target.value)}
-                  className="p-2 border rounded-xl text-xs bg-gray-50 w-64"
+                  className="p-2 border rounded-xl text-xs bg-gray-50 w-72 focus:bg-white"
                 />
               </div>
 
@@ -1196,21 +1423,39 @@ export default function IntegratedApp() {
                     info.memo.toLowerCase().includes(localSearchQuery.toLowerCase())
                   )
                   .map(info => (
-                    <div key={info.id} className="p-4 border rounded-2xl bg-white space-y-2 text-xs shadow-sm">
+                    <div key={info.id} className="p-4 border rounded-2xl bg-white space-y-2 text-xs shadow-sm hover:border-[#5e9bc4] transition-all">
                       <div className="flex justify-between items-center">
                         <span className="font-black text-sm text-gray-900">{info.name}</span>
-                        <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded text-[10px]">{info.district}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-blue-50 text-[#5e9bc4] font-bold rounded-full text-[10px] border border-blue-100">
+                            {info.district}
+                          </span>
+                          <button
+                            onClick={() => setLocalInfos(localInfos.filter(l => l.id !== info.id))}
+                            className="text-gray-400 hover:text-red-500 font-bold px-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
+
                       <div className="flex justify-between items-center text-gray-600">
                         <p className="font-bold">イベント: {info.eventName || '未設定'}</p>
                         <p className="text-gray-400">担当: {info.contactStaff}</p>
                       </div>
+
                       {info.url && (
-                        <a href={info.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline block font-bold text-[11px]">
-                          🔗 {info.url}
+                        <a
+                          href={info.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#5e9bc4] hover:underline block font-bold text-[11px]"
+                        >
+                          🔗 {info.url} (別タブで開く)
                         </a>
                       )}
-                      {info.memo && <p className="text-gray-500 bg-gray-50 p-2 rounded-lg">{info.memo}</p>}
+
+                      {info.memo && <p className="text-gray-600 bg-gray-50 p-2.5 rounded-xl border border-gray-100">{info.memo}</p>}
                     </div>
                   ))}
               </div>
@@ -1218,35 +1463,148 @@ export default function IntegratedApp() {
           </div>
         )}
 
-        {/* --- Tab 5: 取引一覧画面 --- */}
-        {activeTab === 'transactions_list' && (
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-            <h2 className="text-base font-bold text-gray-900">全取引一覧</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="border-b text-gray-400 font-bold bg-gray-50">
-                    <th className="p-3">日付</th>
-                    <th className="p-3">顧客名</th>
-                    <th className="p-3">購入内容</th>
-                    <th className="p-3">種別</th>
-                    <th className="p-3">担当</th>
-                    <th className="p-3 text-right">金額</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {transactions.map(t => (
-                    <tr key={t.id} className="hover:bg-gray-50/50">
-                      <td className="p-3 text-gray-500">{t.date}</td>
-                      <td className="p-3 font-bold text-gray-900">{t.client}</td>
-                      <td className="p-3 text-gray-700">{t.item}</td>
-                      <td className="p-3"><span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-600">{t.type}</span></td>
-                      <td className="p-3"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.staff === 'TAKA' ? 'bg-indigo-50 text-indigo-700' : 'bg-pink-50 text-pink-700'}`}>{t.staff}</span></td>
-                      <td className="p-3 text-right font-black text-gray-900">¥{t.amount.toLocaleString()}</td>
-                    </tr>
+        {/* ==========================================
+            新規ページ 3: 取引一覧画面 (/vendors 相当)
+           ========================================== */}
+        {activeTab === 'vendors' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 text-xs">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#5e9bc4]"></span>
+                業者・設備の追加
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-gray-500 mb-1 font-bold">名前（業者名・機器名）</label>
+                  <input
+                    type="text"
+                    placeholder="例: 株式会社○○, 決済端末"
+                    value={newVendorName}
+                    onChange={(e) => setNewVendorName(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-500 mb-1 font-bold">使用詳細</label>
+                  <input
+                    type="text"
+                    placeholder="例: 体幹計測器のリース・保守"
+                    value={newVendorUsage}
+                    onChange={(e) => setNewVendorUsage(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-500 mb-1 font-bold">業者担当者名</label>
+                  <input
+                    type="text"
+                    placeholder="例: 担当 鈴木様"
+                    value={newVendorStaff}
+                    onChange={(e) => setNewVendorStaff(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-500 mb-1 font-bold">URL (外部リンク)</label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={newVendorUrl}
+                    onChange={(e) => setNewVendorUrl(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-500 mb-1 font-bold">メモ (自由記述)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="契約更新時期や問い合わせ用メモ..."
+                    value={newVendorMemo}
+                    onChange={(e) => setNewVendorMemo(e.target.value)}
+                    className="w-full p-2.5 border rounded-xl bg-gray-50"
+                  />
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (!newVendorName) return;
+                    setVendors([...vendors, {
+                      id: String(Date.now()),
+                      name: newVendorName,
+                      usageDetail: newVendorUsage,
+                      contactStaff: newVendorStaff,
+                      url: newVendorUrl,
+                      memo: newVendorMemo
+                    }]);
+                    setNewVendorName('');
+                    setNewVendorUsage('');
+                    setNewVendorStaff('');
+                    setNewVendorUrl('');
+                    setNewVendorMemo('');
+                  }}
+                  className="w-full py-3 bg-[#5e9bc4] text-white font-bold rounded-xl hover:bg-[#4a83ab] transition-all shadow-sm"
+                >
+                  取引先・設備を登録
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 lg:col-span-2">
+              <div className="flex flex-wrap justify-between items-center gap-4">
+                <h2 className="text-base font-bold text-gray-900">取引業者・設備情報一覧</h2>
+                <input
+                  type="text"
+                  placeholder="業者名・詳細・担当者でリアルタイム検索..."
+                  value={vendorSearchQuery}
+                  onChange={(e) => setVendorSearchQuery(e.target.value)}
+                  className="p-2 border rounded-xl text-xs bg-gray-50 w-72 focus:bg-white"
+                />
+              </div>
+
+              <div className="space-y-3">
+                {vendors
+                  .filter(v =>
+                    v.name.toLowerCase().includes(vendorSearchQuery.toLowerCase()) ||
+                    v.usageDetail.toLowerCase().includes(vendorSearchQuery.toLowerCase()) ||
+                    v.contactStaff.toLowerCase().includes(vendorSearchQuery.toLowerCase()) ||
+                    v.memo.toLowerCase().includes(vendorSearchQuery.toLowerCase())
+                  )
+                  .map(v => (
+                    <div key={v.id} className="p-4 border rounded-2xl bg-white space-y-2 text-xs shadow-sm hover:border-[#5e9bc4] transition-all">
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-sm text-gray-900">{v.name}</span>
+                        <button
+                          onClick={() => setVendors(vendors.filter(item => item.id !== v.id))}
+                          className="text-gray-400 hover:text-red-500 font-bold px-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-gray-600">
+                        <p className="font-bold">用途: {v.usageDetail || '未設定'}</p>
+                        <p className="text-gray-500">担当者: {v.contactStaff || '未設定'}</p>
+                      </div>
+
+                      {v.url && (
+                        <a
+                          href={v.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#5e9bc4] hover:underline block font-bold text-[11px]"
+                        >
+                          🔗 {v.url} (別タブで開く)
+                        </a>
+                      )}
+
+                      {v.memo && <p className="text-gray-600 bg-gray-50 p-2.5 rounded-xl border border-gray-100">{v.memo}</p>}
+                    </div>
                   ))}
-                </tbody>
-              </table>
+              </div>
             </div>
           </div>
         )}
