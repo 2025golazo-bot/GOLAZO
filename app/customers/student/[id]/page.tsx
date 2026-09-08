@@ -2,6 +2,16 @@
 
 import React, { useState, useMemo } from 'react';
 
+// セッションの型定義（photo に string | null を許容）
+interface Session {
+  id: string;
+  date: string;
+  staff: string;
+  content: string;
+  homework: string;
+  photo: string | null;
+}
+
 function calculateAge(birthdateStr: string) {
   if (!birthdateStr) return '';
   const birth = new Date(birthdateStr);
@@ -43,7 +53,8 @@ export default function StudentDetail() {
     memo: '右足首捻挫の既往歴あり'
   });
 
-  const [sessions, setSessions] = useState([
+  // Session[] 型を明示指定
+  const [sessions, setSessions] = useState<Session[]>([
     { id: 'ses-1', date: '2026-08-10', staff: '藤田 渉仁', content: 'KOBA式体幹トレーニング・リアクションアジリティ', homework: '片足バランス1分×2', photo: null }
   ]);
 
@@ -71,7 +82,7 @@ export default function StudentDetail() {
 
   const handleAddSession = () => {
     if (!newContent) return;
-    const newEntry = {
+    const newEntry: Session = {
       id: `ses-${Date.now()}`,
       date: new Date().toISOString().split('T')[0],
       staff: newStaff,
