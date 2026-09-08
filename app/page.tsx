@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-// 年間目標金額（必要に応じて変更してください）
+// 年間目標金額
 const ANNUAL_TARGET = 12000000;
 
 export default function Home() {
@@ -19,7 +19,7 @@ export default function Home() {
     yearlyCount: 0,
   });
 
-  const handleSync = async () => {
+  const handleSync = useCallback(async () => {
     setLoading(true);
     setMessage('Square データを同期・集計中...');
 
@@ -38,7 +38,7 @@ export default function Home() {
         let yearly = 0, yCount = 0;
 
         data.payments.forEach((p: any) => {
-          const createdAt = p.created_at; // 例: "2026-09-08T08:00:00Z"
+          const createdAt = p.created_at;
           if (!createdAt) return;
 
           const amount = p.amount_money?.amount ? Number(p.amount_money.amount) : 0;
@@ -84,7 +84,12 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // ページ読み込み時に自動でデータを取得
+  useEffect(() => {
+    handleSync();
+  }, [handleSync]);
 
   // 目標達成率の計算
   const achievementRate = ANNUAL_TARGET > 0 
@@ -106,7 +111,7 @@ export default function Home() {
             disabled={loading}
             className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-400 font-medium text-sm transition-colors shadow-sm"
           >
-            {loading ? '同期処理中...' : 'Square データ手動同期'}
+            {loading ? '同期処理中...' : '手動更新'}
           </button>
           {message && <p className="text-xs text-gray-600">{message}</p>}
         </div>
