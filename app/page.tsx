@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  note?: string;
+  createdAt: string;
+}
+
 interface Payment {
   id: string;
   created_at: string;
@@ -11,6 +20,8 @@ interface Payment {
   };
   status: string;
   customer_id?: string;
+  customer_name?: string;
+  customer_email?: string;
   note?: string;
   item_names?: string;
 }
@@ -25,6 +36,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [activeTab, setActiveTab] = useState<'sales' | 'customers'>('sales');
 
   // 日付選択 State
   const now = new Date();
@@ -46,7 +59,6 @@ export default function Home() {
     yearlyCount: 0,
   });
 
-  // 選択月の取引一覧＆商品別集計
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [monthlyProducts, setMonthlyProducts] = useState<ProductSummary[]>([]);
 
@@ -74,7 +86,7 @@ export default function Home() {
 
   const handleSync = useCallback(async () => {
     setLoading(true);
-    setMessage('Square データを同期・集計中...');
+    setMessage('Square カルテ・決済データを自動連携中...');
 
     try {
       const response = await fetch('/api/sync/square');
@@ -85,11 +97,12 @@ export default function Home() {
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         setAllPayments(sortedPayments);
+        setCustomers(data.customers || []);
         setMessage(
-          `同期完了: 顧客 ${data.summary.fetchedCustomersCount} 件 / 決済 ${data.summary.fetchedPaymentsCount} 件`
+          `自動連携完了: 顧客カルテ ${data.summary.fetchedCustomersCount} 件 / 決済 ${data.summary.fetchedPaymentsCount} 件`
         );
       } else {
-        setMessage(`同期エラー: ${data.error || 'データ取得に失敗しました'}`);
+        setMessage(`連携エラー: ${data.error || 'データ取得に失敗しました'}`);
       }
     } catch (error) {
       console.error(error);
@@ -134,7 +147,6 @@ export default function Home() {
         mCount++;
         monthlyList.push(p);
 
-        // 商品別集計
         const itemName = p.item_names || '店頭決済・その他';
         if (!productMap[itemName]) {
           productMap[itemName] = { count: 0, totalSales: 0 };
@@ -159,7 +171,6 @@ export default function Home() {
 
     setFilteredPayments(monthlyList);
 
-    // 商品集計配列化・売上順ソート
     const productsList: ProductSummary[] = Object.keys(productMap).map((name) => ({
       name,
       count: productMap[name].count,
@@ -179,7 +190,7 @@ export default function Home() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">GOLAZO Gym Management System</h1>
-          <p className="text-sm text-gray-500">売上・ダッシュボード管理</p>
+          <p className="text-sm text-gray-500">Square 顧客カルテ & 売上自動連携ダッシュボード</p>
         </div>
 
         <div className="flex flex-col items-start sm:items-end gap-1">
@@ -188,164 +199,245 @@ export default function Home() {
             disabled={loading}
             className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-400 font-medium text-sm transition-colors shadow-sm"
           >
-            {loading ? '同期処理中...' : '手動更新'}
+            {loading ? 'データ同期中...' : 'Squareから再同期'}
           </button>
           {message && <p className="text-xs text-gray-600">{message}</p>}
         </div>
       </div>
 
-      {/* 期間選択フィルター */}
-      <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-        <span className="text-sm font-semibold text-gray-700">表示対象期間:</span>
-        <select
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(Number(e.target.value))}
-          className="px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:border-blue-500"
+      {/* タブ切り替え */}
+      <div className="flex gap-4 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('sales')}
+          className={`pb-3 font-semibold text-sm border-b-2 transition-colors ${
+            activeTab === 'sales'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
         >
-          {[2024, 2025, 2026, 2027].map((y) => (
-            <option key={y} value={y}>{y} 年</option>
-          ))}
-        </select>
-        <select
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(Number(e.target.value))}
-          className="px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:border-blue-500"
+          売上・取引管理
+        </button>
+        <button
+          onClick={() => setActiveTab('customers')}
+          className={`pb-3 font-semibold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'customers'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
         >
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-            <option key={m} value={m}>{m} 月</option>
-          ))}
-        </select>
+          連携顧客カルテ
+          <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+            {customers.length} 名
+          </span>
+        </button>
       </div>
 
-      {/* 指標カードグリッド */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm font-medium text-gray-500">本日の売上（今日）</p>
-          <h3 className="text-2xl font-bold text-gray-900 mt-2">¥{metrics.dailySales.toLocaleString()}</h3>
-          <p className="text-xs text-gray-500 mt-1">件数: {metrics.dailyCount} 件</p>
-        </div>
-
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm font-medium text-gray-500">{selectedYear}年{selectedMonth}月の売上</p>
-          <h3 className="text-2xl font-bold text-blue-600 mt-2">¥{metrics.monthlySales.toLocaleString()}</h3>
-          <p className="text-xs text-gray-500 mt-1">件数: {metrics.monthlyCount} 件</p>
-        </div>
-
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-sm font-medium text-gray-500">{selectedYear}年度 累計売上</p>
-          <h3 className="text-2xl font-bold text-gray-900 mt-2">¥{metrics.yearlySales.toLocaleString()}</h3>
-          <p className="text-xs text-gray-500 mt-1">件数: {metrics.yearlyCount} 件</p>
-        </div>
-
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">{selectedYear}年 目標達成率</p>
-            {!isEditingTarget && (
-              <button onClick={() => setIsEditingTarget(true)} className="text-xs text-blue-600 hover:underline">
-                目標を変更
-              </button>
-            )}
+      {activeTab === 'sales' ? (
+        <>
+          {/* 期間選択フィルター */}
+          <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+            <span className="text-sm font-semibold text-gray-700">表示対象期間:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:border-blue-500"
+            >
+              {[2024, 2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>{y} 年</option>
+              ))}
+            </select>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:border-blue-500"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>{m} 月</option>
+              ))}
+            </select>
           </div>
-          <h3 className="text-2xl font-bold text-green-600 mt-2">{achievementRate}%</h3>
-          <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-            <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${achievementRate}%` }}></div>
-          </div>
-          <div className="mt-3 text-xs">
-            {isEditingTarget ? (
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  type="number"
-                  value={inputTarget}
-                  onChange={(e) => setInputTarget(e.target.value)}
-                  className="w-28 px-2 py-1 text-xs border rounded border-gray-300"
-                />
-                <button onClick={handleSaveTarget} className="px-2 py-1 text-white bg-green-600 rounded text-xs">保存</button>
-                <button onClick={() => setIsEditingTarget(false)} className="px-2 py-1 text-gray-600 bg-gray-100 rounded text-xs">キャンセル</button>
+
+          {/* 指標カード */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+              <p className="text-sm font-medium text-gray-500">本日の売上（今日）</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-2">¥{metrics.dailySales.toLocaleString()}</h3>
+              <p className="text-xs text-gray-500 mt-1">件数: {metrics.dailyCount} 件</p>
+            </div>
+
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+              <p className="text-sm font-medium text-gray-500">{selectedYear}年{selectedMonth}月の売上</p>
+              <h3 className="text-2xl font-bold text-blue-600 mt-2">¥{metrics.monthlySales.toLocaleString()}</h3>
+              <p className="text-xs text-gray-500 mt-1">件数: {metrics.monthlyCount} 件</p>
+            </div>
+
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+              <p className="text-sm font-medium text-gray-500">{selectedYear}年度 累計売上</p>
+              <h3 className="text-2xl font-bold text-gray-900 mt-2">¥{metrics.yearlySales.toLocaleString()}</h3>
+              <p className="text-xs text-gray-500 mt-1">件数: {metrics.yearlyCount} 件</p>
+            </div>
+
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-500">{selectedYear}年 目標達成率</p>
+                {!isEditingTarget && (
+                  <button onClick={() => setIsEditingTarget(true)} className="text-xs text-blue-600 hover:underline">
+                    目標を変更
+                  </button>
+                )}
               </div>
+              <h3 className="text-2xl font-bold text-green-600 mt-2">{achievementRate}%</h3>
+              <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${achievementRate}%` }}></div>
+              </div>
+              <div className="mt-3 text-xs">
+                {isEditingTarget ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="number"
+                      value={inputTarget}
+                      onChange={(e) => setInputTarget(e.target.value)}
+                      className="w-28 px-2 py-1 text-xs border rounded border-gray-300"
+                    />
+                    <button onClick={handleSaveTarget} className="px-2 py-1 text-white bg-green-600 rounded text-xs">保存</button>
+                    <button onClick={() => setIsEditingTarget(false)} className="px-2 py-1 text-gray-600 bg-gray-100 rounded text-xs">キャンセル</button>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">目標: ¥{annualTarget.toLocaleString()}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 今月販売した商品一覧 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+            <h2 className="text-lg font-bold text-gray-900">{selectedYear}年{selectedMonth}月に販売された商品内訳</h2>
+            {monthlyProducts.length === 0 ? (
+              <p className="text-sm text-gray-400">この月に販売された商品はありません。</p>
             ) : (
-              <p className="text-gray-400">目標: ¥{annualTarget.toLocaleString()}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {monthlyProducts.map((prod, idx) => (
+                  <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">{prod.name}</p>
+                      <p className="text-xs text-gray-500">{prod.count} 件販売</p>
+                    </div>
+                    <p className="font-bold text-blue-600 text-sm">¥{prod.totalSales.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* 今月販売した商品一覧（商品別内訳） */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-        <h2 className="text-lg font-bold text-gray-900">{selectedYear}年{selectedMonth}月に販売された商品内訳</h2>
-        {monthlyProducts.length === 0 ? (
-          <p className="text-sm text-gray-400">この月に販売された商品はありません。</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {monthlyProducts.map((prod, idx) => (
-              <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-center">
-                <div>
-                  <p className="font-semibold text-gray-800 text-sm">{prod.name}</p>
-                  <p className="text-xs text-gray-500">{prod.count} 件販売</p>
-                </div>
-                <p className="font-bold text-blue-600 text-sm">¥{prod.totalSales.toLocaleString()}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          {/* 取引一覧テーブル（顧客名表記付き） */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">{selectedYear}年{selectedMonth}月の取引明細</h2>
+              <span className="text-xs text-gray-500">{filteredPayments.length} 件</span>
+            </div>
 
-      {/* 取引一覧テーブル（商品名表記付き） */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">{selectedYear}年{selectedMonth}月の取引明細</h2>
-          <span className="text-xs text-gray-500">{filteredPayments.length} 件</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-600">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
-              <tr>
-                <th className="px-6 py-3 font-semibold">決済日時</th>
-                <th className="px-6 py-3 font-semibold">商品名 / メモ</th>
-                <th className="px-6 py-3 font-semibold">金額</th>
-                <th className="px-6 py-3 font-semibold">ステータス</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredPayments.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
-                    {loading ? 'データ読み込み中...' : '該当する取引データがありません。'}
-                  </td>
-                </tr>
-              ) : (
-                filteredPayments.map((payment) => {
-                  const dateFormatted = new Date(payment.created_at).toLocaleString('ja-JP', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  });
-                  const amount = payment.amount_money?.amount || 0;
-
-                  return (
-                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{dateFormatted}</td>
-                      <td className="px-6 py-4 text-gray-900 font-medium">
-                        {payment.item_names || '店頭決済・その他'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">
-                        ¥{amount.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2.5 py-1 text-xs font-semibold text-green-700 bg-green-50 rounded-full border border-green-200">
-                          {payment.status}
-                        </span>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-gray-600">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-3 font-semibold">決済日時</th>
+                    <th className="px-6 py-3 font-semibold">顧客名</th>
+                    <th className="px-6 py-3 font-semibold">商品名 / メモ</th>
+                    <th className="px-6 py-3 font-semibold">金額</th>
+                    <th className="px-6 py-3 font-semibold">ステータス</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                        {loading ? 'データ読み込み中...' : '該当する取引データがありません。'}
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ) : (
+                    filteredPayments.map((payment) => {
+                      const dateFormatted = new Date(payment.created_at).toLocaleString('ja-JP', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      });
+                      const amount = payment.amount_money?.amount || 0;
+
+                      return (
+                        <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-gray-900">{dateFormatted}</td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                            {payment.customer_name}
+                          </td>
+                          <td className="px-6 py-4 text-gray-800">
+                            {payment.item_names || '店頭決済・その他'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">
+                            ¥{amount.toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2.5 py-1 text-xs font-semibold text-green-700 bg-green-50 rounded-full border border-green-200">
+                              {payment.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* 顧客カルテ連携一覧 */
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Square 連携顧客カルテ</h2>
+              <p className="text-xs text-gray-500">Square POS・POSレジで登録されている顧客マスター情報</p>
+            </div>
+            <span className="text-xs text-gray-500">{customers.length} 件</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-gray-600">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-3 font-semibold">顧客氏名</th>
+                  <th className="px-6 py-3 font-semibold">メールアドレス</th>
+                  <th className="px-6 py-3 font-semibold">電話番号</th>
+                  <th className="px-6 py-3 font-semibold">メモ / カルテ備考</th>
+                  <th className="px-6 py-3 font-semibold">登録日時</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {customers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                      {loading ? '顧客データ取得中...' : '登録されている顧客情報がありません。'}
+                    </td>
+                  </tr>
+                ) : (
+                  customers.map((c) => (
+                    <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-gray-900">{c.name}</td>
+                      <td className="px-6 py-4 text-gray-700">{c.email}</td>
+                      <td className="px-6 py-4 text-gray-700">{c.phone}</td>
+                      <td className="px-6 py-4 text-gray-500 text-xs">{c.note || '-'}</td>
+                      <td className="px-6 py-4 text-xs text-gray-400">
+                        {new Date(c.createdAt).toLocaleDateString('ja-JP')}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </main>
   );
 }
