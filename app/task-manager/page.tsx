@@ -1,7 +1,27 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Task, MeetingNote, Staff } from '../../types';
+
+// --- 型定義 ---
+export type Staff = 'TAKA' | 'NANA';
+
+export interface Task {
+  id: string;
+  title: string;
+  assignedTo: Staff;
+  dueDate: string;
+  category: string;
+  status: '未着手' | '進行中' | '完了';
+  isImportant?: boolean;
+}
+
+export interface MeetingNote {
+  id: string;
+  dateTime: string;
+  category: string;
+  title: string;
+  content: string;
+}
 
 export default function TaskManagerPage() {
   const [selectedMonth, setSelectedMonth] = useState('2026-09');
