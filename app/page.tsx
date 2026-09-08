@@ -2,12 +2,25 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-// 年間目標金額
+// 年間目標金額（こちらでお好きな目標金額に変更可能です）
 const ANNUAL_TARGET = 12000000;
+
+interface Payment {
+  id: string;
+  created_at: string;
+  amount_money?: {
+    amount: number;
+    currency: string;
+  };
+  status: string;
+  customer_id?: string;
+  note?: string;
+}
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [paymentsList, setPaymentsList] = useState<Payment[]>([]);
 
   // 集計データ用 State
   const [metrics, setMetrics] = useState({
@@ -37,7 +50,12 @@ export default function Home() {
         let monthly = 0, mCount = 0;
         let yearly = 0, yCount = 0;
 
-        data.payments.forEach((p: any) => {
+        // 日付順（新しい順）にソート
+        const sortedPayments = [...data.payments].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+
+        sortedPayments.forEach((p: Payment) => {
           const createdAt = p.created_at;
           if (!createdAt) return;
 
@@ -72,6 +90,8 @@ export default function Home() {
           yearlyCount: yCount,
         });
 
+        setPaymentsList(sortedPayments);
+
         setMessage(
           `同期完了: 顧客 ${data.summary.fetchedCustomersCount} 件 / 決済 ${data.summary.fetchedPaymentsCount} 件`
         );
@@ -86,7 +106,6 @@ export default function Home() {
     }
   }, []);
 
-  // ページ読み込み時に自動でデータを取得
   useEffect(() => {
     handleSync();
   }, [handleSync]);
@@ -97,7 +116,7 @@ export default function Home() {
     : 0;
 
   return (
-    <main className="p-8 max-w-7xl mx-auto space-y-6">
+    <main className="p-8 max-w-7xl mx-auto space-y-8">
       {/* ヘッダーエリア */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
         <div>
@@ -159,6 +178,64 @@ export default function Home() {
             ></div>
           </div>
           <p className="text-xs text-gray-400 mt-1">目標: ¥{ANNUAL_TARGET.toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* 直近の取引一覧テーブル */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">直近の取引一覧</h2>
+          <span className="text-xs text-gray-500">最新20件表示</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-600">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-3 font-semibold">決済日時</th>
+                <th className="px-6 py-3 font-semibold">決済ID</th>
+                <th className="px-6 py-3 font-semibold">金額</th>
+                <th className="px-6 py-3 font-semibold">ステータス</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {paymentsList.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
+                    {loading ? 'データ読み込み中...' : '取引データがありません。'}
+                  </td>
+                </tr>
+              ) : (
+                paymentsList.slice(0, 20).map((payment) => {
+                  const dateFormatted = new Date(payment.created_at).toLocaleString('ja-JP', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+                  const amount = payment.amount_money?.amount || 0;
+
+                  return (
+                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-900">{dateFormatted}</td>
+                      <td className="px-6 py-4 whitespace-nowrap font-mono text-xs text-gray-500">
+                        {payment.id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">
+                        ¥{amount.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2.5 py-1 text-xs font-semibold text-green-700 bg-green-50 rounded-full border border-green-200">
+                          {payment.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </main>
