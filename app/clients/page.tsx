@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 // --- 型定義 ---
 interface Session {
   id: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   staff: string; // TAKA or NANA
   content: string;
   homework: string;
@@ -97,11 +97,11 @@ export default function ClientsPage() {
       age: 11,
       birthdate: '2015-05-12',
       firstLessonDate: '2026-03-01',
-      lastReservationDate: '2026-08-22',
+      lastReservationDate: '2026-10-05',
       concern: 'サッカーでの体幹ブレ・走力向上',
       target: 'トレセン選出・ブレない軸作り',
       memo: '右足首捻挫の既往歴あり。兄。',
-      alert: '前回セッションから2週間以上空いています',
+      alert: null,
       physicalHistory: [
         {
           id: 'm-1',
@@ -125,8 +125,9 @@ export default function ClientsPage() {
         }
       ],
       sessions: [
-        { id: 'ses-1', date: '2026-09-01', staff: 'TAKA', content: 'KOBA式体幹トレーニング＆リアクションアジリティ', homework: '片足バランス 1分×2回', photo: null },
-        { id: 'ses-2', date: '2026-08-22', staff: 'NANA', content: 'フットアライメント評価・軸足強化', homework: '足指じゃんけん100回', photo: null }
+        { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null },
+        { id: 'ses-102', date: '2026-09-15', staff: 'NANA', content: 'KOBA式体幹トレーニング＆アジリティ', homework: '片足バランス 1分×2回', photo: null },
+        { id: 'ses-103', date: '2026-09-01', staff: 'TAKA', content: 'フットアライメント評価・軸足強化', homework: '足指じゃんけん100回', photo: null }
       ]
     },
     {
@@ -137,7 +138,7 @@ export default function ClientsPage() {
       age: 8,
       birthdate: '2018-09-20',
       firstLessonDate: '2026-04-10',
-      lastReservationDate: '2026-08-30',
+      lastReservationDate: '2026-10-02',
       concern: '運動神経向上・ボール感覚',
       target: 'アジリティUP',
       memo: '弟。リズムトレーニングを好む。',
@@ -155,7 +156,8 @@ export default function ClientsPage() {
         }
       ],
       sessions: [
-        { id: 'ses-3', date: '2026-08-30', staff: 'NANA', content: 'スポーツリズムステップ・コーディネーション', homework: 'ケンケンパ練習', photo: null }
+        { id: 'ses-201', date: '2026-10-02', staff: 'NANA', content: 'スポーツリズムステップ・コーディネーション', homework: 'ケンケンパ練習', photo: null },
+        { id: 'ses-202', date: '2026-09-20', staff: 'TAKA', content: 'リアクションアジリティ＆体幹基礎', homework: 'もも上げ20回×3セット', photo: null }
       ]
     }
   ]);
@@ -170,14 +172,17 @@ export default function ClientsPage() {
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
-  // 測定比較用（年月選択）
-  const [selectedPhysicalDate, setSelectedPhysicalDate] = useState<string>(
-    currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1]?.date || '2026-09-01'
-  );
-  const currentPhysical = currentStudent.physicalHistory.find(m => m.date === selectedPhysicalDate) || currentStudent.physicalHistory[0];
+  // 姿勢写真 比較用（Before / After）年月選択
+  const physicalDates = currentStudent.physicalHistory.map(m => m.date);
+  const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
+  const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
 
-  // セッション表示年月フィルター
-  const [sessionYearMonth, setSessionYearMonth] = useState<string>('ALL');
+  const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
+  const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
+
+  // セッション表示 フィルター（年度・月度）
+  const [selectedYear, setSelectedYear] = useState<string>('ALL');
+  const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
 
   // 新規セッションフォーム
   const [newSessionDate, setNewSessionDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -185,7 +190,7 @@ export default function ClientsPage() {
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
 
-  // 基本情報手動編集モード
+  // 基本情報手動編集フォーム
   const [editForm, setEditForm] = useState({
     name: currentStudent.name,
     kana: currentStudent.kana,
@@ -195,7 +200,7 @@ export default function ClientsPage() {
     memo: currentStudent.memo
   });
 
-  // キーワード検索による絞り込み
+  // 検索処理
   const filteredStudents = students.filter(s => {
     const parent = parents.find(p => p.id === s.parentId);
     const query = searchKeyword.toLowerCase();
@@ -212,11 +217,12 @@ export default function ClientsPage() {
     setSelectedStudentId(id);
     const target = students.find(s => s.id === id);
     if (target && target.physicalHistory.length > 0) {
-      setSelectedPhysicalDate(target.physicalHistory[target.physicalHistory.length - 1].date);
+      setBeforeDate(target.physicalHistory[0].date);
+      setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
     }
   };
 
-  // セッション登録
+  // セッション追加（チケット自動消化ロジック入り）
   const handleAddSession = () => {
     if (!newSessionContent) return;
     const newSession: Session = {
@@ -228,10 +234,12 @@ export default function ClientsPage() {
       photo: null
     };
 
+    // セッションリストへ追加
     setStudents(prev =>
       prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions] } : s))
     );
 
+    // 保護者の回数券（チケット残数）を自動的に1回消化
     setParents(prev =>
       prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
     );
@@ -240,8 +248,13 @@ export default function ClientsPage() {
     setNewSessionHomework('');
   };
 
-  // 画像アップロードハンドラー (TypeScript型不一致を修正済み)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'posture' | 'test', keyName?: 'front' | 'side' | 'back') => {
+  // 画像アップロード・差し替えハンドラー
+  const handleFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    targetDate: string,
+    type: 'posture' | 'test',
+    keyName?: 'front' | 'side' | 'back'
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
@@ -251,7 +264,7 @@ export default function ClientsPage() {
         if (s.id !== currentStudent.id) return s;
 
         const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
-          if (m.date !== selectedPhysicalDate) return m;
+          if (m.date !== targetDate) return m;
 
           if (type === 'posture' && keyName) {
             const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
@@ -276,13 +289,51 @@ export default function ClientsPage() {
     );
   };
 
-  // 身体データ手動修正
-  const handleUpdatePhysicalValue = (field: keyof PhysicalData, val: any) => {
+  // 姿勢写真 削除ハンドラー
+  const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
+          const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
+          return {
+            ...m,
+            posturePhotos: {
+              ...currentPhotos,
+              [keyName]: null
+            }
+          };
+        });
+        return { ...s, physicalHistory: updatedHistory };
+      })
+    );
+  };
+
+  // テスト結果写真 削除ハンドラー
+  const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
+          return {
+            ...m,
+            testPhotos: (m.testPhotos || []).filter((_, idx) => idx !== indexToDelete)
+          };
+        });
+        return { ...s, physicalHistory: updatedHistory };
+      })
+    );
+  };
+
+  // 身体データ更新
+  const handleUpdatePhysicalValue = (targetDate: string, field: keyof PhysicalData, val: any) => {
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
         const updated: PhysicalData[] = s.physicalHistory.map(m => {
-          if (m.date === selectedPhysicalDate) {
+          if (m.date === targetDate) {
             return { ...m, [field]: val };
           }
           return m;
@@ -302,13 +353,16 @@ export default function ClientsPage() {
     );
   };
 
-  const availableYearMonths = Array.from(
-    new Set(currentStudent.sessions.map(s => s.date.substring(0, 7)))
-  ).sort().reverse();
+  // 年度・月度の動的取得
+  const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
+  const availableMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
+  // セッションの絞り込みフィルター処理
   const filteredSessions = currentStudent.sessions.filter(s => {
-    if (sessionYearMonth === 'ALL') return true;
-    return s.date.startsWith(sessionYearMonth);
+    const [y, m] = s.date.split('-');
+    const matchYear = selectedYear === 'ALL' || y === selectedYear;
+    const matchMonth = selectedMonth === 'ALL' || m === selectedMonth;
+    return matchYear && matchMonth;
   });
 
   return (
@@ -325,7 +379,7 @@ export default function ClientsPage() {
       <div className="p-6 max-w-7xl mx-auto space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
-          {/* 左カラム */}
+          {/* 左カラム：受講生選択 */}
           <div className="md:col-span-1 space-y-3">
             <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-2">
               <label className="text-xs font-bold text-slate-600">🔍 キーワード検索</label>
@@ -366,8 +420,9 @@ export default function ClientsPage() {
             })}
           </div>
 
-          {/* 右カラム */}
+          {/* 右カラム：メインコンテンツ */}
           <div className="md:col-span-3 space-y-4">
+            {/* ヘッダーカード */}
             <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
               <div className="flex justify-between items-start">
                 <div>
@@ -380,7 +435,7 @@ export default function ClientsPage() {
                       保護者 (Square連携): {currentParent.name} 様 ({currentParent.phone})
                     </span>
                     <span className="bg-sky-100 text-sky-800 font-bold px-2.5 py-0.5 rounded-full">
-                      🎟️ 家族共通共有チケット残数: {currentParent.ticketRemaining} 回
+                      🎟️ 家族共通回数券 残数: {currentParent.ticketRemaining} 回
                     </span>
                   </div>
                 </div>
@@ -405,12 +460,13 @@ export default function ClientsPage() {
                 )}
               </div>
 
+              {/* タブ切り替え */}
               <div className="flex border-b border-slate-200 pt-2 gap-4 text-xs font-bold">
                 <button
                   onClick={() => setActiveTab('carte')}
                   className={`pb-2 border-b-2 transition ${activeTab === 'carte' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400'}`}
                 >
-                  📋 カルテ (セッション・3ヶ月測定・写真)
+                  📋 カルテ (セッション & 3ヶ月計測・写真比較)
                 </button>
                 <button
                   onClick={() => setActiveTab('tickets')}
@@ -427,126 +483,19 @@ export default function ClientsPage() {
               </div>
             </div>
 
-            {/* TAB 1 */}
+            {/* TAB 1: カルテ */}
             {activeTab === 'carte' && (
               <div className="space-y-6">
-                <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b pb-3">
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-sm">①〜⑤ 3ヶ月定期計測・身体データ推移 & 写真管理</h3>
-                      <p className="text-[11px] text-slate-400">年度・月を選択して過去の姿勢写真やテストデータを比較表示できます</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-bold text-slate-600">表示・比較月:</span>
-                      <select
-                        value={selectedPhysicalDate}
-                        onChange={e => setSelectedPhysicalDate(e.target.value)}
-                        className="border border-slate-300 rounded p-1 font-bold text-[#5e9bc4]"
-                      >
-                        {currentStudent.physicalHistory.map(m => (
-                          <option key={m.id} value={m.date}>{m.date} 計測データ</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
 
-                  {currentPhysical && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg text-xs">
-                      <div>
-                        <label className="text-slate-500 font-semibold block">体重 (kg)</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={currentPhysical.weight}
-                          onChange={e => handleUpdatePhysicalValue('weight', parseFloat(e.target.value))}
-                          className="w-full border border-slate-300 rounded p-1.5 font-bold text-[#5e9bc4]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-slate-500 font-semibold block">体脂肪率 (%)</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={currentPhysical.fat}
-                          onChange={e => handleUpdatePhysicalValue('fat', parseFloat(e.target.value))}
-                          className="w-full border border-slate-300 rounded p-1.5 font-bold text-slate-700"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-slate-500 font-semibold block">筋肉量 (kg)</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={currentPhysical.muscle}
-                          onChange={e => handleUpdatePhysicalValue('muscle', parseFloat(e.target.value))}
-                          className="w-full border border-slate-300 rounded p-1.5 font-bold text-slate-700"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-slate-500 font-semibold block">メモ</label>
-                        <input
-                          type="text"
-                          value={currentPhysical.note || ''}
-                          onChange={e => handleUpdatePhysicalValue('note', e.target.value)}
-                          className="w-full border border-slate-300 rounded p-1.5 text-slate-600"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <h4 className="font-bold text-xs text-slate-700 mb-2">📸 姿勢写真3枚 (正面 / 側面 / 背面)</h4>
-                    <div className="grid grid-cols-3 gap-3">
-                      {(['front', 'side', 'back'] as const).map(type => {
-                        const labels = { front: '正面', side: '側面', back: '背面' };
-                        const photoUrl = currentPhysical?.posturePhotos?.[type];
-                        return (
-                          <div key={type} className="border-2 border-dashed border-slate-300 rounded-lg p-3 text-center bg-slate-50 hover:bg-slate-100 transition relative">
-                            <span className="text-xs font-bold text-slate-600 block mb-1">{labels[type]}写真</span>
-                            {photoUrl ? (
-                              <img src={photoUrl} alt={labels[type]} className="w-full h-32 object-cover rounded" />
-                            ) : (
-                              <div className="h-32 flex flex-col items-center justify-center text-slate-400 text-[10px]">
-                                <span>ファイルをドラッグ＆ドロップ</span>
-                                <span>またはクリックしてアップロード</span>
-                              </div>
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={e => handleFileUpload(e, 'posture', type)}
-                              className="absolute inset-0 opacity-0 cursor-pointer"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-bold text-xs text-slate-700 mb-2">📋 測定各種テスト (ケガゼロ / フィジカルチェック) 結果シート画像</h4>
-                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center bg-slate-50 relative cursor-pointer hover:bg-slate-100 transition">
-                      <span className="text-xs font-bold text-[#5e9bc4]">テスト結果シートをここにドラッグ＆ドロップして保存</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={e => handleFileUpload(e, 'test')}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                    </div>
-                    {currentPhysical?.testPhotos && currentPhysical.testPhotos.length > 0 && (
-                      <div className="flex gap-2 mt-2 overflow-x-auto">
-                        {currentPhysical.testPhotos.map((img, idx) => (
-                          <img key={idx} src={img} alt="test" className="w-20 h-20 object-cover rounded border" />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 新規セッション記録の追加 */}
+                {/* 1. 上部：新規セッション記録の追加 */}
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
-                  <h3 className="font-bold text-slate-800 text-sm">新規セッション記録の追加</h3>
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 text-sm">✍️ 新規セッション記録の追加</h3>
+                    <span className="text-[11px] text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-200 font-bold">
+                      💡 登録すると回数券残数（現在 {currentParent.ticketRemaining} 回）が1回自動消費されます
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
                     <div>
                       <label className="block text-slate-500 mb-1 font-semibold">日時</label>
@@ -572,7 +521,7 @@ export default function ClientsPage() {
                       <label className="block text-slate-500 mb-1 font-semibold">セッション内容</label>
                       <input
                         type="text"
-                        placeholder="例: KOBA式体幹バランストレーニング"
+                        placeholder="例: KOBA式体幹バランストレーニング & スプリントフォーム"
                         value={newSessionContent}
                         onChange={e => setNewSessionContent(e.target.value)}
                         className="w-full border border-slate-300 rounded p-2"
@@ -580,7 +529,7 @@ export default function ClientsPage() {
                     </div>
                   </div>
                   <div className="text-xs">
-                    <label className="block text-slate-500 mb-1 font-semibold">宿題</label>
+                    <label className="block text-slate-500 mb-1 font-semibold">宿題・自主トレ指示</label>
                     <input
                       type="text"
                       placeholder="例: 片足ドローイン 1分×2"
@@ -591,56 +540,294 @@ export default function ClientsPage() {
                   </div>
                   <button
                     onClick={handleAddSession}
-                    className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2 rounded text-xs transition"
+                    className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2 rounded text-xs transition shadow-sm"
                   >
-                    セッションを登録（保護者チケットを1回自動消化）
+                    セッションを登録する（回数券を1回減算）
                   </button>
                 </div>
 
-                {/* 時系列セッション履歴 */}
+                {/* 2. 上部：時系列セッション履歴（年度・月度選択フィルター付き） */}
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b pb-3">
-                    <h3 className="font-bold text-slate-800 text-sm">時系列セッション履歴</h3>
-                    <div className="flex gap-1 text-xs">
-                      <button
-                        onClick={() => setSessionYearMonth('ALL')}
-                        className={`px-3 py-1 rounded-full font-bold transition ${sessionYearMonth === 'ALL' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600'}`}
-                      >
-                        すべて
-                      </button>
-                      {availableYearMonths.map(ym => (
-                        <button
-                          key={ym}
-                          onClick={() => setSessionYearMonth(ym)}
-                          className={`px-3 py-1 rounded-full font-bold transition ${sessionYearMonth === ym ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600'}`}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm">📅 時系列セッション履歴</h3>
+                      <p className="text-[11px] text-slate-400">過去の指導内容と宿題の履歴</p>
+                    </div>
+
+                    {/* 年度 & 月度 選択ドロップダウン */}
+                    <div className="flex items-center gap-2 text-xs bg-slate-50 p-1.5 rounded border border-slate-200">
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-slate-600">年度:</span>
+                        <select
+                          value={selectedYear}
+                          onChange={e => setSelectedYear(e.target.value)}
+                          className="border border-slate-300 rounded p-1 font-bold text-[#5e9bc4] bg-white"
                         >
-                          {ym.replace('-', '年')}月
-                        </button>
-                      ))}
+                          <option value="ALL">すべて</option>
+                          {availableYears.map(y => (
+                            <option key={y} value={y}>{y}年</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-slate-600">月度:</span>
+                        <select
+                          value={selectedMonth}
+                          onChange={e => setSelectedMonth(e.target.value)}
+                          className="border border-slate-300 rounded p-1 font-bold text-[#5e9bc4] bg-white"
+                        >
+                          <option value="ALL">すべて</option>
+                          {availableMonths.map(m => (
+                            <option key={m} value={m}>{parseInt(m, 10)}月</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-3">
-                    {filteredSessions.map(session => (
-                      <div key={session.id} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-1">
-                        <div className="flex justify-between font-bold text-slate-700">
-                          <span>{session.date}</span>
-                          <span className="text-[#5e9bc4]">担当: {session.staff}</span>
+                    {filteredSessions.length > 0 ? (
+                      filteredSessions.map(session => (
+                        <div key={session.id} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-1">
+                          <div className="flex justify-between font-bold text-slate-700">
+                            <span>{session.date}</span>
+                            <span className="text-[#5e9bc4]">担当: {session.staff}</span>
+                          </div>
+                          <p className="text-slate-800">{session.content}</p>
+                          {session.homework && (
+                            <p className="text-amber-800 bg-amber-50 p-1.5 rounded border border-amber-100">
+                              <span className="font-bold">宿題:</span> {session.homework}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-slate-800">{session.content}</p>
-                        {session.homework && (
-                          <p className="text-amber-800 bg-amber-50 p-1.5 rounded border border-amber-100">
-                            <span className="font-bold">宿題:</span> {session.homework}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 text-center py-4">該当する年度・月度のセッション記録はありません</p>
+                    )}
                   </div>
                 </div>
+
+                {/* 3. 下部：3ヶ月定期計測・身体データ推移 & 姿勢写真ビフォーアフター比較 */}
+                <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-6">
+                  <div className="border-b pb-3">
+                    <h3 className="font-bold text-slate-800 text-sm">📊 3ヶ月定期計測・身体データ & 姿勢写真比較</h3>
+                    <p className="text-[11px] text-slate-400">選択した2つの年月での変化（ビフォーアフター）を比較・写真の差し替えや削除ができます</p>
+                  </div>
+
+                  {/* 比較年月セレクター */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 p-3 rounded-lg border border-sky-100 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded">過去 (Before)</span>
+                      <select
+                        value={beforeDate}
+                        onChange={e => setBeforeDate(e.target.value)}
+                        className="border border-slate-300 rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1"
+                      >
+                        {physicalDates.map(d => (
+                          <option key={d} value={d}>{d} 計測データ</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white bg-[#5e9bc4] px-2 py-0.5 rounded">最新 (After)</span>
+                      <select
+                        value={afterDate}
+                        onChange={e => setAfterDate(e.target.value)}
+                        className="border border-slate-300 rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1"
+                      >
+                        {physicalDates.map(d => (
+                          <option key={d} value={d}>{d} 計測データ</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 数値データ比較 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    {/* Before 数値 */}
+                    {beforePhysical && (
+                      <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
+                        <span className="font-bold text-slate-600 block border-b pb-1"> Before: {beforePhysical.date}</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={beforePhysical.weight}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))}
+                              className="w-full border rounded p-1 font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400 block text-[10px]">体脂肪率 (%)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={beforePhysical.fat}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))}
+                              className="w-full border rounded p-1 font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400 block text-[10px]">筋肉量 (kg)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={beforePhysical.muscle}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))}
+                              className="w-full border rounded p-1 font-bold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* After 数値 */}
+                    {afterPhysical && (
+                      <div className="bg-sky-50/40 p-3 rounded border border-sky-200 space-y-2">
+                        <span className="font-bold text-[#5e9bc4] block border-b pb-1"> After: {afterPhysical.date}</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={afterPhysical.weight}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value))}
+                              className="w-full border rounded p-1 font-bold text-[#5e9bc4]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400 block text-[10px]">体脂肪率 (%)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={afterPhysical.fat}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value))}
+                              className="w-full border rounded p-1 font-bold text-[#5e9bc4]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400 block text-[10px]">筋肉量 (kg)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={afterPhysical.muscle}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value))}
+                              className="w-full border rounded p-1 font-bold text-[#5e9bc4]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 姿勢写真 3種 横並び比較 */}
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-xs text-slate-700">📸 姿勢写真3種 (正面 / 側面 / 背面) 変化の比較</h4>
+
+                    {(['front', 'side', 'back'] as const).map(type => {
+                      const labels = { front: '正面', side: '側面', back: '背面' };
+                      const beforeUrl = beforePhysical?.posturePhotos?.[type];
+                      const afterUrl = afterPhysical?.posturePhotos?.[type];
+
+                      return (
+                        <div key={type} className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+                          <span className="text-xs font-bold text-slate-700 block border-b pb-1">【{labels[type]}写真の比較】</span>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            {/* Before 写真ブロック */}
+                            <div className="space-y-1 text-center">
+                              <span className="text-[10px] font-bold text-slate-500 block">Before ({beforeDate})</span>
+                              {beforeUrl ? (
+                                <div className="space-y-1">
+                                  <img src={beforeUrl} alt={`${labels[type]}-before`} className="w-full h-36 object-cover rounded border" />
+                                  <div className="flex gap-1 justify-center">
+                                    <label className="bg-white border text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer">
+                                      🔄 差し替え
+                                      <input type="file" accept="image/*" onChange={e => handleFileUpload(e, beforeDate, 'posture', type)} className="hidden" />
+                                    </label>
+                                    <button onClick={() => handleDeletePosturePhoto(beforeDate, type)} className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded">
+                                      🗑️ 削除
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="border-2 border-dashed border-slate-300 rounded h-36 flex flex-col items-center justify-center text-slate-400 text-[10px] relative hover:bg-slate-100 transition cursor-pointer">
+                                  <span>クリックして追加</span>
+                                  <input type="file" accept="image/*" onChange={e => handleFileUpload(e, beforeDate, 'posture', type)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* After 写真ブロック */}
+                            <div className="space-y-1 text-center">
+                              <span className="text-[10px] font-bold text-[#5e9bc4] block">After ({afterDate})</span>
+                              {afterUrl ? (
+                                <div className="space-y-1">
+                                  <img src={afterUrl} alt={`${labels[type]}-after`} className="w-full h-36 object-cover rounded border border-sky-300" />
+                                  <div className="flex gap-1 justify-center">
+                                    <label className="bg-white border text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer">
+                                      🔄 差し替え
+                                      <input type="file" accept="image/*" onChange={e => handleFileUpload(e, afterDate, 'posture', type)} className="hidden" />
+                                    </label>
+                                    <button onClick={() => handleDeletePosturePhoto(afterDate, type)} className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded">
+                                      🗑️ 削除
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="border-2 border-dashed border-sky-300 rounded h-36 flex flex-col items-center justify-center text-[#5e9bc4] text-[10px] relative hover:bg-sky-50 transition cursor-pointer">
+                                  <span>クリックして追加</span>
+                                  <input type="file" accept="image/*" onChange={e => handleFileUpload(e, afterDate, 'posture', type)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* テスト結果写真 */}
+                  <div className="space-y-3 pt-2 border-t">
+                    <h4 className="font-bold text-xs text-slate-700">📋 測定各種テスト (ケガゼロ / フィジカルチェック) 結果シート</h4>
+
+                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 text-center bg-slate-50 relative cursor-pointer hover:bg-slate-100 transition">
+                      <span className="text-xs font-bold text-[#5e9bc4]">＋ テスト結果シートを追加 ({afterDate} 計測データへ保存)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={e => handleFileUpload(e, afterDate, 'test')}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+
+                    {afterPhysical?.testPhotos && afterPhysical.testPhotos.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {afterPhysical.testPhotos.map((img, idx) => (
+                          <div key={idx} className="relative border border-slate-200 rounded p-1 bg-white">
+                            <img src={img} alt={`test-${idx}`} className="w-full h-24 object-cover rounded" />
+                            <button
+                              onClick={() => handleDeleteTestPhoto(afterDate, idx)}
+                              className="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow hover:bg-rose-700 transition"
+                            >
+                              🗑️ 削除
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
             )}
 
-            {/* TAB 2 */}
+            {/* TAB 2: チケット購入履歴 */}
             {activeTab === 'tickets' && (
               <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-800 text-sm border-b pb-2">🎟️ 保護者（Square連携）決済 & チケット購入履歴</h3>
@@ -648,7 +835,7 @@ export default function ClientsPage() {
                 <div className="bg-sky-50 p-4 rounded-lg border border-sky-200 text-xs space-y-1">
                   <p className="font-bold text-sky-900">保護者アカウント: {currentParent.name} 様</p>
                   <p className="text-sky-800">フリガナ: {currentParent.kana} | TEL: {currentParent.phone}</p>
-                  <p className="text-sky-800 font-bold">現在の共有チケット残数: {currentParent.ticketRemaining} 回</p>
+                  <p className="text-sky-800 font-bold">現在の共有回数券 残数: {currentParent.ticketRemaining} 回</p>
                 </div>
 
                 <table className="w-full text-xs text-left text-slate-600 border-collapse">
@@ -676,7 +863,7 @@ export default function ClientsPage() {
               </div>
             )}
 
-            {/* TAB 3 */}
+            {/* TAB 3: 手動編集 */}
             {activeTab === 'edit_info' && (
               <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-800 text-sm border-b pb-2">✏️ 基本情報・カルテ情報手動編集</h3>
