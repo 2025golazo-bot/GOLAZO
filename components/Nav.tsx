@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/task-manager", label: "タスク・議事録" },
   { href: "/local-info", label: "近隣情報" },
   { href: "/transactions", label: "取引一覧" },
+  { href: "/vendors", label: "取引詳細" }, // ← ここに「取引詳細」を追加しました
 ];
 
 export default function Nav() {
