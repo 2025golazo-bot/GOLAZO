@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 
-// --- 型定義（オプショナルプロパティを正しく設定） ---
+// --- 型定義 ---
 interface Session {
   id: string;
   date: string;
@@ -240,7 +240,7 @@ export default function ClientsPage() {
     setNewSessionHomework('');
   };
 
-  // 画像アップロードハンドラー（型安全に修正）
+  // 画像アップロードハンドラー (TypeScript型不一致を修正済み)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'posture' | 'test', keyName?: 'front' | 'side' | 'back') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -249,14 +249,16 @@ export default function ClientsPage() {
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
+
         const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
           if (m.date !== selectedPhysicalDate) return m;
 
           if (type === 'posture' && keyName) {
+            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
             return {
               ...m,
               posturePhotos: {
-                ...(m.posturePhotos || {}),
+                ...currentPhotos,
                 [keyName]: url
               }
             };
@@ -268,6 +270,7 @@ export default function ClientsPage() {
           }
           return m;
         });
+
         return { ...s, physicalHistory: updatedHistory };
       })
     );
@@ -278,7 +281,7 @@ export default function ClientsPage() {
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
-        const updated = s.physicalHistory.map(m => {
+        const updated: PhysicalData[] = s.physicalHistory.map(m => {
           if (m.date === selectedPhysicalDate) {
             return { ...m, [field]: val };
           }
