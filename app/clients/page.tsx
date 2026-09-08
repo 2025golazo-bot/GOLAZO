@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 
-// --- 型定義 ---
+// --- 型定義（オプショナルプロパティを正しく設定） ---
 interface Session {
   id: string;
   date: string;
@@ -20,9 +20,9 @@ interface PhysicalData {
   muscle: number;
   note?: string;
   posturePhotos?: {
-    front: string | null;
-    side: string | null;
-    back: string | null;
+    front?: string | null;
+    side?: string | null;
+    back?: string | null;
   };
   testPhotos?: string[]; // ケガゼロ/フィジカルチェック等
 }
@@ -131,7 +131,7 @@ export default function ClientsPage() {
     },
     {
       id: 's-002',
-      parentId: 'p-101', // 同じ保護者（藤田 奈々）に紐づく弟
+      parentId: 'p-101',
       name: '藤田 翔',
       kana: 'フジタ ショウ',
       age: 8,
@@ -186,7 +186,6 @@ export default function ClientsPage() {
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
 
   // 基本情報手動編集モード
-  const [isEditingInfo, setIsEditingInfo] = useState<boolean>(false);
   const [editForm, setEditForm] = useState({
     name: currentStudent.name,
     kana: currentStudent.kana,
@@ -209,7 +208,6 @@ export default function ClientsPage() {
     );
   });
 
-  // --- ハンドラー関係 ---
   const handleSelectStudent = (id: string) => {
     setSelectedStudentId(id);
     const target = students.find(s => s.id === id);
@@ -218,7 +216,7 @@ export default function ClientsPage() {
     }
   };
 
-  // セッション登録 (チケット自動1回消化)
+  // セッション登録
   const handleAddSession = () => {
     if (!newSessionContent) return;
     const newSession: Session = {
@@ -234,7 +232,6 @@ export default function ClientsPage() {
       prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions] } : s))
     );
 
-    // 保護者の回数券を1回減算
     setParents(prev =>
       prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
     );
@@ -243,7 +240,7 @@ export default function ClientsPage() {
     setNewSessionHomework('');
   };
 
-  // 画像アップロード（ドラッグ＆ドロップ用シミュレーション）
+  // 画像アップロードハンドラー（型安全に修正）
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'posture' | 'test', keyName?: 'front' | 'side' | 'back') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -252,12 +249,16 @@ export default function ClientsPage() {
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
-        const updatedHistory = s.physicalHistory.map(m => {
+        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
           if (m.date !== selectedPhysicalDate) return m;
+
           if (type === 'posture' && keyName) {
             return {
               ...m,
-              posturePhotos: { ...m.posturePhotos, [keyName]: url }
+              posturePhotos: {
+                ...(m.posturePhotos || {}),
+                [keyName]: url
+              }
             };
           } else if (type === 'test') {
             return {
@@ -296,7 +297,6 @@ export default function ClientsPage() {
     setParents(prev =>
       prev.map(p => (p.id === currentParent.id ? { ...p, phone: editForm.phone } : p))
     );
-    setIsEditingInfo(false);
   };
 
   const availableYearMonths = Array.from(
@@ -310,7 +310,6 @@ export default function ClientsPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800">
-      {/* ヘッダー */}
       <header className="bg-[#5e9bc4] text-white px-6 py-3 flex justify-between items-center shadow">
         <h1 className="text-xl font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         <nav className="flex gap-4 text-xs font-semibold">
@@ -321,10 +320,9 @@ export default function ClientsPage() {
       </header>
 
       <div className="p-6 max-w-7xl mx-auto space-y-4">
-        {/* メインレイアウト（2カラム） */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
-          {/* 左カラム：受講生一覧・キーワード検索 */}
+          {/* 左カラム */}
           <div className="md:col-span-1 space-y-3">
             <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-2">
               <label className="text-xs font-bold text-slate-600">🔍 キーワード検索</label>
@@ -365,10 +363,8 @@ export default function ClientsPage() {
             })}
           </div>
 
-          {/* 右カラム：受講生詳細・カルテ管理 */}
+          {/* 右カラム */}
           <div className="md:col-span-3 space-y-4">
-
-            {/* 基本情報ヘッダー＆保護者・兄弟連携表示 */}
             <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
               <div className="flex justify-between items-start">
                 <div>
@@ -386,7 +382,6 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 兄弟切り替えボタン */}
                 {siblingStudents.length > 1 && (
                   <div className="bg-amber-50 border border-amber-200 p-2 rounded text-right">
                     <span className="text-[10px] text-amber-800 font-bold block mb-1">👨‍👩‍👧‍👦 ご兄弟でのご利用</span>
@@ -407,7 +402,6 @@ export default function ClientsPage() {
                 )}
               </div>
 
-              {/* タブ切り替えメニュー */}
               <div className="flex border-b border-slate-200 pt-2 gap-4 text-xs font-bold">
                 <button
                   onClick={() => setActiveTab('carte')}
@@ -430,18 +424,15 @@ export default function ClientsPage() {
               </div>
             </div>
 
-            {/* TAB 1: カルテ画面 */}
+            {/* TAB 1 */}
             {activeTab === 'carte' && (
               <div className="space-y-6">
-
-                {/* 3ヶ月定期計測・身体データ推移 & 姿勢/テスト写真比較 */}
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <div>
                       <h3 className="font-bold text-slate-800 text-sm">①〜⑤ 3ヶ月定期計測・身体データ推移 & 写真管理</h3>
                       <p className="text-[11px] text-slate-400">年度・月を選択して過去の姿勢写真やテストデータを比較表示できます</p>
                     </div>
-                    {/* 年月比較フィルター */}
                     <div className="flex items-center gap-2 text-xs">
                       <span className="font-bold text-slate-600">表示・比較月:</span>
                       <select
@@ -456,7 +447,6 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 数値データ手動編集 */}
                   {currentPhysical && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg text-xs">
                       <div>
@@ -501,7 +491,6 @@ export default function ClientsPage() {
                     </div>
                   )}
 
-                  {/* 姿勢写真3枚 ドラッグ＆ドロップ保存領域 */}
                   <div>
                     <h4 className="font-bold text-xs text-slate-700 mb-2">📸 姿勢写真3枚 (正面 / 側面 / 背面)</h4>
                     <div className="grid grid-cols-3 gap-3">
@@ -531,7 +520,6 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 測定各種テスト（ケガゼロ / フィジカルチェック）写真保存領域 */}
                   <div>
                     <h4 className="font-bold text-xs text-slate-700 mb-2">📋 測定各種テスト (ケガゼロ / フィジカルチェック) 結果シート画像</h4>
                     <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center bg-slate-50 relative cursor-pointer hover:bg-slate-100 transition">
@@ -553,7 +541,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 新規セッション記録の追加 (担当者 TAKA / NANA 選択) */}
+                {/* 新規セッション記録の追加 */}
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
                   <h3 className="font-bold text-slate-800 text-sm">新規セッション記録の追加</h3>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
@@ -606,7 +594,7 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                {/* 時系列セッション履歴（年月タブ選択） */}
+                {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm">時系列セッション履歴</h3>
@@ -646,11 +634,10 @@ export default function ClientsPage() {
                     ))}
                   </div>
                 </div>
-
               </div>
             )}
 
-            {/* TAB 2: チケット購入履歴 & Square連携 */}
+            {/* TAB 2 */}
             {activeTab === 'tickets' && (
               <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-800 text-sm border-b pb-2">🎟️ 保護者（Square連携）決済 & チケット購入履歴</h3>
@@ -686,7 +673,7 @@ export default function ClientsPage() {
               </div>
             )}
 
-            {/* TAB 3: 基本情報・手動編集 */}
+            {/* TAB 3 */}
             {activeTab === 'edit_info' && (
               <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-800 text-sm border-b pb-2">✏️ 基本情報・カルテ情報手動編集</h3>
