@@ -1,72 +1,58 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-// ビルド時のエラー（DYNAMIC_SERVER_USAGE）を防止する設定
-export const dynamic = 'force-dynamic';
+// Supabaseクライアント（サーバー側用：Service Role Keyを使用）
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('startDate') || '2025-10-01T00:00:00Z';
+    const body = await request.json();
+    const eventType = body.type;
 
-    const accessToken = process.env.SQUARE_ACCESS_TOKEN;
-    const environment = process.env.SQUARE_ENVIRONMENT || 'production';
+    // 1. 決済情報の連携 (売上管理への反映)
+    if (eventType === 'payment.updated' || eventType === 'payment.created') {
+      const payment = body.data.object.payment;
+      
+      if (payment.status === 'COMPLETED') {
+        const amount = payment.amount_money.amount / 100; // 円単位に変換
+        const customerId = payment.customer_id;
+        const createdAt = payment.created_at;
 
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: '環境変数 SQUARE_ACCESS_TOKEN が設定されていません。' },
-        { status: 500 }
-      );
+        // Supabaseの sales テーブルにデータを挿入
+        const { error } = await supabase.from('sales').insert({
+          square_payment_id: payment.id,
+          amount: amount,
+          customer_square_id: customerId,
+          paid_at: createdAt,
+          source: 'Square'
+        });
+
+        if (error) console.error('Supabase sales insert error:', error);
+      }
     }
 
-    const baseUrl =
-      environment === 'production'
-        ? 'https://connect.squareup.com/v2'
-        : 'https://connect.squareupsandbox.com/v2';
+    // 2. 顧客情報の連携 (顧客リストへの反映)
+    if (eventType === 'customer.created' || eventType === 'customer.updated') {
+      const customer = body.data.object.customer;
 
-    // 1. 過去の顧客一覧を取得
-    const customerResponse = await fetch(`${baseUrl}/customers`, {
-      method: 'GET',
-      headers: {
-        'Square-Version': '2024-01-18',
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    const customerData = await customerResponse.json();
-    const customers = customerData.customers || [];
+      // Supabaseの customers テーブルにupsert（存在すれば更新、なければ追加）
+      const { error } = await supabase.from('customers').upsert({
+        square_customer_id: customer.id,
+        name: `${customer.given_name || ''} ${customer.family_name || ''}`.trim(),
+        email: customer.email_address,
+        phone: customer.phone_number,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'square_customer_id' });
 
-    // 2. 過去の決済（売上）一覧を取得
-    const paymentResponse = await fetch(
-      `${baseUrl}/payments?begin_time=${encodeURIComponent(startDate)}`,
-      {
-        method: 'GET',
-        headers: {
-          'Square-Version': '2024-01-18',
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    const paymentData = await paymentResponse.json();
-    const payments = paymentData.payments || [];
+      if (error) console.error('Supabase customer upsert error:', error);
+    }
 
-    const completedPayments = payments.filter((p: any) => p.status === 'COMPLETED');
-
-    return NextResponse.json({
-      success: true,
-      summary: {
-        startDate,
-        fetchedCustomersCount: customers.length,
-        fetchedPaymentsCount: completedPayments.length,
-      },
-      customers,
-      payments: completedPayments,
-    });
-  } catch (error: any) {
-    console.error('Square Sync Error:', error);
-    return NextResponse.json(
-      { error: 'Square 過去データの取得に失敗しました', details: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
