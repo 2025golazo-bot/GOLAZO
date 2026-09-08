@@ -42,7 +42,7 @@ export default function TasksPage() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState<'SNS発信' | '顧客フォロー' | '事務・広告' | '店舗運営'>('SNS発信');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
-  const [newTaskAssignee, setNewTaskAssignee] = useState('藤田 渉仁');
+  const [newTaskAssignee] = useState('藤田 渉仁');
 
   const [ticketProgress] = useState([
     { id: '1', client: '鈴木 蓮', ticketName: 'ジュニア体幹 4回券', total: 4, remaining: 1 },
@@ -158,7 +158,7 @@ export default function TasksPage() {
             <h2 className="text-lg font-bold text-gray-900">回数券の消化進捗 (自動連動参考)</h2>
             <div className="space-y-4">
               {ticketProgress.map((tp) => {
-                const shokasu率 = Math.round(((tp.total - tp.remaining) / tp.total) * 100);
+                const shokasuRate = Math.round(((tp.total - tp.remaining) / tp.total) * 100);
                 return (
                   <div key={tp.id} className="p-3 border rounded-xl bg-gray-50 space-y-2 text-xs">
                     <div className="flex justify-between font-bold">
@@ -166,7 +166,7 @@ export default function TasksPage() {
                       <span className="text-blue-600">残り {tp.remaining}回 / 全{tp.total}回</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${shokasu率}%` }}></div>
+                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${shokasuRate}%` }}></div>
                     </div>
                   </div>
                 );
