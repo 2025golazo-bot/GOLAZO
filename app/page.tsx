@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState } from 'react';
 
 // セッションの型定義
 interface Session {
@@ -29,10 +29,9 @@ function calculateAge(birthdateStr: string) {
   return `${years}歳${months < 0 ? months + 12 : months}ヶ月`;
 }
 
-export default function StudentDetail({ params }: { params: Promise<{ id: string }> }) {
-  // Next.js 15+ 対応: params の Promise 解凍
-  const resolvedParams = use(params);
-  const studentId = resolvedParams.id;
+export default function StudentDetail({ params }: { params: { id: string } }) {
+  // クライアントコンポーネントでは params から直接 id を取得します
+  const studentId = params?.id || 's-001';
 
   const [activeTab, setActiveTab] = useState<'session' | 'measurement' | 'search'>('session');
 
@@ -46,7 +45,7 @@ export default function StudentDetail({ params }: { params: Promise<{ id: string
   };
 
   const [student, setStudent] = useState({
-    id: studentId || 's-001',
+    id: studentId,
     name: '藤田 陸',
     kana: 'フジタ リク',
     birthdate: '2015-05-12',
