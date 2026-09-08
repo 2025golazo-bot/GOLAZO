@@ -2,6 +2,20 @@
 
 import React, { useState } from 'react';
 
+// タスクの型定義（タスク管理側と統一）
+interface LinkedTask {
+  id: string;
+  title: string;
+  category: 'Instagram' | '週例業務' | 'キャンペーン議事録' | 'その他' | '近隣情報連携';
+  date: string;
+  fiscalYear: number;
+  month: number;
+  status: '未着手' | '進行中' | '完了';
+  dueDateAlarm: boolean;
+  isImportant: boolean;
+  memo: string;
+}
+
 // 近隣情報の型定義
 interface NeighborInfo {
   id: string;
@@ -10,12 +24,32 @@ interface NeighborInfo {
   eventName: string;
   url: string;
   contactPerson: string;
+  // 3つのメモ欄（それぞれにタスク化オプションを持たせる拡張）
   memo1: string;
+  memo1TaskEnabled: boolean;
+  memo1Date: string;
+  memo1Status: '未着手' | '進行中' | '完了';
+  memo1Important: boolean;
+  memo1Alarm: boolean;
+
   memo2: string;
+  memo2TaskEnabled: boolean;
+  memo2Date: string;
+  memo2Status: '未着手' | '進行中' | '完了';
+  memo2Important: boolean;
+  memo2Alarm: boolean;
+
   memo3: string;
+  memo3TaskEnabled: boolean;
+  memo3Date: string;
+  memo3Status: '未着手' | '進行中' | '完了';
+  memo3Important: boolean;
+  memo3Alarm: boolean;
 }
 
 export default function NeighborsPage() {
+  const todayStr = '2026-09-08';
+
   const [neighbors, setNeighbors] = useState<NeighborInfo[]>([
     {
       id: '1',
@@ -25,19 +59,23 @@ export default function NeighborsPage() {
       url: 'https://example.com/itabashi-soccer',
       contactPerson: '山田 先生',
       memo1: 'グラウンド使用時の注意事項あり',
+      memo1TaskEnabled: true,
+      memo1Date: '2026-09-15',
+      memo1Status: '未着手',
+      memo1Important: true,
+      memo1Alarm: true,
       memo2: '次回大会の案内パンフレット受取済み',
-      memo3: '夏期クリニックのチラシ配布に協力可能か要確認',
-    },
-    {
-      id: '2',
-      targetArea: '板橋区',
-      schoolOrTeam: '××ミニバスケットボールクラブ',
-      eventName: '夏休みスポーツ体験会',
-      url: '',
-      contactPerson: '鈴木 コーチ',
-      memo1: '小学生の体幹トレーニングに興味あり',
-      memo2: '連絡は基本的に夕方以降',
-      memo3: '体験会へのトレーナー派遣について相談中',
+      memo2TaskEnabled: false,
+      memo2Date: todayStr,
+      memo2Status: '未着手',
+      memo2Important: false,
+      memo2Alarm: false,
+      memo3: '',
+      memo3TaskEnabled: false,
+      memo3Date: todayStr,
+      memo3Status: '未着手',
+      memo3Important: false,
+      memo3Alarm: false,
     },
   ]);
 
@@ -54,8 +92,23 @@ export default function NeighborsPage() {
     url: '',
     contactPerson: '',
     memo1: '',
+    memo1TaskEnabled: false,
+    memo1Date: todayStr,
+    memo1Status: '未着手',
+    memo1Important: false,
+    memo1Alarm: false,
     memo2: '',
+    memo2TaskEnabled: false,
+    memo2Date: todayStr,
+    memo2Status: '未着手',
+    memo2Important: false,
+    memo2Alarm: false,
     memo3: '',
+    memo3TaskEnabled: false,
+    memo3Date: todayStr,
+    memo3Status: '未着手',
+    memo3Important: false,
+    memo3Alarm: false,
   });
 
   // 保存・追加処理
@@ -98,8 +151,23 @@ export default function NeighborsPage() {
       url: '',
       contactPerson: '',
       memo1: '',
+      memo1TaskEnabled: false,
+      memo1Date: todayStr,
+      memo1Status: '未着手',
+      memo1Important: false,
+      memo1Alarm: false,
       memo2: '',
+      memo2TaskEnabled: false,
+      memo2Date: todayStr,
+      memo2Status: '未着手',
+      memo2Important: false,
+      memo2Alarm: false,
       memo3: '',
+      memo3TaskEnabled: false,
+      memo3Date: todayStr,
+      memo3Status: '未着手',
+      memo3Important: false,
+      memo3Alarm: false,
     });
   };
 
@@ -123,14 +191,14 @@ export default function NeighborsPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🏫 近隣情報・イベント管理</h1>
-          <p className="text-sm text-gray-600 mt-1">近くの学校やスポーツチームのイベント情報、担当者、メモを集約管理します。</p>
+          <p className="text-sm text-gray-600 mt-1">学校やスポーツチームのイベント情報、担当者メモ、タスク連携を一元管理します。</p>
         </div>
       </div>
 
       {/* 検索・フィルターバー */}
       <div className="bg-white p-4 rounded-lg border shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-          <span className="text-sm font-semibold">🔍 キーワード検索:</span>
+          <span className="text-sm font-semibold">🔍 検索:</span>
           <input
             type="text"
             placeholder="学校名、チーム名、イベント、担当者、メモで検索..."
@@ -199,9 +267,9 @@ export default function NeighborsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600 mb-3">
-                  <div>👤 関係者担当者: <span className="font-medium text-gray-800">{item.contactPerson || '未設定'}</span></div>
+                  <div>👤 担当者: <span className="font-medium text-gray-800">{item.contactPerson || '未設定'}</span></div>
                   <div>
-                    🔗 詳細URL: {item.url ? (
+                    🔗 URL: {item.url ? (
                       <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
                         リンクを開く ↗
                       </a>
@@ -211,13 +279,30 @@ export default function NeighborsPage() {
                   </div>
                 </div>
 
-                {/* 3つのメモ欄 */}
-                <div className="bg-gray-50 rounded p-3 space-y-1.5 text-xs text-gray-700 border">
-                  <div className="font-semibold text-gray-500 mb-1">📝 メモ欄</div>
-                  {item.memo1 && <div className="truncate">・{item.memo1}</div>}
-                  {item.memo2 && <div className="truncate">・{item.memo2}</div>}
-                  {item.memo3 && <div className="truncate">・{item.memo3}</div>}
-                  {!item.memo1 && !item.memo2 && !item.memo3 && <div className="text-gray-400 italic">メモはありません</div>}
+                {/* 3つのメモ欄 ＆ タスク連携表示 */}
+                <div className="bg-gray-50 rounded p-3 space-y-2.5 text-xs text-gray-700 border">
+                  <div className="font-semibold text-gray-500">📝 メモ ＆ タスク連動内容</div>
+                  
+                  {[
+                    { text: item.memo1, enabled: item.memo1TaskEnabled, date: item.memo1Date, status: item.memo1Status, imp: item.memo1Important, alarm: item.memo1Alarm },
+                    { text: item.memo2, enabled: item.memo2TaskEnabled, date: item.memo2Date, status: item.memo2Status, imp: item.memo2Important, alarm: item.memo2Alarm },
+                    { text: item.memo3, enabled: item.memo3TaskEnabled, date: item.memo3Date, status: item.memo3Status, imp: item.memo3Important, alarm: item.memo3Alarm },
+                  ].map((m, idx) => m.text ? (
+                    <div key={idx} className="bg-white p-2 rounded border border-gray-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-gray-900">・{m.text}</span>
+                        {m.enabled && (
+                          <span className="flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold border border-purple-200">
+                            {m.imp && '⭐'} {m.alarm && '🔔'} タスク化 ({m.date} / {m.status})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : null)}
+
+                  {!item.memo1 && !item.memo2 && !item.memo3 && (
+                    <div className="text-gray-400 italic">メモはありません</div>
+                  )}
                 </div>
               </div>
             ))
@@ -269,7 +354,7 @@ export default function NeighborsPage() {
             </div>
 
             <div>
-              <label className="block font-medium mb-1">詳細URL（外部リンク）</label>
+              <label className="block font-medium mb-1">詳細URL</label>
               <input
                 type="url"
                 placeholder="https://..."
@@ -290,30 +375,141 @@ export default function NeighborsPage() {
               />
             </div>
 
-            {/* 3つの独立したメモ欄 */}
-            <div className="space-y-2 pt-2 border-t">
-              <label className="block font-medium text-gray-700">📝 メモ欄 (3つ)</label>
-              <input
-                type="text"
-                placeholder="メモ 1"
-                value={form.memo1}
-                onChange={(e) => setForm({ ...form, memo1: e.target.value })}
-                className="w-full border rounded p-2 text-xs"
-              />
-              <input
-                type="text"
-                placeholder="メモ 2"
-                value={form.memo2}
-                onChange={(e) => setForm({ ...form, memo2: e.target.value })}
-                className="w-full border rounded p-2 text-xs"
-              />
-              <input
-                type="text"
-                placeholder="メモ 3"
-                value={form.memo3}
-                onChange={(e) => setForm({ ...form, memo3: e.target.value })}
-                className="w-full border rounded p-2 text-xs"
-              />
+            {/* --- 3つのメモ欄 ＆ タスク登録連携機能 --- */}
+            <div className="space-y-4 pt-3 border-t">
+              <label className="block font-bold text-gray-800">📝 メモ欄 ＆ タスク手動登録 (3つ)</label>
+
+              {/* メモ1 */}
+              <div className="bg-gray-50 p-3 rounded border space-y-2">
+                <input
+                  type="text"
+                  placeholder="メモ 1 の内容"
+                  value={form.memo1}
+                  onChange={(e) => setForm({ ...form, memo1: e.target.value })}
+                  className="w-full border rounded p-2 text-xs bg-white"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="m1Task"
+                    checked={form.memo1TaskEnabled}
+                    onChange={(e) => setForm({ ...form, memo1TaskEnabled: e.target.checked })}
+                    className="rounded text-blue-600"
+                  />
+                  <label htmlFor="m1Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスク一覧に連携登録する</label>
+                </div>
+                {form.memo1TaskEnabled && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                    <input
+                      type="date"
+                      value={form.memo1Date}
+                      onChange={(e) => setForm({ ...form, memo1Date: e.target.value })}
+                      className="border rounded p-1.5 bg-white"
+                    />
+                    <select
+                      value={form.memo1Status}
+                      onChange={(e) => setForm({ ...form, memo1Status: e.target.value as any })}
+                      className="border rounded p-1.5 bg-white"
+                    >
+                      <option value="未着手">未着手</option>
+                      <option value="進行中">進行中</option>
+                      <option value="完了">完了</option>
+                    </select>
+                    <div className="flex items-center gap-2 col-span-2 pt-1">
+                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo1Important} onChange={(e) => setForm({ ...form, memo1Important: e.target.checked })} /> ⭐ 重要</label>
+                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo1Alarm} onChange={(e) => setForm({ ...form, memo1Alarm: e.target.checked })} /> 🔔 期日アラーム</label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* メモ2 */}
+              <div className="bg-gray-50 p-3 rounded border space-y-2">
+                <input
+                  type="text"
+                  placeholder="メモ 2 の内容"
+                  value={form.memo2}
+                  onChange={(e) => setForm({ ...form, memo2: e.target.value })}
+                  className="w-full border rounded p-2 text-xs bg-white"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="m2Task"
+                    checked={form.memo2TaskEnabled}
+                    onChange={(e) => setForm({ ...form, memo2TaskEnabled: e.target.checked })}
+                    className="rounded text-blue-600"
+                  />
+                  <label htmlFor="m2Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスク一覧に連携登録する</label>
+                </div>
+                {form.memo2TaskEnabled && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                    <input
+                      type="date"
+                      value={form.memo2Date}
+                      onChange={(e) => setForm({ ...form, memo2Date: e.target.value })}
+                      className="border rounded p-1.5 bg-white"
+                    />
+                    <select
+                      value={form.memo2Status}
+                      onChange={(e) => setForm({ ...form, memo2Status: e.target.value as any })}
+                      className="border rounded p-1.5 bg-white"
+                    >
+                      <option value="未着手">未着手</option>
+                      <option value="進行中">進行中</option>
+                      <option value="完了">完了</option>
+                    </select>
+                    <div className="flex items-center gap-2 col-span-2 pt-1">
+                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo2Important} onChange={(e) => setForm({ ...form, memo2Important: e.target.checked })} /> ⭐ 重要</label>
+                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo2Alarm} onChange={(e) => setForm({ ...form, memo2Alarm: e.target.checked })} /> 🔔 期日アラーム</label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* メモ3 */}
+              <div className="bg-gray-50 p-3 rounded border space-y-2">
+                <input
+                  type="text"
+                  placeholder="メモ 3 の内容"
+                  value={form.memo3}
+                  onChange={(e) => setForm({ ...form, memo3: e.target.value })}
+                  className="w-full border rounded p-2 text-xs bg-white"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="m3Task"
+                    checked={form.memo3TaskEnabled}
+                    onChange={(e) => setForm({ ...form, memo3TaskEnabled: e.target.checked })}
+                    className="rounded text-blue-600"
+                  />
+                  <label htmlFor="m3Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスク一覧に連携登録する</label>
+                </div>
+                {form.memo3TaskEnabled && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                    <input
+                      type="date"
+                      value={form.memo3Date}
+                      onChange={(e) => setForm({ ...form, memo3Date: e.target.value })}
+                      className="border rounded p-1.5 bg-white"
+                    />
+                    <select
+                      value={form.memo3Status}
+                      onChange={(e) => setForm({ ...form, memo3Status: e.target.value as any })}
+                      className="border rounded p-1.5 bg-white"
+                    >
+                      <option value="未着手">未着手</option>
+                      <option value="進行中">進行中</option>
+                      <option value="完了">完了</option>
+                    </select>
+                    <div className="flex items-center gap-2 col-span-2 pt-1">
+                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo3Important} onChange={(e) => setForm({ ...form, memo3Important: e.target.checked })} /> ⭐ 重要</label>
+                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo3Alarm} onChange={(e) => setForm({ ...form, memo3Alarm: e.target.checked })} /> 🔔 期日アラーム</label>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-2 pt-3">
