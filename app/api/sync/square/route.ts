@@ -22,7 +22,7 @@ export async function GET(request: Request) {
         ? 'https://connect.squareup.com/v2'
         : 'https://connect.squareupsandbox.com/v2';
 
-    // 顧客一覧取得
+    // 1. Square 顧客カルテ（顧客一覧）の全件取得
     const customerResponse = await fetch(`${baseUrl}/customers`, {
       method: 'GET',
       headers: {
@@ -32,9 +32,25 @@ export async function GET(request: Request) {
       },
     });
     const customerData = await customerResponse.json();
-    const customers = customerData.customers || [];
+    const rawCustomers = customerData.customers || [];
 
-    // 決済一覧取得
+    // 顧客マップの作成 (ID -> 顧客情報)
+    const customerMap = new Map();
+    const formattedCustomers = rawCustomers.map((c: any) => {
+      const name = [c.family_name, c.given_name].filter(Boolean).join(' ') || c.company_name || '名称未設定';
+      const info = {
+        id: c.id,
+        name: name,
+        email: c.email_address || '未登録',
+        phone: c.phone_number || '未登録',
+        note: c.note || '',
+        createdAt: c.created_at,
+      };
+      customerMap.set(c.id, info);
+      return info;
+    });
+
+    // 2. Square 決済一覧の取得
     const paymentResponse = await fetch(
       `${baseUrl}/payments?begin_time=${encodeURIComponent(startDate)}`,
       {
@@ -48,10 +64,9 @@ export async function GET(request: Request) {
     );
     const paymentData = await paymentResponse.json();
     const payments = paymentData.payments || [];
-
     const completedPayments = payments.filter((p: any) => p.status === 'COMPLETED');
 
-    // 各決済のオーダー情報（商品明細）の紐付け（必要に応じて取得）
+    // 3. 決済データに商品明細と顧客カルテ情報を紐付け
     const enrichedPayments = await Promise.all(
       completedPayments.map(async (payment: any) => {
         let itemNames: string[] = [];
@@ -59,7 +74,6 @@ export async function GET(request: Request) {
           itemNames.push(payment.note);
         }
 
-        // Order ID が存在する場合、Order API から商品名を取得
         if (payment.order_id) {
           try {
             const orderRes = await fetch(`${baseUrl}/orders/${payment.order_id}`, {
@@ -82,8 +96,13 @@ export async function GET(request: Request) {
           }
         }
 
+        // 顧客カルテ情報の紐付け
+        const customerInfo = payment.customer_id ? customerMap.get(payment.customer_id) : null;
+
         return {
           ...payment,
+          customer_name: customerInfo ? customerInfo.name : 'ビジター / 非会員',
+          customer_email: customerInfo ? customerInfo.email : '-',
           item_names: itemNames.length > 0 ? itemNames.join(', ') : '店頭決済・その他',
         };
       })
@@ -93,16 +112,16 @@ export async function GET(request: Request) {
       success: true,
       summary: {
         startDate,
-        fetchedCustomersCount: customers.length,
+        fetchedCustomersCount: formattedCustomers.length,
         fetchedPaymentsCount: enrichedPayments.length,
       },
-      customers,
+      customers: formattedCustomers,
       payments: enrichedPayments,
     });
   } catch (error: any) {
     console.error('Square Sync Error:', error);
     return NextResponse.json(
-      { error: 'Square 過去データの取得に失敗しました', details: error.message },
+      { error: 'Square データの取得に失敗しました', details: error.message },
       { status: 500 }
     );
   }
