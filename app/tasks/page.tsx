@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 // タスクの型定義
 interface Task {
@@ -11,12 +11,12 @@ interface Task {
   fiscalYear: number; // 年度 (例: 2026)
   month: number; // 月度 (1-12)
   status: '未着手' | '進行中' | '完了';
-  dueDateAlarm: boolean; // 期日アラーム設定
+  dueDateAlarm: boolean; // 期日アラーム設定 (🔔)
+  isImportant: boolean;  // 重要フラグ設定 (⭐)
   memo: string; // メモ欄
 }
 
 export default function TasksPage() {
-  // 現在の日付情報 (2026年9月を基準に動作確認)
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
@@ -25,6 +25,7 @@ export default function TasksPage() {
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   
+  // 初期サンプルデータ
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: '1',
@@ -35,6 +36,7 @@ export default function TasksPage() {
       month: 9,
       status: '未着手',
       dueDateAlarm: true,
+      isImportant: false,
       memo: '',
     },
     {
@@ -46,14 +48,17 @@ export default function TasksPage() {
       month: 9,
       status: '未着手',
       dueDateAlarm: true,
+      isImportant: true,
       memo: '要確認事項あり',
     },
   ]);
 
-  // 新規・編集モーダル用フォーム状態
-  const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null); // 詳細表示用
+  // タブ切り替え ('list' | 'calendar' | 'minutes')
+  const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'minutes'>('list');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  
+  // フォーム状態
   const [editForm, setEditForm] = useState<Partial<Task>>({
     title: '',
     category: 'Instagram',
@@ -62,11 +67,11 @@ export default function TasksPage() {
     month: 9,
     status: '未着手',
     dueDateAlarm: false,
+    isImportant: false,
     memo: '',
   });
 
-  // キャンペーン議事録の手動入力選択肢用
-  const [manualCampaignInput, setManualCampaignInput] = useState<string>('');
+  // キャンペーン議事録の固定（プリセット）選択肢
   const presetCampaignOptions = [
     'キックオフミーティング決定事項',
     'SNS広告運用方針のすり合わせ',
@@ -78,21 +83,19 @@ export default function TasksPage() {
     (task) => task.fiscalYear === selectedFiscalYear && task.month === selectedMonth
   );
 
-  // キャンペーン議事録の未完了タスクがあるかチェック（アラーム用）
+  // キャンペーン議事録の未完了タスク（全期間・または選択月など。全期間でチェック）
   const uncompletedCampaignTasks = tasks.filter(
     (task) => task.category === 'キャンペーン議事録' && task.status !== '完了'
   );
 
-  // タスクの追加・保存処理
+  // タスク保存・更新処理
   const handleSaveTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editForm.title) return;
 
     if (selectedTaskId && isEditing) {
-      // 更新
       setTasks(tasks.map(t => t.id === selectedTaskId ? { ...t, ...editForm } as Task : t));
     } else {
-      // 新規追加
       const newTask: Task = {
         id: Date.now().toString(),
         title: editForm.title || '無題のタスク',
@@ -102,6 +105,7 @@ export default function TasksPage() {
         month: editForm.month || selectedMonth,
         status: editForm.status || '未着手',
         dueDateAlarm: editForm.dueDateAlarm || false,
+        isImportant: editForm.isImportant || false,
         memo: editForm.memo || '',
       };
       setTasks([...tasks, newTask]);
@@ -120,29 +124,36 @@ export default function TasksPage() {
       month: selectedMonth,
       status: '未着手',
       dueDateAlarm: false,
+      isImportant: false,
       memo: '',
     });
   };
 
-  // カレンダーの日付クリック時やタスククリック時に詳細へ移行
-  const handleSelectTaskFromCalendar = (task: Task) => {
+  // カレンダーや他タブから該当タスクを選択して詳細・編集へ移行
+  const handleSelectTask = (task: Task) => {
     setSelectedTaskId(task.id);
     setEditForm(task);
     setIsEditing(true);
-    setActiveTab('list'); // タスク一覧（詳細・編集ビュー）へ切り替え
+    setActiveTab('list'); // 編集は一覧（メイン）タブで行う
   };
 
   return (
     <div className="p-6 max-w-6xl mx-auto font-sans">
       <h1 className="text-2xl font-bold mb-4">GOLAZO 業務タスク管理</h1>
 
-      {/* キャンペーン議事録の未完了アラームバナー */}
+      {/* 画面上部：キャンペーン議事録の未完了アラームバナー */}
       {uncompletedCampaignTasks.length > 0 && (
         <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-6 rounded shadow-sm flex items-center justify-between">
           <div>
             <p className="font-bold">⚠️ キャンペーン議事録の未完了タスクがあります</p>
-            <p className="text-sm">未完了の議事録関連タスクが {uncompletedCampaignTasks.length} 件残っています。内容を確認してください。</p>
+            <p className="text-sm">未完了の議事録関連タスクが {uncompletedCampaignTasks.length} 件残っています。</p>
           </div>
+          <button 
+            onClick={() => setActiveTab('minutes')}
+            className="bg-amber-600 text-white px-3 py-1.5 rounded text-xs hover:bg-amber-700 font-medium"
+          >
+            議事録ページで確認
+          </button>
         </div>
       )}
 
@@ -150,7 +161,6 @@ export default function TasksPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-gray-50 p-4 rounded-lg border">
         <div className="flex items-center gap-3">
           <label className="font-semibold text-sm">📅 表示選択:</label>
-          {/* 年度選択 */}
           <select 
             value={selectedFiscalYear} 
             onChange={(e) => setSelectedFiscalYear(Number(e.target.value))}
@@ -161,7 +171,6 @@ export default function TasksPage() {
             ))}
           </select>
 
-          {/* 月度選択 */}
           <select 
             value={selectedMonth} 
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
@@ -173,7 +182,7 @@ export default function TasksPage() {
           </select>
         </div>
 
-        {/* タブ切り替え */}
+        {/* タブ切り替え（一覧・カレンダー・議事録専用ページ） */}
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('list')}
@@ -187,13 +196,24 @@ export default function TasksPage() {
           >
             カレンダー表示
           </button>
+          <button
+            onClick={() => setActiveTab('minutes')}
+            className={`px-4 py-2 rounded text-sm font-medium relative ${activeTab === 'minutes' ? 'bg-purple-600 text-white' : 'bg-white border text-gray-700'}`}
+          >
+            📝 キャンペーン議事録
+            {uncompletedCampaignTasks.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                {uncompletedCampaignTasks.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* メインコンテンツエリア */}
-      {activeTab === 'list' ? (
+      {/* --- タブ1: タスク一覧・編集 --- */}
+      {activeTab === 'list' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* 左側：タスク一覧 */}
+          {/* 左側：タスク一覧テーブル */}
           <div className="md:col-span-2 bg-white border rounded-lg p-4 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold text-lg">{selectedFiscalYear}年度 {selectedMonth}月度 タスク一覧</h2>
@@ -232,9 +252,10 @@ export default function TasksPage() {
                             {task.category}
                           </span>
                         </td>
-                        <td className="p-2.5 font-medium">
+                        <td className="p-2.5 font-medium flex items-center gap-1.5">
+                          {task.isImportant && <span className="text-red-500" title="重要">⭐</span>}
                           {task.title}
-                          {task.dueDateAlarm && <span className="ml-1 text-red-500 text-xs" title="期日アラーム設定中">🔔</span>}
+                          {task.dueDateAlarm && <span className="text-blue-500 text-xs" title="期日アラーム">🔔</span>}
                         </td>
                         <td className="p-2.5">
                           <span className={`px-2 py-1 rounded text-xs ${
@@ -246,8 +267,8 @@ export default function TasksPage() {
                         </td>
                         <td className="p-2.5">
                           <button
-                            onClick={() => handleSelectTaskFromCalendar(task)}
-                            className="text-blue-600 hover:underline mr-2"
+                            onClick={() => handleSelectTask(task)}
+                            className="text-blue-600 hover:underline"
                           >
                             詳細
                           </button>
@@ -260,7 +281,7 @@ export default function TasksPage() {
             </div>
           </div>
 
-          {/* 右側：タスク詳細・編集フォーム */}
+          {/* 右側：登録・編集フォーム */}
           <div className="bg-white border rounded-lg p-4 shadow-sm">
             <h2 className="font-bold text-lg mb-4">{isEditing ? 'タスク詳細・編集' : '新規タスク登録'}</h2>
             <form onSubmit={handleSaveTask} className="space-y-4 text-sm">
@@ -278,10 +299,10 @@ export default function TasksPage() {
                 </select>
               </div>
 
-              {/* キャンペーン議事録の場合：既存選択肢 ＋ 手動入力対応 */}
+              {/* キャンペーン議事録の場合：固定（プリセット）選択肢 ＋ 手動入力の両立 */}
               {editForm.category === 'キャンペーン議事録' && (
                 <div>
-                  <label className="block font-medium mb-1">議事録タスクの選択・手動入力</label>
+                  <label className="block font-medium mb-1">議事録タスク（固定選択 or 手動入力）</label>
                   <select
                     onChange={(e) => {
                       if (e.target.value) {
@@ -291,14 +312,14 @@ export default function TasksPage() {
                     className="w-full border rounded p-2 bg-white mb-2 text-xs"
                     defaultValue=""
                   >
-                    <option value="" disabled>-- プリセットから選択または直接入力 --</option>
+                    <option value="" disabled>-- 以前からの固定選択肢から選ぶ --</option>
                     {presetCampaignOptions.map((opt, idx) => (
                       <option key={idx} value={opt}>{opt}</option>
                     ))}
                   </select>
                   <input
                     type="text"
-                    placeholder="または手動でタスク名を入力"
+                    placeholder="または手動で自由に入力"
                     value={editForm.title || ''}
                     onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                     className="w-full border rounded p-2"
@@ -353,16 +374,28 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              {/* 期日アラーム設定 */}
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="alarmCheck"
-                  checked={editForm.dueDateAlarm || false}
-                  onChange={(e) => setEditForm({ ...editForm, dueDateAlarm: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <label htmlFor="alarmCheck" className="font-medium cursor-pointer">🔔 期日アラームを設定する</label>
+              {/* 重要アラーム ＆ 期日アラーム設定 */}
+              <div className="space-y-2 py-2 border-t border-b">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="importantCheck"
+                    checked={editForm.isImportant || false}
+                    onChange={(e) => setEditForm({ ...editForm, isImportant: e.target.checked })}
+                    className="w-4 h-4 text-red-600 rounded"
+                  />
+                  <label htmlFor="importantCheck" className="font-medium cursor-pointer text-red-600">⭐ 重要タスクに設定（重要アラーム）</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="alarmCheck"
+                    checked={editForm.dueDateAlarm || false}
+                    onChange={(e) => setEditForm({ ...editForm, dueDateAlarm: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <label htmlFor="alarmCheck" className="font-medium cursor-pointer">🔔 期日アラームを設定</label>
+                </div>
               </div>
 
               {/* メモ欄 */}
@@ -396,17 +429,18 @@ export default function TasksPage() {
             </form>
           </div>
         </div>
-      ) : (
-        /* カレンダー表示タブ */
+      )}
+
+      {/* --- タブ2: カレンダー表示 --- */}
+      {activeTab === 'calendar' && (
         <div className="bg-white border rounded-lg p-6 shadow-sm">
-          <h2 className="font-bold text-lg mb-4">{selectedFiscalYear}年度 {selectedMonth}月度 カレンダー</h2>
+          <h2 className="font-bold text-lg mb-2">{selectedFiscalYear}年度 {selectedMonth}月度 カレンダー</h2>
           <p className="text-sm text-gray-500 mb-4">カレンダー内のタスクをクリックすると、該当タスクの詳細・編集画面に移行します。</p>
           
           <div className="grid grid-cols-7 gap-2">
             {['日', '月', '火', '水', '木', '金', '土'].map((day, idx) => (
               <div key={idx} className="text-center font-bold text-sm bg-gray-100 py-2 rounded">{day}</div>
             ))}
-            {/* 簡易カレンダーのマス目生成（当月の日付に紐づくタスクを表示） */}
             {Array.from({ length: 31 }, (_, i) => {
               const dayNum = i + 1;
               const dateStr = `${selectedFiscalYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
@@ -419,19 +453,103 @@ export default function TasksPage() {
                     {dayTasks.map(task => (
                       <button
                         key={task.id}
-                        onClick={() => handleSelectTaskFromCalendar(task)}
+                        onClick={() => handleSelectTask(task)}
                         className={`text-left text-xs p-1 rounded truncate transition hover:opacity-80 ${
                           task.category === 'キャンペーン議事録' ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-blue-50 text-blue-900 border border-blue-200'
                         }`}
                         title={task.title}
                       >
-                        {task.dueDateAlarm && '🔔'} {task.title}
+                        {task.isImportant && '⭐'}{task.dueDateAlarm && '🔔'} {task.title}
                       </button>
                     ))}
                   </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* --- タブ3: キャンペーン議事録（専用ページ） --- */}
+      {activeTab === 'minutes' && (
+        <div className="bg-white border rounded-lg p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="font-bold text-xl text-purple-900">📝 キャンペーン議事録 専用ページ</h2>
+              <p className="text-sm text-gray-600 mt-1">キャンペーン議事録に関するタスクの確認・管理を行います。未完了タスクがある場合は専用のアラームが表示されます。</p>
+            </div>
+            <button 
+              onClick={() => {
+                resetForm();
+                setEditForm(prev => ({ ...prev, category: 'キャンペーン議事録' }));
+                setActiveTab('list');
+              }}
+              className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 font-medium"
+            >
+              + 議事録タスクを追加する
+            </button>
+          </div>
+
+          {/* 議事録ページ内での未完了アラーム通知 */}
+          {uncompletedCampaignTasks.length > 0 ? (
+            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg mb-6 flex items-center justify-between">
+              <div>
+                <p className="font-bold">🚨 議事録タスク未完了アラーム</p>
+                <p className="text-sm">対応が必要な未完了の議事録タスクが <strong>{uncompletedCampaignTasks.length}件</strong> 残っています。</p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg mb-6">
+              <p className="font-bold">✨ すべてのキャンペーン議事録タスクが完了しています！</p>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-purple-50 border-b">
+                  <th className="p-3">日付</th>
+                  <th className="p-3">タスク名（固定選択 or 手動入力）</th>
+                  <th className="p-3">ステータス</th>
+                  <th className="p-3">メモ</th>
+                  <th className="p-3">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.filter(t => t.category === 'キャンペーン議事録').length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-gray-500">キャンペーン議事録のタスクは登録されていません。</td>
+                  </tr>
+                ) : (
+                  tasks.filter(t => t.category === 'キャンペーン議事録').map(task => (
+                    <tr key={task.id} className="border-b hover:bg-gray-50">
+                      <td className="p-3">{task.date}</td>
+                      <td className="p-3 font-medium flex items-center gap-1.5">
+                        {task.isImportant && <span className="text-red-500" title="重要">⭐</span>}
+                        {task.dueDateAlarm && <span className="text-blue-500 text-xs" title="期日アラーム">🔔</span>}
+                        {task.title}
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2.5 py-1 rounded text-xs font-medium ${
+                          task.status === '完了' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {task.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-gray-600 truncate max-w-xs">{task.memo || '-'}</td>
+                      <td className="p-3">
+                        <button 
+                          onClick={() => handleSelectTask(task)} 
+                          className="text-blue-600 hover:underline font-medium"
+                        >
+                          詳細・編集
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
