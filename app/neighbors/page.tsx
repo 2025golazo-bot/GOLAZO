@@ -2,29 +2,16 @@
 
 import React, { useState } from 'react';
 
-// タスクの型定義（タスク管理側と統一）
-interface LinkedTask {
+// 近隣情報・イベント情報の型定義
+interface NeighborItem {
   id: string;
-  title: string;
-  category: 'Instagram' | '週例業務' | 'キャンペーン議事録' | 'その他' | '近隣情報連携';
-  date: string;
-  fiscalYear: number;
-  month: number;
-  status: '未着手' | '進行中' | '完了';
-  dueDateAlarm: boolean;
-  isImportant: boolean;
-  memo: string;
-}
-
-// 近隣情報の型定義
-interface NeighborInfo {
-  id: string;
-  targetArea: '板橋区' | '北区' | 'その他';
-  schoolOrTeam: string;
-  eventName: string;
-  url: string;
+  category: '近隣施設・店舗' | '地域イベント' | '提携・協業候補' | 'その他';
+  name: string;
+  addressOrLocation: string;
   contactPerson: string;
-  // 3つのメモ欄（それぞれにタスク化オプションを持たせる拡張）
+  phone: string;
+  url: string;
+  
   memo1: string;
   memo1TaskEnabled: boolean;
   memo1Date: string;
@@ -38,59 +25,47 @@ interface NeighborInfo {
   memo2Status: '未着手' | '進行中' | '完了';
   memo2Important: boolean;
   memo2Alarm: boolean;
-
-  memo3: string;
-  memo3TaskEnabled: boolean;
-  memo3Date: string;
-  memo3Status: '未着手' | '進行中' | '完了';
-  memo3Important: boolean;
-  memo3Alarm: boolean;
 }
 
 export default function NeighborsPage() {
-  const todayStr = '2026-09-08';
+  const todayStr = '2026-09-09';
 
-  const [neighbors, setNeighbors] = useState<NeighborInfo[]>([
+  const [neighbors, setNeighbors] = useState<NeighborItem[]>([
     {
       id: '1',
-      targetArea: '北区',
-      schoolOrTeam: '〇〇中学校サッカー部',
-      eventName: '区民大会 決勝戦応援',
-      url: 'https://example.com/itabashi-soccer',
-      contactPerson: '山田 先生',
-      memo1: 'グラウンド使用時の注意事項あり',
+      category: '近隣施設・店舗',
+      name: '赤羽スポーツカフェ',
+      addressOrLocation: '北区赤羽1-x-x',
+      contactPerson: '店長 鈴木様',
+      phone: '03-1111-2222',
+      url: 'https://example.com',
+      memo1: 'チラシ設置の件でお話しに行く',
       memo1TaskEnabled: true,
-      memo1Date: '2026-09-15',
+      memo1Date: '2026-09-25',
       memo1Status: '未着手',
       memo1Important: true,
       memo1Alarm: true,
-      memo2: '次回大会の案内パンフレット受取済み',
+      memo2: '夏イベントで共同プロモーションの可能性あり',
       memo2TaskEnabled: false,
       memo2Date: todayStr,
       memo2Status: '未着手',
       memo2Important: false,
       memo2Alarm: false,
-      memo3: '',
-      memo3TaskEnabled: false,
-      memo3Date: todayStr,
-      memo3Status: '未着手',
-      memo3Important: false,
-      memo3Alarm: false,
     },
   ]);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedAreaFilter, setSelectedAreaFilter] = useState<string>('すべて');
-
-  // フォーム状態
+  const [selectedCategory, setSelectedCategory] = useState<string>('すべて');
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<NeighborInfo, 'id'>>({
-    targetArea: '北区',
-    schoolOrTeam: '',
-    eventName: '',
-    url: '',
+
+  const [form, setForm] = useState<Omit<NeighborItem, 'id'>>({
+    category: '近隣施設・店舗',
+    name: '',
+    addressOrLocation: '',
     contactPerson: '',
+    phone: '',
+    url: '',
     memo1: '',
     memo1TaskEnabled: false,
     memo1Date: todayStr,
@@ -103,23 +78,16 @@ export default function NeighborsPage() {
     memo2Status: '未着手',
     memo2Important: false,
     memo2Alarm: false,
-    memo3: '',
-    memo3TaskEnabled: false,
-    memo3Date: todayStr,
-    memo3Status: '未着手',
-    memo3Important: false,
-    memo3Alarm: false,
   });
 
-  // 保存・追加処理
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.schoolOrTeam || !form.eventName) return;
+    if (!form.name) return;
 
     if (isEditing && selectedId) {
       setNeighbors(neighbors.map(n => n.id === selectedId ? { ...n, ...form } : n));
     } else {
-      const newItem: NeighborInfo = {
+      const newItem: NeighborItem = {
         id: Date.now().toString(),
         ...form,
       };
@@ -128,7 +96,7 @@ export default function NeighborsPage() {
     resetForm();
   };
 
-  const handleEdit = (item: NeighborInfo) => {
+  const handleEdit = (item: NeighborItem) => {
     setSelectedId(item.id);
     setForm(item);
     setIsEditing(true);
@@ -145,11 +113,12 @@ export default function NeighborsPage() {
     setIsEditing(false);
     setSelectedId(null);
     setForm({
-      targetArea: '北区',
-      schoolOrTeam: '',
-      eventName: '',
-      url: '',
+      category: '近隣施設・店舗',
+      name: '',
+      addressOrLocation: '',
       contactPerson: '',
+      phone: '',
+      url: '',
       memo1: '',
       memo1TaskEnabled: false,
       memo1Date: todayStr,
@@ -162,70 +131,76 @@ export default function NeighborsPage() {
       memo2Status: '未着手',
       memo2Important: false,
       memo2Alarm: false,
-      memo3: '',
-      memo3TaskEnabled: false,
-      memo3Date: todayStr,
-      memo3Status: '未着手',
-      memo3Important: false,
-      memo3Alarm: false,
     });
   };
 
-  // フィルタリング＆検索
   const filteredNeighbors = neighbors.filter(item => {
-    const matchesArea = selectedAreaFilter === 'すべて' || item.targetArea === selectedAreaFilter;
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = 
-      item.schoolOrTeam.toLowerCase().includes(query) ||
-      item.eventName.toLowerCase().includes(query) ||
-      item.contactPerson.toLowerCase().includes(query) ||
-      item.memo1.toLowerCase().includes(query) ||
-      item.memo2.toLowerCase().includes(query) ||
-      item.memo3.toLowerCase().includes(query);
-
-    return matchesArea && matchesSearch;
+    const matchesCat = selectedCategory === 'すべて' || item.category === selectedCategory;
+    const q = searchQuery.toLowerCase();
+    const matchesQuery = (
+      item.name.toLowerCase().includes(q) ||
+      item.addressOrLocation.toLowerCase().includes(q) ||
+      item.contactPerson.toLowerCase().includes(q) ||
+      item.phone.toLowerCase().includes(q) ||
+      item.memo1.toLowerCase().includes(q) ||
+      item.memo2.toLowerCase().includes(q)
+    );
+    return matchesCat && matchesQuery;
   });
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-sans">
+      {/* ヘッダータイトル：パーソナルジムGOLAZO */}
+      <div className="mb-4">
+        <h2 className="text-xl font-extrabold text-blue-900 tracking-wide">パーソナルジムGOLAZO</h2>
+      </div>
+
+      {/* ページ切り替えナビゲーション（追加・修正部分） */}
+      <div className="flex flex-wrap gap-2 mb-6 bg-gray-100 p-3 rounded-lg border">
+        <a href="/sales" className="px-3 py-1.5 bg-white border rounded text-sm font-medium hover:bg-gray-50">💰 売上管理</a>
+        <a href="/customers" className="px-3 py-1.5 bg-white border rounded text-sm font-medium hover:bg-gray-50">👥 顧客リスト</a>
+        <a href="/tasks" className="px-3 py-1.5 bg-white border rounded text-sm font-medium hover:bg-gray-50">📝 タスク・議事録</a>
+        <a href="/neighbors" className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium">🏫 近隣情報</a>
+        <a href="/vendors" className="px-3 py-1.5 bg-white border rounded text-sm font-medium hover:bg-gray-50">⚙️ マシン・業者一覧</a>
+      </div>
+
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🏫 近隣情報・イベント管理</h1>
-          <p className="text-sm text-gray-600 mt-1">学校やスポーツチームのイベント情報、担当者メモ、タスク連携を一元管理します。</p>
+          <p className="text-sm text-gray-600 mt-1">ジム周辺の施設、店舗、地域イベント、提携候補先を管理し、タスクや営業活動に繋げます。</p>
         </div>
       </div>
 
-      {/* 検索・フィルターバー */}
-      <div className="bg-white p-4 rounded-lg border shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-          <span className="text-sm font-semibold">🔍 検索:</span>
+      {/* 検索・フィルター */}
+      <div className="bg-white p-4 rounded-lg border shadow-sm mb-6 flex flex-wrap gap-4 items-center">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">カテゴリー:</span>
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="border rounded px-3 py-2 text-sm"
+          >
+            <option value="すべて">すべて</option>
+            <option value="近隣施設・店舗">近隣施設・店舗</option>
+            <option value="地域イベント">地域イベント</option>
+            <option value="提携・協業候補">提携・協業候補</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-sm font-semibold">🔍 キーワード:</span>
           <input
             type="text"
-            placeholder="学校名、チーム名、イベント、担当者、メモで検索..."
+            placeholder="名称、場所、担当者、メモで検索..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="border rounded px-3 py-2 text-sm flex-1"
           />
         </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold">📍 対象区:</span>
-          {['すべて', '板橋区', '北区', 'その他'].map((area) => (
-            <button
-              key={area}
-              onClick={() => setSelectedAreaFilter(area)}
-              className={`px-3 py-1.5 rounded text-sm font-medium ${
-                selectedAreaFilter === area ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {area}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左側：一覧表示エリア */}
+        {/* 左側：一覧表示 */}
         <div className="lg:col-span-2 space-y-4">
           {filteredNeighbors.length === 0 ? (
             <div className="bg-white border rounded-lg p-8 text-center text-gray-500 shadow-sm">
@@ -234,15 +209,12 @@ export default function NeighborsPage() {
           ) : (
             filteredNeighbors.map((item) => (
               <div key={item.id} className="bg-white border rounded-lg p-5 shadow-sm hover:shadow transition">
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-0.5 rounded text-xs font-semibold ${
-                      item.targetArea === '板橋区' ? 'bg-emerald-100 text-emerald-800' :
-                      item.targetArea === '北区' ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {item.targetArea}
+                    <span className="text-xs px-2 py-0.5 rounded font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      {item.category}
                     </span>
-                    <h3 className="font-bold text-lg text-gray-900">{item.schoolOrTeam}</h3>
+                    <h3 className="font-bold text-lg text-gray-900">{item.name}</h3>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -260,36 +232,31 @@ export default function NeighborsPage() {
                   </div>
                 </div>
 
-                <div className="mb-3">
-                  <p className="text-sm font-medium text-blue-900 bg-blue-50 px-3 py-1.5 rounded inline-block">
-                    📅 イベント: {item.eventName}
-                  </p>
+                <div className="text-sm text-gray-600 mb-3">
+                  📍 場所・住所: <span className="font-medium text-gray-800">{item.addressOrLocation || '-'}</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600 mb-3">
-                  <div>👤 担当者: <span className="font-medium text-gray-800">{item.contactPerson || '未設定'}</span></div>
-                  <div>
-                    🔗 URL: {item.url ? (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
-                        リンクを開く ↗
-                      </a>
-                    ) : (
-                      <span className="text-gray-400">未設定</span>
-                    )}
-                  </div>
+                  <div>👤 担当・関係者: <span className="font-medium text-gray-800">{item.contactPerson || '-'}</span></div>
+                  <div>📞 電話番号: <span className="font-medium text-gray-800">{item.phone || '-'}</span></div>
                 </div>
 
-                {/* 3つのメモ欄 ＆ タスク連携表示 */}
-                <div className="bg-gray-50 rounded p-3 space-y-2.5 text-xs text-gray-700 border">
-                  <div className="font-semibold text-gray-500">📝 メモ ＆ タスク連動内容</div>
+                {item.url && (
+                  <div className="mb-4 text-sm">
+                    🔗 URL: <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{item.url}</a>
+                  </div>
+                )}
+
+                {/* メモ＆タスク連携表示 */}
+                <div className="bg-gray-50 rounded p-3 space-y-2 text-xs text-gray-700 border">
+                  <div className="font-semibold text-gray-500">📝 メモ ＆ タスク連携</div>
                   
                   {[
                     { text: item.memo1, enabled: item.memo1TaskEnabled, date: item.memo1Date, status: item.memo1Status, imp: item.memo1Important, alarm: item.memo1Alarm },
                     { text: item.memo2, enabled: item.memo2TaskEnabled, date: item.memo2Date, status: item.memo2Status, imp: item.memo2Important, alarm: item.memo2Alarm },
-                    { text: item.memo3, enabled: item.memo3TaskEnabled, date: item.memo3Date, status: item.memo3Status, imp: item.memo3Important, alarm: item.memo3Alarm },
                   ].map((m, idx) => m.text ? (
                     <div key={idx} className="bg-white p-2 rounded border border-gray-200">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between">
                         <span className="font-medium text-gray-900">・{m.text}</span>
                         {m.enabled && (
                           <span className="flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold border border-purple-200">
@@ -300,7 +267,7 @@ export default function NeighborsPage() {
                     </div>
                   ) : null)}
 
-                  {!item.memo1 && !item.memo2 && !item.memo3 && (
+                  {!item.memo1 && !item.memo2 && (
                     <div className="text-gray-400 italic">メモはありません</div>
                   )}
                 </div>
@@ -312,49 +279,72 @@ export default function NeighborsPage() {
         {/* 右側：登録・編集フォーム */}
         <div className="bg-white border rounded-lg p-5 shadow-sm h-fit">
           <h2 className="font-bold text-lg mb-4 text-gray-900">
-            {isEditing ? '✏️ 近隣情報の編集' : '＋ 新規近隣情報の追加'}
+            {isEditing ? '✏️ 近隣情報の編集' : '＋ 新規情報の追加'}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4 text-sm">
             <div>
-              <label className="block font-medium mb-1">対象区</label>
+              <label className="block font-medium mb-1">カテゴリー</label>
               <select
-                value={form.targetArea}
-                onChange={(e) => setForm({ ...form, targetArea: e.target.value as NeighborInfo['targetArea'] })}
-                className="w-full border rounded p-2 bg-white"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value as any })}
+                className="w-full border rounded p-2"
               >
-                <option value="板橋区">板橋区</option>
-                <option value="北区">北区</option>
+                <option value="近隣施設・店舗">近隣施設・店舗</option>
+                <option value="地域イベント">地域イベント</option>
+                <option value="提携・協業候補">提携・協業候補</option>
                 <option value="その他">その他</option>
               </select>
             </div>
 
             <div>
-              <label className="block font-medium mb-1">学校・チーム名 <span className="text-red-500">*</span></label>
+              <label className="block font-medium mb-1">名称 (施設名・イベント名等) <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 required
-                placeholder="例: 〇〇中学校サッカー部"
-                value={form.schoolOrTeam}
-                onChange={(e) => setForm({ ...form, schoolOrTeam: e.target.value })}
+                placeholder="例: 赤羽スポーツカフェ"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full border rounded p-2"
               />
             </div>
 
             <div>
-              <label className="block font-medium mb-1">イベント名 <span className="text-red-500">*</span></label>
+              <label className="block font-medium mb-1">場所・住所</label>
               <input
                 type="text"
-                required
-                placeholder="例: 区民大会 決勝戦"
-                value={form.eventName}
-                onChange={(e) => setForm({ ...form, eventName: e.target.value })}
+                placeholder="例: 北区赤羽1-x-x"
+                value={form.addressOrLocation}
+                onChange={(e) => setForm({ ...form, addressOrLocation: e.target.value })}
                 className="w-full border rounded p-2"
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block font-medium mb-1">担当・関係者</label>
+                <input
+                  type="text"
+                  placeholder="例: 店長 鈴木様"
+                  value={form.contactPerson}
+                  onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+                  className="w-full border rounded p-2"
+                />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">電話番号</label>
+                <input
+                  type="text"
+                  placeholder="03-0000-0000"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="w-full border rounded p-2"
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block font-medium mb-1">詳細URL</label>
+              <label className="block font-medium mb-1">URL</label>
               <input
                 type="url"
                 placeholder="https://..."
@@ -364,20 +354,9 @@ export default function NeighborsPage() {
               />
             </div>
 
-            <div>
-              <label className="block font-medium mb-1">関係者の担当者名</label>
-              <input
-                type="text"
-                placeholder="例: 山田 先生"
-                value={form.contactPerson}
-                onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
-                className="w-full border rounded p-2"
-              />
-            </div>
-
-            {/* --- 3つのメモ欄 ＆ タスク登録連携機能 --- */}
-            <div className="space-y-4 pt-3 border-t">
-              <label className="block font-bold text-gray-800">📝 メモ欄 ＆ タスク手動登録 (3つ)</label>
+            {/* メモ欄 ＆ タスク手動登録連携 */}
+            <div className="space-y-3 pt-3 border-t">
+              <label className="block font-bold text-gray-800">📝 メモ欄 ＆ タスク手動登録 (2つ)</label>
 
               {/* メモ1 */}
               <div className="bg-gray-50 p-3 rounded border space-y-2">
@@ -391,12 +370,12 @@ export default function NeighborsPage() {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    id="m1Task"
+                    id="n-m1Task"
                     checked={form.memo1TaskEnabled}
                     onChange={(e) => setForm({ ...form, memo1TaskEnabled: e.target.checked })}
                     className="rounded text-blue-600"
                   />
-                  <label htmlFor="m1Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスク一覧に連携登録する</label>
+                  <label htmlFor="n-m1Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスクに連携登録</label>
                 </div>
                 {form.memo1TaskEnabled && (
                   <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
@@ -435,12 +414,12 @@ export default function NeighborsPage() {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    id="m2Task"
+                    id="n-m2Task"
                     checked={form.memo2TaskEnabled}
                     onChange={(e) => setForm({ ...form, memo2TaskEnabled: e.target.checked })}
                     className="rounded text-blue-600"
                   />
-                  <label htmlFor="m2Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスク一覧に連携登録する</label>
+                  <label htmlFor="n-m2Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスクに連携登録</label>
                 </div>
                 {form.memo2TaskEnabled && (
                   <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
@@ -462,50 +441,6 @@ export default function NeighborsPage() {
                     <div className="flex items-center gap-2 col-span-2 pt-1">
                       <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo2Important} onChange={(e) => setForm({ ...form, memo2Important: e.target.checked })} /> ⭐ 重要</label>
                       <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo2Alarm} onChange={(e) => setForm({ ...form, memo2Alarm: e.target.checked })} /> 🔔 期日アラーム</label>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* メモ3 */}
-              <div className="bg-gray-50 p-3 rounded border space-y-2">
-                <input
-                  type="text"
-                  placeholder="メモ 3 の内容"
-                  value={form.memo3}
-                  onChange={(e) => setForm({ ...form, memo3: e.target.value })}
-                  className="w-full border rounded p-2 text-xs bg-white"
-                />
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="m3Task"
-                    checked={form.memo3TaskEnabled}
-                    onChange={(e) => setForm({ ...form, memo3TaskEnabled: e.target.checked })}
-                    className="rounded text-blue-600"
-                  />
-                  <label htmlFor="m3Task" className="text-xs font-medium cursor-pointer text-blue-900">このメモをタスク一覧に連携登録する</label>
-                </div>
-                {form.memo3TaskEnabled && (
-                  <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-                    <input
-                      type="date"
-                      value={form.memo3Date}
-                      onChange={(e) => setForm({ ...form, memo3Date: e.target.value })}
-                      className="border rounded p-1.5 bg-white"
-                    />
-                    <select
-                      value={form.memo3Status}
-                      onChange={(e) => setForm({ ...form, memo3Status: e.target.value as any })}
-                      className="border rounded p-1.5 bg-white"
-                    >
-                      <option value="未着手">未着手</option>
-                      <option value="進行中">進行中</option>
-                      <option value="完了">完了</option>
-                    </select>
-                    <div className="flex items-center gap-2 col-span-2 pt-1">
-                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo3Important} onChange={(e) => setForm({ ...form, memo3Important: e.target.checked })} /> ⭐ 重要</label>
-                      <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={form.memo3Alarm} onChange={(e) => setForm({ ...form, memo3Alarm: e.target.checked })} /> 🔔 期日アラーム</label>
                     </div>
                   </div>
                 )}
