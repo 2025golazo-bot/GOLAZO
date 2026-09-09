@@ -54,7 +54,7 @@ export default function TasksPage() {
     });
   }, []);
 
-  // --- ナビゲーションメニュー設定（他のページと完全統一） ---
+  // --- ナビゲーションメニュー設定 ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/clients', icon: '📋' },
@@ -130,7 +130,7 @@ export default function TasksPage() {
     memo: '',
   });
 
-  // 議事録編集・新規フォーム状態（複数タスク入力欄つき）
+  // 議事録編集・新規フォーム状態
   const [selectedMinutesId, setSelectedMinutesId] = useState<string | null>(null);
   const [isMinutesEditing, setIsMinutesEditing] = useState<boolean>(false);
   const [minutesForm, setMinutesForm] = useState<Partial<MeetingMinutes>>({
@@ -300,7 +300,7 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans pb-12">
-      {/* 統一されたGOLAZOカスタムヘッダー */}
+      {/* 統一されたGOLAZOカスタムヘッダー（「管理システム」表記を削除） */}
       <header className="golazo-custom-header bg-[#5e9bc4] text-white px-6 py-2.5 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
         <div className="flex items-center gap-2.5">
           <span className="bg-white text-[#5e9bc4] px-2 py-0.5 rounded font-black text-xs shadow-sm">G</span>
