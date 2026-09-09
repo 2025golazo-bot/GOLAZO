@@ -1,674 +1,315 @@
+// app/sales/page.tsx
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import React, { useState } from 'react';
+import Header from '@/components/Header';
 
-// --- 型定義 ---
-interface SaleRecord {
-  id: string;
-  date: string; // YYYY-MM-DD
-  time: string;
-  customerName: string; // 購入者名（保護者名等）
-  studentName?: string; // 対象受講生名
-  productName: string; // 商品名（10回券、単発等）
-  amount: number;
-  staff: 'TAKA' | 'NANA';
-  campaignName?: string; // 適用キャンペーン
-  squarePaymentId: string;
-}
-
-interface TrialClient {
-  id: string;
+type SaleItem = {
+  id: number;
   date: string;
-  name: string;
-  age: number;
-  staff: 'TAKA' | 'NANA';
-  converted: boolean; // 回数券購入有無
-  productPurchased?: string;
-}
-
-interface CampaignSummary {
-  id: string;
-  name: string;
-  note: string; // 議事録メモ連携
-}
-
-interface MemberTicketStatus {
-  id: string;
-  parentName: string;
-  studentName: string;
-  totalPurchased: number;
-  remaining: number;
-}
+  clientName: string;
+  category: '月謝・コース' | '回数券' | '物販・プロテイン' | '体験料';
+  amount: number;
+  paymentMethod: 'Square決済' | '現金' | '銀行振込';
+  memo: string;
+};
 
 export default function SalesPage() {
-  const pathname = usePathname();
-
-  // --- ナビゲーションメニュー設定 (/task-managerと完全統一) ---
-  const navItems = [
-    { label: '売上管理', href: '/sales', icon: '📊' },
-    { label: '顧客リスト', href: '/clients', icon: '📋' },
-    { label: 'タスク・議事録', href: '/task-manager', icon: '📝' },
-    { label: '近隣情報', href: '/local-info', icon: '📍' },
-    { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
-  ];
-
-  // --- 目標金額（手入力・状態管理） ---
-  const [monthlyTarget, setMonthlyTarget] = useState<number>(1000000); // 今月目標 (100万円)
-  const [yearlyTarget, setYearlyTarget] = useState<number>(12000000); // 今年度目標 (1,200万円)
-
-  // --- 期間指定フィルター ---
-  const todayStr = '2026-10-05'; // デモ用本日日付
-  const [startDate, setStartDate] = useState<string>('2026-10-01');
-  const [endDate, setEndDate] = useState<string>('2026-10-31');
-
-  // --- 過去売上表示用の選択 ---
-  const [selectedArchiveYear, setSelectedArchiveYear] = useState<string>('2026');
-  const [selectedArchiveMonth, setSelectedArchiveMonth] = useState<string>('10');
-
-  // --- Square自動連携売上データ (サンプル) ---
-  const [salesHistory] = useState<SaleRecord[]>([
-    { id: 's-1', date: '2026-10-05', time: '10:30', customerName: '藤田 奈々', studentName: '藤田 陸', productName: '10回券 (共通)', amount: 60000, staff: 'TAKA', campaignName: '秋の体験入会CP', squarePaymentId: 'sq_pay_998811' },
-    { id: 's-2', date: '2026-10-05', time: '14:00', customerName: '山田 太郎', studentName: '山田 花', productName: '5回券', amount: 32000, staff: 'NANA', squarePaymentId: 'sq_pay_772200' },
-    { id: 's-3', date: '2026-10-02', time: '16:15', customerName: '佐藤 健', studentName: '佐藤 翔', productName: '単発パーソナル', amount: 7500, staff: 'TAKA', squarePaymentId: 'sq_pay_554433' },
-    { id: 's-4', date: '2026-09-28', time: '11:00', customerName: '高橋 恵', studentName: '高橋 蓮', productName: '10回券 (共通)', amount: 60000, staff: 'NANA', campaignName: '秋の体験入会CP', squarePaymentId: 'sq_pay_112233' },
-    { id: 's-5', date: '2026-09-15', time: '15:30', customerName: '鈴木 一郎', studentName: '鈴木 拓海', productName: '5回券', amount: 32000, staff: 'TAKA', squarePaymentId: 'sq_pay_445566' },
+  const [sales, setSales] = useState<SaleItem[]>([
+    {
+      id: 1,
+      date: '2026-09-07',
+      clientName: '山田 太郎',
+      category: '月謝・コース',
+      amount: 33000,
+      paymentMethod: 'Square決済',
+      memo: '9月分月謝',
+    },
+    {
+      id: 2,
+      date: '2026-09-06',
+      clientName: '佐藤 花子',
+      category: '月謝・コース',
+      amount: 44000,
+      paymentMethod: 'Square決済',
+      memo: '9月分月謝（月8回）',
+    },
+    {
+      id: 3,
+      date: '2026-09-05',
+      clientName: '鈴木 一郎',
+      category: '体験料',
+      amount: 3000,
+      paymentMethod: '現金',
+      memo: '体験レッスン代',
+    },
   ]);
 
-  // --- 体験者データ ---
-  const [trialClients] = useState<TrialClient[]>([
-    { id: 't-1', date: '2026-10-04', name: '渡辺 颯太', age: 10, staff: 'TAKA', converted: true, productPurchased: '10回券' },
-    { id: 't-2', date: '2026-10-02', name: '伊藤 結衣', age: 7, staff: 'NANA', converted: false },
-    { id: 't-3', date: '2026-09-25', name: '小林 蒼空', age: 11, staff: 'TAKA', converted: true, productPurchased: '5回券' },
-    { id: 't-4', date: '2026-09-18', name: '加藤 陽菜', age: 9, staff: 'NANA', converted: true, productPurchased: '10回券' },
-  ]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // --- キャンペーン情報 ---
-  const [campaigns] = useState<CampaignSummary[]>([
-    { id: 'c-1', name: '秋の体験入会CP', note: '体験当日入会で10回券 5,000円引き＋評価シート無料プレゼント' },
-    { id: 'c-2', name: '兄弟・家族紹介CP', note: 'ご紹介者様・ご新規様ともに1チケット進呈' }
-  ]);
+  const [newSale, setNewSale] = useState({
+    date: new Date().toISOString().split('T')[0],
+    clientName: '',
+    category: '月謝・コース' as const,
+    amount: '',
+    paymentMethod: 'Square決済' as const,
+    memo: '',
+  });
 
-  // --- 会員別 回数券保有・消化状況 ---
-  const [memberTickets] = useState<MemberTicketStatus[]>([
-    { id: 'm-1', parentName: '藤田 奈々', studentName: '藤田 陸 / 翔', totalPurchased: 20, remaining: 8 },
-    { id: 'm-2', parentName: '山田 太郎', studentName: '山田 花', totalPurchased: 10, remaining: 3 },
-    { id: 'm-3', parentName: '高橋 恵', studentName: '高橋 蓮', totalPurchased: 10, remaining: 7 },
-    { id: 'm-4', parentName: '鈴木 一郎', studentName: '鈴木 拓海', totalPurchased: 5, remaining: 1 },
-  ]);
+  const filteredSales = sales.filter((item) => {
+    const matchesSearch = item.clientName.includes(searchTerm) || item.memo.includes(searchTerm);
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
-  // --- 集計ヘルパー関数 ---
-  const calcStaffBreakdown = (records: SaleRecord[]) => {
-    let taka = 0;
-    let nana = 0;
-    records.forEach(s => {
-      if (s.staff === 'TAKA') taka += s.amount;
-      if (s.staff === 'NANA') nana += s.amount;
-    });
-    const total = taka + nana;
-    return {
-      taka,
-      nana,
-      takaRate: total > 0 ? ((taka / total) * 100).toFixed(0) : '0',
-      nanaRate: total > 0 ? ((nana / total) * 100).toFixed(0) : '0',
+  const totalAmount = filteredSales.reduce((sum, item) => sum + item.amount, 0);
+
+  const handleAddSale = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSale.clientName || !newSale.amount) return;
+
+    const saleToAdd: SaleItem = {
+      id: Date.now(),
+      date: newSale.date,
+      clientName: newSale.clientName,
+      category: newSale.category,
+      amount: Number(newSale.amount),
+      paymentMethod: newSale.paymentMethod,
+      memo: newSale.memo,
     };
+
+    setSales([saleToAdd, ...sales]);
+    setNewSale({
+      date: new Date().toISOString().split('T')[0],
+      clientName: '',
+      category: '月謝・コース',
+      amount: '',
+      paymentMethod: 'Square決済',
+      memo: '',
+    });
+    setIsModalOpen(false);
   };
 
-  // --- 集計データ算出 ---
-  const todaySalesRecords = useMemo(() => salesHistory.filter(s => s.date === todayStr), [salesHistory, todayStr]);
-  const todaySales = useMemo(() => todaySalesRecords.reduce((sum, s) => sum + s.amount, 0), [todaySalesRecords]);
-
-  const currentMonthSalesRecords = useMemo(() => salesHistory.filter(s => s.date.startsWith('2026-10')), [salesHistory]);
-  const currentMonthSales = useMemo(() => currentMonthSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentMonthSalesRecords]);
-  const currentMonthStaff = useMemo(() => calcStaffBreakdown(currentMonthSalesRecords), [currentMonthSalesRecords]);
-
-  const currentYearSalesRecords = useMemo(() => salesHistory.filter(s => s.date >= '2026-04-01' && s.date <= '2027-03-31'), [salesHistory]);
-  const currentYearSales = useMemo(() => currentYearSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentYearSalesRecords]);
-  const currentYearStaff = useMemo(() => calcStaffBreakdown(currentYearSalesRecords), [currentYearSalesRecords]);
-
-  const monthlyTicketCount = useMemo(() => currentMonthSalesRecords.filter(s => s.productName.includes('回券')).length, [currentMonthSalesRecords]);
-  const monthlyTrialCount = useMemo(() => trialClients.filter(t => t.date.startsWith('2026-10')).length, [trialClients]);
-
-  const filteredSalesByDate = useMemo(() => {
-    return salesHistory.filter(s => s.date >= startDate && s.date <= endDate);
-  }, [salesHistory, startDate, endDate]);
-
-  const filteredTotalAmount = useMemo(() => {
-    return filteredSalesByDate.reduce((sum, s) => sum + s.amount, 0);
-  }, [filteredSalesByDate]);
-
-  const filteredStaffSummary = useMemo(() => calcStaffBreakdown(filteredSalesByDate), [filteredSalesByDate]);
-
-  const productSummary = useMemo(() => {
-    const map: { [key: string]: { count: number; total: number } } = {};
-    filteredSalesByDate.forEach(s => {
-      if (!map[s.productName]) {
-        map[s.productName] = { count: 0, total: 0 };
-      }
-      map[s.productName].count += 1;
-      map[s.productName].total += s.amount;
-    });
-    return map;
-  }, [filteredSalesByDate]);
-
-  const trialConversionStats = useMemo(() => {
-    const total = trialClients.length;
-    const converted = trialClients.filter(t => t.converted).length;
-    const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0';
-    return { total, converted, rate };
-  }, [trialClients]);
-
-  const ticketOverallStats = useMemo(() => {
-    const totalPurchased = memberTickets.reduce((sum, m) => sum + m.totalPurchased, 0);
-    const totalRemaining = memberTickets.reduce((sum, m) => sum + m.remaining, 0);
-    const totalUsed = totalPurchased - totalRemaining;
-    const usedRate = totalPurchased > 0 ? ((totalUsed / totalPurchased) * 100).toFixed(1) : '0';
-    return { totalPurchased, totalRemaining, totalUsed, usedRate };
-  }, [memberTickets]);
-
-  const archiveSalesRecords = useMemo(() => {
-    const prefix = `${selectedArchiveYear}-${selectedArchiveMonth.padStart(2, '0')}`;
-    return salesHistory.filter(s => s.date.startsWith(prefix));
-  }, [salesHistory, selectedArchiveYear, selectedArchiveMonth]);
-
-  const archiveSales = useMemo(() => archiveSalesRecords.reduce((sum, s) => sum + s.amount, 0), [archiveSalesRecords]);
-  const archiveStaffSummary = useMemo(() => calcStaffBreakdown(archiveSalesRecords), [archiveSalesRecords]);
-
   return (
-    <div style={{ display: 'contents' }}>
-      {/* 共通レイアウト上の重複ナビゲーションを確実に隠すためのCSS */}
-      <style jsx global>{`
-        header nav, 
-        body > header, 
-        #__next > header,
-        main ~ header {
-          display: none !important;
-        }
-      `}</style>
+    <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
+      <Header />
 
-      <div className="bg-slate-100 min-h-screen text-slate-800 pb-12">
-        {/* /task-manager と完全に統一されたヘッダーデザイン */}
-        <header className="bg-[#5e9bc4] text-white px-6 py-3 flex justify-between items-center shadow-md sticky top-0 z-50">
-          <div className="flex items-center gap-3">
-            <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs shadow-sm">G</span>
-            <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
+      <main className="p-6 max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <span>📊</span> 売上管理・Square連携
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              ジムの売上データや決済履歴を確認・集計します。
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="bg-white/20 px-3 py-1 rounded text-xs font-bold border border-white/30 text-white">
-              管理システム
-            </span>
-            <nav className="flex gap-1 text-xs font-semibold">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`px-3 py-1.5 rounded transition flex items-center gap-1 ${
-                      isActive
-                        ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
-                        : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
-                    }`}
-                  >
-                    <span>{item.icon}</span> {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center gap-2"
+          >
+            <span>＋</span> 売上手動追加
+          </button>
+        </div>
+
+        {/* 集計サマリーカード */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-1">
+            <span className="text-xs font-semibold text-slate-400">表示中合計売上</span>
+            <div className="text-2xl font-bold text-slate-800">¥{totalAmount.toLocaleString()}</div>
           </div>
-        </header>
-
-        {/* 売上管理 メインコンテンツ */}
-        <main className="p-6 max-w-7xl mx-auto space-y-6">
-
-          {/* 上部ステータスバー: Square自動連携 & 目標設定エリア */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Square API 自動連携中 (最終同期: 本日 10:30)
-              </span>
-              <span className="text-xs text-slate-400">※Squareで決済された売上データがリアルタイム反映されます</span>
-            </div>
-
-            {/* 目標金額 手入力フォーム */}
-            <div className="flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5">
-                <label className="font-bold text-slate-600">🎯 今月目標:</label>
-                <input
-                  type="number"
-                  step="10000"
-                  value={monthlyTarget}
-                  onChange={e => setMonthlyTarget(Number(e.target.value))}
-                  className="w-28 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
-                />
-                <span className="text-slate-500">円</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <label className="font-bold text-slate-600">🏆 今年度目標:</label>
-                <input
-                  type="number"
-                  step="100000"
-                  value={yearlyTarget}
-                  onChange={e => setYearlyTarget(Number(e.target.value))}
-                  className="w-32 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
-                />
-                <span className="text-slate-500">円</span>
-              </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-1">
+            <span className="text-xs font-semibold text-slate-400">件数</span>
+            <div className="text-2xl font-bold text-[#5e9bc4]">{filteredSales.length} 件</div>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-1">
+            <span className="text-xs font-semibold text-slate-400">決済連携状況</span>
+            <div className="text-sm font-semibold text-emerald-600 flex items-center gap-1.5 pt-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Square API 接続正常
             </div>
           </div>
+        </div>
 
-          {/* 売上サマリー & 目標達成プログレスバー (担当者毎内訳付き) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            {/* 本日売上 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">TODAY'S SALES</span>
-              <div className="flex justify-between items-baseline">
-                <h2 className="text-3xl font-extrabold text-slate-800">¥{todaySales.toLocaleString()}</h2>
-                <span className="text-xs font-bold text-slate-500">{todayStr}</span>
-              </div>
-              <p className="text-[11px] text-slate-400">Square決済完了件数: {todaySalesRecords.length} 件</p>
-            </div>
-
-            {/* 今月売上 (月別) & 担当者毎売上 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <div className="flex justify-between items-baseline">
-                <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">MONTHLY PROGRESS (今月)</span>
-                <span className="text-xs font-bold bg-sky-100 text-[#5e9bc4] px-2 py-0.5 rounded">
-                  達成率: {((currentMonthSales / (monthlyTarget || 1)) * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <h2 className="text-3xl font-extrabold text-[#5e9bc4]">¥{currentMonthSales.toLocaleString()}</h2>
-                <span className="text-xs text-slate-400">/ ¥{monthlyTarget.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-[#5e9bc4] h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (currentMonthSales / (monthlyTarget || 1)) * 100)}%` }}
-                ></div>
-              </div>
-
-              <div className="bg-sky-50/60 p-2.5 rounded border border-sky-100 text-xs space-y-1 mt-2">
-                <span className="font-bold text-slate-600 block text-[11px]">👤 今月の担当者別売上</span>
-                <div className="flex justify-between text-slate-700 font-semibold">
-                  <span className="text-sky-800">TAKA: ¥{currentMonthStaff.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({currentMonthStaff.takaRate}%)</span></span>
-                  <span className="text-pink-800">NANA: ¥{currentMonthStaff.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({currentMonthStaff.nanaRate}%)</span></span>
-                </div>
-              </div>
-
-              <div className="flex justify-between text-[11px] text-slate-500 pt-1">
-                <span>🎟️ 回数券販売: <strong>{monthlyTicketCount}</strong> 件</span>
-                <span>👟 体験者数: <strong>{monthlyTrialCount}</strong> 名</span>
-              </div>
-            </div>
-
-            {/* 今年度売上 (年度) & 担当者毎売上 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <div className="flex justify-between items-baseline">
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">ANNUAL PROGRESS (今年度)</span>
-                <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                  達成率: {((currentYearSales / (yearlyTarget || 1)) * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <h2 className="text-3xl font-extrabold text-emerald-800">¥{currentYearSales.toLocaleString()}</h2>
-                <span className="text-xs text-slate-400">/ ¥{yearlyTarget.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (currentYearSales / (yearlyTarget || 1)) * 100)}%` }}
-                ></div>
-              </div>
-
-              <div className="bg-emerald-50/60 p-2.5 rounded border border-emerald-100 text-xs space-y-1 mt-2">
-                <span className="font-bold text-slate-600 block text-[11px]">👤 今年度の担当者別売上</span>
-                <div className="flex justify-between text-slate-700 font-semibold">
-                  <span className="text-sky-800">TAKA: ¥{currentYearStaff.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({currentYearStaff.takaRate}%)</span></span>
-                  <span className="text-pink-800">NANA: ¥{currentYearStaff.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({currentYearStaff.nanaRate}%)</span></span>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-400">2026年度 累計実績 (4月〜翌3月)</p>
-            </div>
-
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="w-full md:w-96">
+            <input
+              type="text"
+              placeholder="顧客名やメモで検索..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+            />
           </div>
-
-          {/* 任意設定期間フィルター & 担当者毎売上 & 販売商品内訳 */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
-              <div>
-                <h3 className="font-bold text-slate-800 text-sm">📊 設定期間 売上 & 担当者毎分析</h3>
-                <p className="text-[11px] text-slate-400">指定した期間内の売上合計・担当者毎の内訳・商品別販売件数を集計します</p>
-              </div>
-
-              {/* 期間選択カレンダー */}
-              <div className="flex items-center gap-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
-                <span className="font-bold text-slate-600">設定期間:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white outline-none"
-                />
-                <span className="text-slate-400">〜</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white outline-none"
-                />
-              </div>
-            </div>
-
-            {/* 指定期間のサマリー ＆ 担当者毎売上カード */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              {/* 設定期間内の売上合計 & 担当者毎売上 */}
-              <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 space-y-3">
-                <span className="text-xs font-bold text-slate-500 block">設定期間内の売上合計</span>
-                <p className="text-2xl font-extrabold text-[#5e9bc4]">¥{filteredTotalAmount.toLocaleString()}</p>
-
-                <div className="border-t border-sky-200 pt-2 space-y-2 text-xs">
-                  <span className="font-bold text-slate-700 block">👨‍🏫 担当者毎売上 (設定期間内)</span>
-                  
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between items-center text-slate-700 font-bold">
-                      <span className="text-sky-800">TAKA</span>
-                      <span>¥{filteredStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({filteredStaffSummary.takaRate}%)</span></span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-sky-500 h-1.5" style={{ width: `${filteredStaffSummary.takaRate}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-0.5 pt-1">
-                    <div className="flex justify-between items-center text-slate-700 font-bold">
-                      <span className="text-pink-800">NANA</span>
-                      <span>¥{filteredStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({filteredStaffSummary.nanaRate}%)</span></span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-pink-400 h-1.5" style={{ width: `${filteredStaffSummary.nanaRate}%` }}></div>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* 購入商品の件数サマリー */}
-              <div className="md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                <span className="text-xs font-bold text-slate-600 block">🛍️ 設定期間内の商品別 販売件数・内訳</span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {Object.keys(productSummary).length > 0 ? (
-                    Object.entries(productSummary).map(([pName, data]) => (
-                      <div key={pName} className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-xs">
-                        <span className="font-bold text-slate-800 block truncate">{pName}</span>
-                        <div className="flex justify-between items-baseline mt-1">
-                          <span className="text-sm font-extrabold text-[#5e9bc4]">{data.count} <span className="text-[10px] font-normal">件</span></span>
-                          <span className="text-[11px] text-slate-500">¥{data.total.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-slate-400 col-span-3 py-2">該当期間の購入商品はありません</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 期間内の購入者明細テーブル */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-xs text-slate-700">🧾 購入日・商品購入者 明細一覧 ({filteredSalesByDate.length}件)</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left text-slate-600 border-collapse">
-                  <thead>
-                    <tr className="border-b bg-slate-50 text-slate-500 font-bold">
-                      <th className="py-2.5 px-3">購入日時</th>
-                      <th className="py-2.5 px-3">購入者名 (保護者)</th>
-                      <th className="py-2.5 px-3">受講生名</th>
-                      <th className="py-2.5 px-3">購入商品</th>
-                      <th className="py-2.5 px-3">金額</th>
-                      <th className="py-2.5 px-3">担当</th>
-                      <th className="py-2.5 px-3">適用キャンペーン</th>
-                      <th className="py-2.5 px-3">Square決済ID</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSalesByDate.length > 0 ? (
-                      filteredSalesByDate.map(sale => (
-                        <tr key={sale.id} className="border-b hover:bg-slate-50 transition">
-                          <td className="py-2.5 px-3 font-semibold">{sale.date} <span className="text-slate-400 text-[10px]">{sale.time}</span></td>
-                          <td className="py-2.5 px-3 font-bold text-slate-800">{sale.customerName} 様</td>
-                          <td className="py-2.5 px-3 text-slate-600">{sale.studentName || '-'}</td>
-                          <td className="py-2.5 px-3 font-bold text-[#5e9bc4]">{sale.productName}</td>
-                          <td className="py-2.5 px-3 font-extrabold text-slate-800">¥{sale.amount.toLocaleString()}</td>
-                          <td className="py-2.5 px-3">
-                            <span className={`px-2 py-0.5 rounded font-bold ${sale.staff === 'TAKA' ? 'bg-sky-100 text-sky-800' : 'bg-pink-100 text-pink-800'}`}>
-                              {sale.staff}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            {sale.campaignName ? (
-                              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold text-[10px]">
-                                🏷️ {sale.campaignName}
-                              </span>
-                            ) : (
-                              <span className="text-slate-300">-</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400">{sale.squarePaymentId}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={8} className="py-6 text-center text-slate-400">選択された期間内の売上データはありません</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedCategory === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              すべて
+            </button>
+            <button
+              onClick={() => setSelectedCategory('月謝・コース')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedCategory === '月謝・コース' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              月謝・コース
+            </button>
+            <button
+              onClick={() => setSelectedCategory('体験料')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedCategory === '体験料' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              体験料
+            </button>
           </div>
+        </div>
 
-          {/* キャンペーン効果 & 体験者管理 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            {/* 左：キャンペーン効果 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <div className="border-b pb-2 flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-slate-800 text-sm">📣 キャンペーン効果 & 売上貢献度</h3>
-                  <p className="text-[11px] text-slate-400">議事録で設定したキャンペーンの適用状況</p>
-                </div>
-                <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold">議事録連動中</span>
-              </div>
-
-              <div className="space-y-3">
-                {campaigns.map(cp => {
-                  const appliedSales = salesHistory.filter(s => s.campaignName === cp.name);
-                  const appliedCount = appliedSales.length;
-                  const totalContribution = appliedSales.reduce((sum, s) => sum + s.amount, 0);
-
-                  return (
-                    <div key={cp.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-200 space-y-2 text-xs">
-                      <div className="flex justify-between items-start">
-                        <span className="font-bold text-amber-900 text-sm">🏷️ {cp.name}</span>
-                        <span className="bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded text-[11px]">
-                          売上貢献: ¥{totalContribution.toLocaleString()}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <th className="p-4">日付</th>
+                  <th className="p-4">顧客名</th>
+                  <th className="p-4">カテゴリ</th>
+                  <th className="p-4">金額</th>
+                  <th className="p-4">決済方法</th>
+                  <th className="p-4">メモ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {filteredSales.length > 0 ? (
+                  filteredSales.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                      <td className="p-4 text-slate-600 text-xs">{item.date}</td>
+                      <td className="p-4 font-bold text-slate-800">{item.clientName}</td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                          {item.category}
                         </span>
-                      </div>
-                      <p className="text-slate-600 text-[11px] bg-white p-2 rounded-lg border border-amber-100">{cp.note}</p>
-                      <div className="text-right text-slate-500 font-bold">
-                        適用件数: <span className="text-amber-800 text-sm">{appliedCount}</span> 件
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 右：体験者管理 (CVR) */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <div className="border-b pb-2 flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-slate-800 text-sm">👟 体験者一覧 & 入会成約率 (CVR)</h3>
-                  <p className="text-[11px] text-slate-400">体験レッスンから回数券購入への転換率</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block font-bold">体験成約率 (CVR)</span>
-                  <span className="text-base font-extrabold text-[#5e9bc4]">{trialConversionStats.rate}%</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <table className="w-full text-xs text-left text-slate-600 border-collapse">
-                  <thead>
-                    <tr className="border-b bg-slate-50 text-slate-500">
-                      <th className="py-2 px-2">体験日</th>
-                      <th className="py-2 px-2">体験者名</th>
-                      <th className="py-2 px-2">年齢</th>
-                      <th className="py-2 px-2">担当</th>
-                      <th className="py-2 px-2">回数券購入</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trialClients.map(tc => (
-                      <tr key={tc.id} className="border-b">
-                        <td className="py-2 px-2 font-semibold">{tc.date}</td>
-                        <td className="py-2 px-2 font-bold text-slate-800">{tc.name} 様</td>
-                        <td className="py-2 px-2">{tc.age} 歳</td>
-                        <td className="py-2 px-2 font-bold text-slate-600">{tc.staff}</td>
-                        <td className="py-2 px-2">
-                          {tc.converted ? (
-                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                              ✅ 成約 ({tc.productPurchased})
-                            </span>
-                          ) : (
-                            <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded font-bold">
-                              未購入
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-
-          {/* 回数券消化進捗 & 過去売上アーカイブ */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-            {/* 回数券消化進捗 */}
-            <div className="md:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <div className="border-b pb-2 flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-slate-800 text-sm">🎫 会員別 回数券消化進捗 & 全体消化率</h3>
-                  <p className="text-[11px] text-slate-400">会員ごとの残りチケット数と全体の消費スピード</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block font-bold">全体消化率</span>
-                  <span className="text-base font-extrabold text-emerald-700">{ticketOverallStats.usedRate}%</span>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                <div className="flex justify-between text-xs font-bold text-slate-600">
-                  <span>発行累計: {ticketOverallStats.totalPurchased} 回</span>
-                  <span>消化済み: {ticketOverallStats.totalUsed} 回 / 残り: {ticketOverallStats.totalRemaining} 回</span>
-                </div>
-                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                  <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${ticketOverallStats.usedRate}%` }}></div>
-                </div>
-              </div>
-
-              <table className="w-full text-xs text-left text-slate-600 border-collapse">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-slate-500 font-bold">
-                    <th className="py-2 px-2">保護者名</th>
-                    <th className="py-2 px-2">受講生（お子様）</th>
-                    <th className="py-2 px-2">累計購入回数</th>
-                    <th className="py-2 px-2">残り回数</th>
-                    <th className="py-2 px-2">ステータス</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {memberTickets.map(m => (
-                    <tr key={m.id} className="border-b">
-                      <td className="py-2 px-2 font-bold text-slate-800">{m.parentName} 様</td>
-                      <td className="py-2 px-2">{m.studentName}</td>
-                      <td className="py-2 px-2 font-bold text-slate-600">{m.totalPurchased} 回</td>
-                      <td className="py-2 px-2 font-extrabold text-[#5e9bc4]">{m.remaining} 回</td>
-                      <td className="py-2 px-2">
-                        {m.remaining <= 2 ? (
-                          <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold text-[10px]">
-                            ⚠️ 次回追加提案対象
-                          </span>
-                        ) : (
-                          <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold text-[10px]">
-                            正常
-                          </span>
-                        )}
                       </td>
+                      <td className="p-4 font-bold text-slate-800">¥{item.amount.toLocaleString()}</td>
+                      <td className="p-4 text-xs text-slate-600">{item.paymentMethod}</td>
+                      <td className="p-4 text-xs text-slate-500">{item.memo || '-'}</td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 過去の売上アーカイブ */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <div className="border-b pb-2">
-                <h3 className="font-bold text-slate-800 text-sm">📁 過去売上アーカイブ (担当者毎)</h3>
-                <p className="text-[11px] text-slate-400">過去の月別実績確認</p>
-              </div>
-
-              <div className="flex gap-2 text-xs">
-                <select
-                  value={selectedArchiveYear}
-                  onChange={e => setSelectedArchiveYear(e.target.value)}
-                  className="border border-slate-300 rounded p-1.5 bg-white font-bold text-slate-700 outline-none flex-1"
-                >
-                  <option value="2025">2025年</option>
-                  <option value="2026">2026年</option>
-                </select>
-                <select
-                  value={selectedArchiveMonth}
-                  onChange={e => setSelectedArchiveMonth(e.target.value)}
-                  className="border border-slate-300 rounded p-1.5 bg-white font-bold text-slate-700 outline-none flex-1"
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={String(i + 1)}>{i + 1}月</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-xs font-bold text-slate-500">{selectedArchiveYear}年{selectedArchiveMonth}月 売上</span>
-                  <span className="text-lg font-extrabold text-[#5e9bc4]">¥{archiveSales.toLocaleString()}</span>
-                </div>
-
-                <div className="border-t border-slate-200 pt-2 space-y-2 text-xs">
-                  <span className="font-bold text-slate-600 block text-[11px]">👤 担当者別アーカイブ</span>
-                  <div className="flex justify-between text-slate-700 font-semibold">
-                    <span className="text-sky-800">TAKA: ¥{archiveStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.takaRate}%)</span></span>
-                    <span className="text-pink-800">NANA: ¥{archiveStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.nanaRate}%)</span></span>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 text-right">{archiveSalesRecords.length} 件の取引</p>
-              </div>
-            </div>
-
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-400 text-sm">
+                      該当する売上データが見つかりませんでした。
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
+        </div>
+      </main>
 
-        </main>
-      </div>
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">売上データの追加</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <form onSubmit={handleAddSale} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">日付</label>
+                  <input
+                    type="date"
+                    required
+                    value={newSale.date}
+                    onChange={(e) => setNewSale({ ...newSale, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">顧客名 *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="山田 太郎"
+                    value={newSale.clientName}
+                    onChange={(e) => setNewSale({ ...newSale, clientName: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリ</label>
+                  <select
+                    value={newSale.category}
+                    onChange={(e: any) => setNewSale({ ...newSale, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                  >
+                    <option value="月謝・コース">月謝・コース</option>
+                    <option value="回数券">回数券</option>
+                    <option value="物販・プロテイン">物販・プロテイン</option>
+                    <option value="体験料">体験料</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">金額 (円) *</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="10000"
+                    value={newSale.amount}
+                    onChange={(e) => setNewSale({ ...newSale, amount: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">決済方法</label>
+                <select
+                  value={newSale.paymentMethod}
+                  onChange={(e: any) => setNewSale({ ...newSale, paymentMethod: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                >
+                  <option value="Square決済">Square決済</option>
+                  <option value="現金">現金</option>
+                  <option value="銀行振込">銀行振込</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">メモ</label>
+                <input
+                  type="text"
+                  placeholder="9月分月謝など"
+                  value={newSale.memo}
+                  onChange={(e) => setNewSale({ ...newSale, memo: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
+                >
+                  追加する
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
