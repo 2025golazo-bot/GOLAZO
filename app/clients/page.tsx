@@ -602,8 +602,8 @@ export default function ClientsPage() {
                         onChange={e => setNewSessionStaff(e.target.value as 'TAKA' | 'NANA')}
                         className="w-full border border-slate-300 rounded-lg p-2 font-bold text-[#5e9bc4] focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                       >
-                        <option value="TAKA">TAKA (藤田 渉仁)</option>
-                        <option value="NANA">NANA (藤田 奈々)</option>
+                        <option value="TAKA">TAKA</option>
+                        <option value="NANA">NANA</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
