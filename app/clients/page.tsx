@@ -63,6 +63,15 @@ interface Student {
 }
 
 export default function ClientsPage() {
+  // --- ナビゲーションメニュー設定 ---
+  const navItems = [
+    { label: '売上管理', href: '/sales', icon: '📊' },
+    { label: '顧客リスト', href: '/clients', icon: '📋' },
+    { label: 'タスク・議事録', href: '/tasks', icon: '📝' },
+    { label: '近隣情報', href: '/local-info', icon: '📍' },
+    { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
+  ];
+
   // 保護者データ (Square連携・チケット管理)
   const [parents, setParents] = useState<Parent[]>([
     {
@@ -405,21 +414,22 @@ export default function ClientsPage() {
           <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         </div>
         <nav className="flex gap-2 text-xs font-semibold">
-          <a href="/" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
-            ダッシュボード・カルテ
-          </a>
-          <a href="/sales" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
-            売上管理
-          </a>
-          <a href="/tasks" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
-            タスク
-          </a>
-          <a href="/transactions" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
-            取引詳細
-          </a>
-          <a href="/local-info" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
-            近隣情報
-          </a>
+          {navItems.map((item) => {
+            const isActive = item.href === '/clients';
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-1.5 rounded-md transition flex items-center gap-1 ${
+                  isActive
+                    ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                    : 'opacity-80 hover:opacity-100 hover:bg-white/10'
+                }`}
+              >
+                <span>{item.icon}</span> {item.label}
+              </a>
+            );
+          })}
         </nav>
       </header>
 
