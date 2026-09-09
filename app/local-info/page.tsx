@@ -20,7 +20,7 @@ export default function LocalInfoPage() {
       title: 'パーキングGOLAZO横',
       category: 'parking',
       address: '東京都北区...',
-      distance: '30',
+      distance: '35',
       memo: '30分200円、最大料金あり。お客様案内用。',
     },
     {
@@ -28,7 +28,7 @@ export default function LocalInfoPage() {
       title: 'セブンイレブン 赤羽店',
       category: 'shop',
       address: '東京都北区...',
-      distance: '120',
+      distance: '130',
       memo: 'プロテインや水のエージェント購入に便利。',
     },
   ]);
