@@ -626,25 +626,27 @@ export default function SalesPage() {
                 onChange={e => setSelectedArchiveMonth(e.target.value)}
                 className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white outline-none flex-1"
               >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={String(i + 1)}>{i + 1}月</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <option key={m} value={String(m)}>{m}月</option>
                 ))}
               </select>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="flex justify-between items-baseline">
-                <span className="font-bold text-slate-600">{selectedArchiveYear}年{selectedArchiveMonth}月 売上合計</span>
-                <span className="text-xl font-extrabold text-[#5e9bc4]">¥{archiveSales.toLocaleString()}</span>
+                <span className="text-xs font-bold text-slate-500">{selectedArchiveYear}年{selectedArchiveMonth}月 売上</span>
+                <span className="text-lg font-extrabold text-[#5e9bc4]">¥{archiveSales.toLocaleString()}</span>
               </div>
 
-              <div className="border-t border-slate-200 pt-2 space-y-1.5">
-                <span className="font-bold text-slate-700 block text-[11px]">👤 担当者別実績</span>
-                <div className="flex justify-between font-semibold">
+              <div className="border-t border-slate-200 pt-2 space-y-2 text-xs">
+                <span className="font-bold text-slate-600 block">👤 担当者別アーカイブ</span>
+                <div className="flex justify-between text-slate-700 font-semibold">
                   <span className="text-sky-800">TAKA: ¥{archiveStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.takaRate}%)</span></span>
                   <span className="text-pink-800">NANA: ¥{archiveStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.nanaRate}%)</span></span>
                 </div>
               </div>
+
+              <p className="text-[10px] text-slate-400 pt-1">対象月の取引件数: {archiveSalesRecords.length} 件</p>
             </div>
           </div>
 
