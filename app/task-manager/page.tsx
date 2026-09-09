@@ -18,16 +18,24 @@ interface Task {
   memo: string;
 }
 
-// 議事録の型定義（新規追加）
+// 議事録内で登録する個別タスクの型
+interface SubTaskItem {
+  id: string;
+  title: string;
+  dueDate: string;
+  assignee: string; // 担当者
+}
+
+// 議事録の型定義（複数タスク保持対応）
 interface MeetingMinutes {
   id: string;
-  title: string;          // 議事録タイトル (例: 10月度キックオフ会議)
+  title: string;          // 議事録タイトル
   date: string;           // 開催日
-  participants: string;   // 参加者 (例: TAKA, NANA)
+  participants: string;   // 参加者
   agenda: string;         // アジェンダ・議題
   decisions: string;      // 決定事項
-  freeMemo: string;       // 自由メモ・詳細
-  linkedTaskIds: string[];// 紐づくタスクID一覧
+  freeMemo: string;       // 自由メモ・特記事項
+  subTasks: SubTaskItem[]; // 議事録から派生する複数のタスク
 }
 
 export default function TasksPage() {
@@ -36,20 +44,11 @@ export default function TasksPage() {
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
 
-  // --- ナビゲーションメニュー設定 ---
-  const navItems = [
-    { label: '売上管理', href: '/sales', icon: '📊' },
-    { label: '顧客リスト', href: '/clients', icon: '📋' },
-    { label: 'タスク・議事録', href: '/task-manager', icon: '📝' },
-    { label: '近隣情報', href: '/local-info', icon: '📍' },
-    { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
-  ];
-
   // 状態管理
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   
-  // タスク初期データ
+  // タスク一覧データ
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: '1',
@@ -65,38 +64,41 @@ export default function TasksPage() {
     },
     {
       id: '2',
-      title: '新企画の打ち合わせ議事録',
+      title: '秋のキャンペーン広告バナー作成',
       category: 'キャンペーン議事録',
-      date: '2026-09-09',
+      date: '2026-09-15',
       fiscalYear: 2026,
       month: 9,
       status: '未着手',
       dueDateAlarm: true,
       isImportant: true,
-      memo: '要確認事項あり',
+      memo: '議事録派生タスク',
     },
   ]);
 
-  // 議事録初期データ（新規追加）
+  // 議事録データ
   const [minutesList, setMinutesList] = useState<MeetingMinutes[]>([
     {
-      id: 'm-1',
+      id: 'min-1',
       title: '秋の体験入会キャンペーン方針決定会議',
       date: '2026-09-09',
       participants: 'TAKA, NANA',
       agenda: '1. 特典内容の確認\n2. 告知スケジュール',
       decisions: '当日入会で10回券5,000円引き＋評価シート無料プレゼントに決定。',
       freeMemo: 'SNS広告の予算配分も合わせて見直すこと。',
-      linkedTaskIds: ['2']
+      subTasks: [
+        { id: 'sub-1', title: '秋のキャンペーン広告バナー作成', dueDate: '2026-09-15', assignee: 'TAKA' },
+        { id: 'sub-2', title: 'LINE公式アカウントで一斉配信設定', dueDate: '2026-09-18', assignee: 'NANA' }
+      ]
     }
   ]);
 
   // タブ切り替え ('list' | 'calendar' | 'minutes')
   const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'minutes'>('list');
+  
+  // タスク登録・編集フォーム状態
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  
-  // タスクフォーム状態
   const [editForm, setEditForm] = useState<Partial<Task>>({
     title: '',
     category: 'Instagram',
@@ -109,7 +111,7 @@ export default function TasksPage() {
     memo: '',
   });
 
-  // 議事録編集・新規フォーム状態（新規追加）
+  // 議事録編集・新規フォーム状態（複数タスク入力欄つき）
   const [selectedMinutesId, setSelectedMinutesId] = useState<string | null>(null);
   const [isMinutesEditing, setIsMinutesEditing] = useState<boolean>(false);
   const [minutesForm, setMinutesForm] = useState<Partial<MeetingMinutes>>({
@@ -119,8 +121,13 @@ export default function TasksPage() {
     agenda: '',
     decisions: '',
     freeMemo: '',
-    linkedTaskIds: []
+    subTasks: []
   });
+
+  // 議事録フォーム内での一時的な「追加用タスク入力フィールド」
+  const [tempSubTaskTitle, setTempSubTaskTitle] = useState('');
+  const [tempSubTaskDate, setTempSubTaskDate] = useState('2026-09-15');
+  const [tempSubTaskAssignee, setTempSubTaskAssignee] = useState('TAKA');
 
   // プリセット
   const presetCampaignOptions = [
@@ -186,10 +193,36 @@ export default function TasksPage() {
     setActiveTab('list');
   };
 
-  // 議事録保存処理（新規追加）
+  // 議事録フォーム内：派生タスクの追加
+  const handleAddSubTaskToMinutes = () => {
+    if (!tempSubTaskTitle.trim()) return;
+    const newSub: SubTaskItem = {
+      id: `sub-${Date.now()}`,
+      title: tempSubTaskTitle,
+      dueDate: tempSubTaskDate,
+      assignee: tempSubTaskAssignee
+    };
+    setMinutesForm(prev => ({
+      ...prev,
+      subTasks: [...(prev.subTasks || []), newSub]
+    }));
+    setTempSubTaskTitle('');
+  };
+
+  // 議事録フォーム内：派生タスクの削除
+  const handleRemoveSubTaskFromMinutes = (subId: string) => {
+    setMinutesForm(prev => ({
+      ...prev,
+      subTasks: (prev.subTasks || []).filter(s => s.id !== subId)
+    }));
+  };
+
+  // 議事録保存処理（サブタスクをメインのタスク一覧にも自動反映）
   const handleSaveMinutes = (e: React.FormEvent) => {
     e.preventDefault();
     if (!minutesForm.title) return;
+
+    const currentSubTasks = minutesForm.subTasks || [];
 
     if (selectedMinutesId && isMinutesEditing) {
       setMinutesList(minutesList.map(m => m.id === selectedMinutesId ? { ...m, ...minutesForm } as MeetingMinutes : m));
@@ -202,25 +235,33 @@ export default function TasksPage() {
         agenda: minutesForm.agenda || '',
         decisions: minutesForm.decisions || '',
         freeMemo: minutesForm.freeMemo || '',
-        linkedTaskIds: minutesForm.linkedTaskIds || []
+        subTasks: currentSubTasks
       };
       setMinutesList([newMinutes, ...minutesList]);
+    }
 
-      // 自動的に「キャンペーン議事録」カテゴリのタスクとしても登録する
-      const newTask: Task = {
-        id: `task-min-${Date.now()}`,
-        title: minutesForm.title,
+    const newlyGeneratedTasks: Task[] = currentSubTasks.map((sub, idx) => {
+      const d = new Date(sub.dueDate);
+      const fYear = !isNaN(d.getFullYear()) ? d.getFullYear() : selectedFiscalYear;
+      const fMonth = !isNaN(d.getMonth()) ? d.getMonth() + 1 : selectedMonth;
+      return {
+        id: `task-sub-${Date.now()}-${idx}`,
+        title: `[議事録タスク] ${sub.title} (担当: ${sub.assignee})`,
         category: 'キャンペーン議事録',
-        date: minutesForm.date || '2026-09-09',
-        fiscalYear: selectedFiscalYear,
-        month: selectedMonth,
+        date: sub.dueDate,
+        fiscalYear: fYear,
+        month: fMonth,
         status: '未着手',
         dueDateAlarm: true,
         isImportant: true,
-        memo: `議事録連携: ${minutesForm.decisions || ''}`
+        memo: `議事録「${minutesForm.title}」より派生`
       };
-      setTasks(prev => [newTask, ...prev]);
+    });
+
+    if (newlyGeneratedTasks.length > 0) {
+      setTasks(prev => [...newlyGeneratedTasks, ...prev]);
     }
+
     resetMinutesForm();
   };
 
@@ -234,8 +275,9 @@ export default function TasksPage() {
       agenda: '',
       decisions: '',
       freeMemo: '',
-      linkedTaskIds: []
+      subTasks: []
     });
+    setTempSubTaskTitle('');
   };
 
   const handleSelectMinutes = (minutes: MeetingMinutes) => {
@@ -246,42 +288,30 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans pb-12">
-      {/* 統一ヘッダーナビゲーション */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
-          <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
+      {/* ヘッダーレイアウト：背景色 #5e9bc4、bg-slate-100 / border-slate-200 を踏襲したクリーンなデザイン */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 mb-6">
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
+          <div className="flex items-center space-x-3">
+            <span className="text-white px-2.5 py-1 rounded-md text-xs font-bold" style={{ backgroundColor: '#5e9bc4' }}>
+              GOLAZO
+            </span>
+            <span className="font-bold text-lg text-slate-800 tracking-wide">
+              パーソナルジム GOLAZO 管理システム
+            </span>
+          </div>
         </div>
-        <nav className="flex gap-2 text-xs font-semibold">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
-                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
-                }`}
-              >
-                <span>{item.icon}</span> {item.label}
-              </Link>
-            );
-          })}
-        </nav>
       </header>
 
       {/* メインコンテンツエリア */}
       <main className="p-6 max-w-7xl mx-auto space-y-6">
         <h2 className="text-xl font-bold text-slate-800">GOLAZO 業務タスク管理 & 議事録</h2>
 
-        {/* 画面上部：キャンペーン議事録の未完了アラームバナー */}
+        {/* 画面上部：未完了アラームバナー */}
         {uncompletedCampaignTasks.length > 0 && (
           <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 rounded-xl shadow-sm flex items-center justify-between text-xs">
             <div>
-              <p className="font-bold text-sm">⚠️ キャンペーン議事録の未完了タスクがあります</p>
-              <p className="text-slate-600 mt-0.5">未完了の議事録関連タスクが {uncompletedCampaignTasks.length} 件残っています。</p>
+              <p className="font-bold text-sm">⚠️ キャンペーン議事録関連の未完了タスクがあります</p>
+              <p className="text-slate-600 mt-0.5">未完了のタスクが {uncompletedCampaignTasks.length} 件残っています。</p>
             </div>
             <button 
               onClick={() => setActiveTab('minutes')}
@@ -292,7 +322,7 @@ export default function TasksPage() {
           </div>
         )}
 
-        {/* コントロールパネル (年度・月度選択 & タブ切り替え) */}
+        {/* コントロールパネル */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
           <div className="flex items-center gap-3">
             <label className="font-bold text-slate-700">📅 表示選択:</label>
@@ -323,9 +353,12 @@ export default function TasksPage() {
               onClick={() => setActiveTab('list')}
               className={`px-4 py-2 rounded-lg font-bold transition ${
                 activeTab === 'list'
-                  ? 'bg-[#5e9bc4] text-white shadow-sm'
-                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  ? 'text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
+              style={{
+                backgroundColor: activeTab === 'list' ? '#5e9bc4' : undefined,
+              }}
             >
               タスク一覧・編集
             </button>
@@ -333,9 +366,12 @@ export default function TasksPage() {
               onClick={() => setActiveTab('calendar')}
               className={`px-4 py-2 rounded-lg font-bold transition ${
                 activeTab === 'calendar'
-                  ? 'bg-[#5e9bc4] text-white shadow-sm'
-                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  ? 'text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
+              style={{
+                backgroundColor: activeTab === 'calendar' ? '#5e9bc4' : undefined,
+              }}
             >
               カレンダー表示
             </button>
@@ -344,10 +380,10 @@ export default function TasksPage() {
               className={`px-4 py-2 rounded-lg font-bold relative transition ${
                 activeTab === 'minutes'
                   ? 'bg-purple-600 text-white shadow-sm'
-                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              📝 議事録詳細・登録
+              📝 議事録詳細 ＆ 複数タスク登録
               {uncompletedCampaignTasks.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                   {uncompletedCampaignTasks.length}
@@ -360,7 +396,6 @@ export default function TasksPage() {
         {/* --- タブ1: タスク一覧・編集 --- */}
         {activeTab === 'list' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* 左側：タスク一覧テーブル */}
             <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
               <div className="flex justify-between items-center border-b pb-3">
                 <h3 className="font-bold text-slate-800 text-sm">{selectedFiscalYear}年度 {selectedMonth}月度 タスク一覧</h3>
@@ -415,7 +450,8 @@ export default function TasksPage() {
                           <td className="py-2.5 px-3">
                             <button
                               onClick={() => handleSelectTask(task)}
-                              className="font-bold text-[#5e9bc4] hover:underline"
+                              className="font-bold hover:underline"
+                              style={{ color: '#5e9bc4' }}
                             >
                               詳細
                             </button>
@@ -428,7 +464,6 @@ export default function TasksPage() {
               </div>
             </div>
 
-            {/* 右側：登録・編集フォーム */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4 text-xs">
               <h3 className="font-bold text-slate-800 text-sm border-b pb-3">{isEditing ? 'タスク詳細・編集' : '新規タスク登録'}</h3>
               <form onSubmit={handleSaveTask} className="space-y-3">
@@ -437,7 +472,7 @@ export default function TasksPage() {
                   <select
                     value={editForm.category}
                     onChange={(e) => setEditForm({ ...editForm, category: e.target.value as Task['category'] })}
-                    className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
+                    className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
                   >
                     <option value="Instagram">Instagram</option>
                     <option value="週例業務">週例業務</option>
@@ -446,46 +481,17 @@ export default function TasksPage() {
                   </select>
                 </div>
 
-                {editForm.category === 'キャンペーン議事録' && (
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">議事録タスク名（固定選択 or 手動入力）</label>
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          setEditForm({ ...editForm, title: e.target.value });
-                        }
-                      }}
-                      className="w-full border border-slate-300 rounded-lg p-2 bg-white mb-2 text-slate-800 outline-none"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>-- 以前からの固定選択肢から選ぶ --</option>
-                      {presetCampaignOptions.map((opt, idx) => (
-                        <option key={idx} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="または手動で自由に入力"
-                      value={editForm.title || ''}
-                      onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
-                    />
-                  </div>
-                )}
-
-                {editForm.category !== 'キャンペーン議事録' && (
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">タスク名</label>
-                    <input
-                      type="text"
-                      required
-                      value={editForm.title || ''}
-                      onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
-                      placeholder="例: ストーリー投稿"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">タスク名</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.title || ''}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none"
+                    placeholder="例: ストーリー投稿"
+                  />
+                </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -556,7 +562,8 @@ export default function TasksPage() {
                 <div className="flex gap-2 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 bg-[#5e9bc4] hover:bg-sky-600 text-white py-2.5 rounded-lg font-bold transition shadow-sm"
+                    className="flex-1 text-white py-2.5 rounded-lg font-bold transition shadow-sm hover:opacity-90"
+                    style={{ backgroundColor: '#5e9bc4' }}
                   >
                     {isEditing ? '変更を保存' : '追加する'}
                   </button>
@@ -616,7 +623,7 @@ export default function TasksPage() {
           </div>
         )}
 
-        {/* --- タブ3: 議事録詳細・タスク連動登録 --- */}
+        {/* --- タブ3: 議事録詳細 ＆ 複数タスク登録 --- */}
         {activeTab === 'minutes' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* 左側：保存済み議事録一覧 */}
@@ -633,33 +640,46 @@ export default function TasksPage() {
                 </button>
               </div>
 
-              {uncompletedCampaignTasks.length > 0 && (
-                <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded-lg text-xs font-bold">
-                  🚨 未完了の議事録関連タスクが {uncompletedCampaignTasks.length}件 残っています。
-                </div>
-              )}
-
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {minutesList.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-8">登録されている議事録はありません。</p>
                 ) : (
                   minutesList.map((m) => (
-                    <div key={m.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+                    <div key={m.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
                       <div className="flex justify-between items-start">
                         <span className="font-bold text-purple-900 text-sm">{m.title}</span>
                         <span className="text-slate-400 font-semibold">{m.date}</span>
                       </div>
                       <p className="text-slate-600"><strong>参加者:</strong> {m.participants}</p>
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                      
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
                         <p className="font-bold text-slate-700">【決定事項】</p>
                         <p className="text-slate-800 whitespace-pre-wrap">{m.decisions || '未記入'}</p>
                       </div>
+
+                      {/* 議事録に紐づく複数タスクの表示 */}
+                      <div className="space-y-1.5 pt-1">
+                        <p className="font-bold text-purple-800">📋 この議事録から登録されたタスク ({m.subTasks?.length || 0}件)</p>
+                        {(!m.subTasks || m.subTasks.length === 0) ? (
+                          <p className="text-slate-400">登録されたタスクはありません</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {m.subTasks.map(sub => (
+                              <div key={sub.id} className="bg-purple-50/70 border border-purple-100 p-2 rounded-lg flex justify-between items-center">
+                                <span className="font-bold text-slate-800">📌 {sub.title}</span>
+                                <span className="text-slate-500 font-semibold">期日: {sub.dueDate} (担当: {sub.assignee})</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex justify-end pt-1">
                         <button
                           onClick={() => handleSelectMinutes(m)}
-                          className="bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 px-3 py-1 rounded-lg font-bold transition"
+                          className="bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg font-bold transition shadow-sm"
                         >
-                          内容を確認・編集
+                          内容を編集する
                         </button>
                       </div>
                     </div>
@@ -668,10 +688,10 @@ export default function TasksPage() {
               </div>
             </div>
 
-            {/* 右側：議事録新規作成 & タスク連動登録フォーム */}
+            {/* 右側：議事録作成フォーム ＆ 複数タスク追加機能 */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4 text-xs">
               <h3 className="font-bold text-slate-800 text-sm border-b pb-3">
-                {isMinutesEditing ? '議事録の編集' : '新規議事録作成 & タスク登録'}
+                {isMinutesEditing ? '議事録の編集' : '新規議事録 ＆ 複数タスク登録'}
               </h3>
               <form onSubmit={handleSaveMinutes} className="space-y-3">
                 <div>
@@ -709,20 +729,9 @@ export default function TasksPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">アジェンダ・議題</label>
+                  <label className="block font-semibold text-slate-600 mb-1">決定事項</label>
                   <textarea
                     rows={2}
-                    placeholder="1. 現状確認&#10;2. 次の一手について"
-                    value={minutesForm.agenda || ''}
-                    onChange={(e) => setMinutesForm({ ...minutesForm, agenda: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">決定事項（※タスクに自動連動します）</label>
-                  <textarea
-                    rows={3}
                     placeholder="会議で決定した内容を記入..."
                     value={minutesForm.decisions || ''}
                     onChange={(e) => setMinutesForm({ ...minutesForm, decisions: e.target.value })}
@@ -730,19 +739,64 @@ export default function TasksPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">自由メモ・特記事項</label>
-                  <textarea
-                    rows={2}
-                    placeholder="補足や次回持ち越し事項など..."
-                    value={minutesForm.freeMemo || ''}
-                    onChange={(e) => setMinutesForm({ ...minutesForm, freeMemo: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none resize-none"
-                  />
-                </div>
+                {/* --- 別建て：複数のタスク登録エリア --- */}
+                <div className="border border-purple-200 bg-purple-50/40 p-3 rounded-xl space-y-3">
+                  <label className="block font-bold text-purple-900 text-xs">📋 議事録から派生するタスク登録（複数追加可能）</label>
+                  
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="タスク名 (例: バナー作成)"
+                      value={tempSubTaskTitle}
+                      onChange={(e) => setTempSubTaskTitle(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        value={tempSubTaskDate}
+                        onChange={(e) => setTempSubTaskDate(e.target.value)}
+                        className="border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="担当者 (例: TAKA)"
+                        value={tempSubTaskAssignee}
+                        onChange={(e) => setTempSubTaskAssignee(e.target.value)}
+                        className="border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSubTaskToMinutes}
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white py-1.5 rounded-lg font-bold transition shadow-sm text-xs"
+                    >
+                      + このタスクをリストに追加する
+                    </button>
+                  </div>
 
-                <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 text-[11px] text-purple-900 font-semibold">
-                  💡 保存すると、この議事録タイトルが「キャンペーン議事録」タスクとしても自動追加され、タスク一覧やカレンダーから進捗管理できるようになります。
+                  {/* 追加されたサブタスクの一覧（フォーム内） */}
+                  <div className="space-y-1.5 pt-1">
+                    {(minutesForm.subTasks || []).length === 0 ? (
+                      <p className="text-[11px] text-slate-400 text-center">まだタスクが追加されていません</p>
+                    ) : (
+                      (minutesForm.subTasks || []).map(sub => (
+                        <div key={sub.id} className="bg-white border border-purple-200 p-2 rounded-lg flex justify-between items-center text-[11px]">
+                          <div>
+                            <span className="font-bold text-slate-800">📌 {sub.title}</span>
+                            <span className="text-slate-500 block">期日: {sub.dueDate} / 担当: {sub.assignee}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSubTaskFromMinutes(sub.id)}
+                            className="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-2">
@@ -750,7 +804,7 @@ export default function TasksPage() {
                     type="submit"
                     className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-lg font-bold transition shadow-sm"
                   >
-                    {isMinutesEditing ? '議事録の変更を保存' : '議事録を保存 ＆ タスク化'}
+                    {isMinutesEditing ? '議事録の変更を保存' : '議事録を保存 ＆ タスクを一括登録'}
                   </button>
                   {isMinutesEditing && (
                     <button
