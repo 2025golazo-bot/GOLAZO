@@ -82,16 +82,21 @@ export default function NeighborsPage() {
   };
 
   // 追加処理
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
 
     const catObj = CATEGORIES.find((c) => c.value === formData.category);
 
+    // スプレッド構文(...formData)を使わず明示的に指定
     const newItem: NeighborItem = {
       id: `n-${Date.now()}`,
+      name: formData.name,
+      category: formData.category,
       categoryLabel: catObj ? catObj.label : 'その他',
-      ...formData,
+      address: formData.address,
+      phone: formData.phone,
+      description: formData.description,
       mapUrl: formData.mapUrl || (formData.address ? `https://maps.google.com/?q=${encodeURIComponent(formData.address)}` : '')
     };
 
