@@ -288,17 +288,11 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans pb-12">
-      {/* ヘッダーレイアウト：背景色 #5e9bc4、bg-slate-100 / border-slate-200 を踏襲したクリーンなデザイン */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 mb-6">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
-          <div className="flex items-center space-x-3">
-            <span className="text-white px-2.5 py-1 rounded-md text-xs font-bold" style={{ backgroundColor: '#5e9bc4' }}>
-              GOLAZO
-            </span>
-            <span className="font-bold text-lg text-slate-800 tracking-wide">
-              パーソナルジム GOLAZO 管理システム
-            </span>
-          </div>
+      {/* ヘッダーレイアウト変更：ナビゲーションを排除し、「パーソナルジム GOLAZO 管理システム」のみに変更 */}
+      <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
+          <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         </div>
       </header>
 
@@ -353,12 +347,9 @@ export default function TasksPage() {
               onClick={() => setActiveTab('list')}
               className={`px-4 py-2 rounded-lg font-bold transition ${
                 activeTab === 'list'
-                  ? 'text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-[#5e9bc4] text-white shadow-sm'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
-              style={{
-                backgroundColor: activeTab === 'list' ? '#5e9bc4' : undefined,
-              }}
             >
               タスク一覧・編集
             </button>
@@ -366,12 +357,9 @@ export default function TasksPage() {
               onClick={() => setActiveTab('calendar')}
               className={`px-4 py-2 rounded-lg font-bold transition ${
                 activeTab === 'calendar'
-                  ? 'text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-[#5e9bc4] text-white shadow-sm'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
-              style={{
-                backgroundColor: activeTab === 'calendar' ? '#5e9bc4' : undefined,
-              }}
             >
               カレンダー表示
             </button>
@@ -380,7 +368,7 @@ export default function TasksPage() {
               className={`px-4 py-2 rounded-lg font-bold relative transition ${
                 activeTab === 'minutes'
                   ? 'bg-purple-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
             >
               📝 議事録詳細 ＆ 複数タスク登録
@@ -450,8 +438,7 @@ export default function TasksPage() {
                           <td className="py-2.5 px-3">
                             <button
                               onClick={() => handleSelectTask(task)}
-                              className="font-bold hover:underline"
-                              style={{ color: '#5e9bc4' }}
+                              className="font-bold text-[#5e9bc4] hover:underline"
                             >
                               詳細
                             </button>
@@ -562,8 +549,7 @@ export default function TasksPage() {
                 <div className="flex gap-2 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 text-white py-2.5 rounded-lg font-bold transition shadow-sm hover:opacity-90"
-                    style={{ backgroundColor: '#5e9bc4' }}
+                    className="flex-1 bg-[#5e9bc4] hover:bg-sky-600 text-white py-2.5 rounded-lg font-bold transition shadow-sm"
                   >
                     {isEditing ? '変更を保存' : '追加する'}
                   </button>
