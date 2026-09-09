@@ -48,9 +48,9 @@ export default function SalesPage() {
   // --- ナビゲーションメニュー設定 ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
-    { label: '顧客リスト', href: '/customers', icon: '📋' },
+    { label: '顧客リスト', href: '/clients', icon: '📋' },
     { label: 'タスク・議事録', href: '/tasks', icon: '📝' },
-    { label: '近隣情報', href: '/neighbors', icon: '📍' },
+    { label: '近隣情報', href: '/local-info', icon: '📍' },
     { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
   ];
 
@@ -176,45 +176,38 @@ export default function SalesPage() {
   const archiveStaffSummary = useMemo(() => calcStaffBreakdown(archiveSalesRecords), [archiveSalesRecords]);
 
   return (
-    <div className="bg-slate-100 min-h-screen text-slate-800">
-      {/* ナビゲーションバー (5つの各ページパスへ遷移) */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3 shadow border-b border-sky-600 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-          
-          {/* ロゴ / タイトル */}
-          <div className="flex items-center gap-2">
-            <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm shadow-sm">G</span>
-            <h1 className="text-lg font-extrabold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
-          </div>
-
-          {/* ナビゲーションボタンエリア (5機能) */}
-          <nav className="flex items-center gap-1.5 bg-sky-800/40 p-1 rounded-lg border border-white/20">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${
-                    isActive
-                      ? 'bg-white text-[#5e9bc4]'
-                      : 'text-sky-100 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span>{item.icon}</span> {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
+    <div className="bg-slate-100 min-h-screen text-slate-800 pb-12">
+      {/* 統一ヘッダーナビゲーション */}
+      <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
+          <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         </div>
+        <nav className="flex gap-2 text-xs font-semibold">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
+                }`}
+              >
+                <span>{item.icon}</span> {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
       {/* 売上管理 メインコンテンツ */}
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <main className="p-6 max-w-7xl mx-auto space-y-6">
 
         {/* 上部ステータスバー: Square自動連携 & 目標設定エリア */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -232,7 +225,7 @@ export default function SalesPage() {
                 step="10000"
                 value={monthlyTarget}
                 onChange={e => setMonthlyTarget(Number(e.target.value))}
-                className="w-28 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700"
+                className="w-28 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
               />
               <span className="text-slate-500">円</span>
             </div>
@@ -243,7 +236,7 @@ export default function SalesPage() {
                 step="100000"
                 value={yearlyTarget}
                 onChange={e => setYearlyTarget(Number(e.target.value))}
-                className="w-32 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700"
+                className="w-32 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
               />
               <span className="text-slate-500">円</span>
             </div>
@@ -254,7 +247,7 @@ export default function SalesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* 本日売上 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Today's Sales</span>
             <div className="flex justify-between items-baseline">
               <h2 className="text-3xl font-extrabold text-slate-800">¥{todaySales.toLocaleString()}</h2>
@@ -264,7 +257,7 @@ export default function SalesPage() {
           </div>
 
           {/* 今月売上 (月別) & 担当者毎売上 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
             <div className="flex justify-between items-baseline">
               <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">Monthly Progress (今月)</span>
               <span className="text-xs font-bold bg-sky-100 text-[#5e9bc4] px-2 py-0.5 rounded">
@@ -275,7 +268,6 @@ export default function SalesPage() {
               <h2 className="text-3xl font-extrabold text-[#5e9bc4]">¥{currentMonthSales.toLocaleString()}</h2>
               <span className="text-xs text-slate-400">/ ¥{monthlyTarget.toLocaleString()}</span>
             </div>
-            {/* プログレスバー */}
             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
               <div
                 className="bg-[#5e9bc4] h-2 rounded-full transition-all duration-500"
@@ -283,7 +275,6 @@ export default function SalesPage() {
               ></div>
             </div>
 
-            {/* 担当者毎売上（今月） */}
             <div className="bg-sky-50/60 p-2.5 rounded border border-sky-100 text-xs space-y-1 mt-2">
               <span className="font-bold text-slate-600 block text-[11px]">👤 今月の担当者別売上</span>
               <div className="flex justify-between text-slate-700 font-semibold">
@@ -299,7 +290,7 @@ export default function SalesPage() {
           </div>
 
           {/* 今年度売上 (年度) & 担当者毎売上 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-3">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
             <div className="flex justify-between items-baseline">
               <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Annual Progress (今年度)</span>
               <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
@@ -310,7 +301,6 @@ export default function SalesPage() {
               <h2 className="text-3xl font-extrabold text-emerald-800">¥{currentYearSales.toLocaleString()}</h2>
               <span className="text-xs text-slate-400">/ ¥{yearlyTarget.toLocaleString()}</span>
             </div>
-            {/* プログレスバー */}
             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
               <div
                 className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
@@ -318,7 +308,6 @@ export default function SalesPage() {
               ></div>
             </div>
 
-            {/* 担当者毎売上（今年度） */}
             <div className="bg-emerald-50/60 p-2.5 rounded border border-emerald-100 text-xs space-y-1 mt-2">
               <span className="font-bold text-slate-600 block text-[11px]">👤 今年度の担当者別売上</span>
               <div className="flex justify-between text-slate-700 font-semibold">
@@ -333,7 +322,7 @@ export default function SalesPage() {
         </div>
 
         {/* 任意設定期間フィルター & 担当者毎売上 & 販売商品内訳 */}
-        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-5">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
             <div>
               <h3 className="font-bold text-slate-800 text-sm">📅 設定期間 売上 & 担当者毎分析</h3>
@@ -341,20 +330,20 @@ export default function SalesPage() {
             </div>
 
             {/* 期間選択カレンダー */}
-            <div className="flex items-center gap-2 text-xs bg-slate-50 p-2 rounded border border-slate-200">
+            <div className="flex items-center gap-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
               <span className="font-bold text-slate-600">設定期間:</span>
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white"
+                className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white outline-none"
               />
               <span className="text-slate-400">〜</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white"
+                className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white outline-none"
               />
             </div>
           </div>
@@ -363,7 +352,7 @@ export default function SalesPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
             {/* 設定期間内の売上合計 & 担当者毎売上 */}
-            <div className="bg-sky-50/50 p-4 rounded-lg border border-sky-100 space-y-3">
+            <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 space-y-3">
               <span className="text-xs font-bold text-slate-500 block">設定期間内の売上合計</span>
               <p className="text-2xl font-extrabold text-[#5e9bc4]">¥{filteredTotalAmount.toLocaleString()}</p>
 
@@ -394,12 +383,12 @@ export default function SalesPage() {
             </div>
 
             {/* 購入商品の件数サマリー */}
-            <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
+            <div className="md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
               <span className="text-xs font-bold text-slate-600 block">🛍️ 設定期間内の商品別 販売件数・内訳</span>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {Object.keys(productSummary).length > 0 ? (
                   Object.entries(productSummary).map(([pName, data]) => (
-                    <div key={pName} className="bg-white p-2.5 rounded border border-slate-200 shadow-sm text-xs">
+                    <div key={pName} className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-xs">
                       <span className="font-bold text-slate-800 block truncate">{pName}</span>
                       <div className="flex justify-between items-baseline mt-1">
                         <span className="text-sm font-extrabold text-[#5e9bc4]">{data.count} <span className="text-[10px] font-normal">件</span></span>
@@ -472,7 +461,7 @@ export default function SalesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
           {/* 左：キャンペーン効果 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-slate-800 text-sm">📣 キャンペーン効果 & 売上貢献度</h3>
@@ -488,14 +477,14 @@ export default function SalesPage() {
                 const totalContribution = appliedSales.reduce((sum, s) => sum + s.amount, 0);
 
                 return (
-                  <div key={cp.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-200 space-y-2 text-xs">
+                  <div key={cp.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-200 space-y-2 text-xs">
                     <div className="flex justify-between items-start">
                       <span className="font-bold text-amber-900 text-sm">🏷️ {cp.name}</span>
                       <span className="bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded text-[11px]">
                         売上貢献: ¥{totalContribution.toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-slate-600 text-[11px] bg-white p-2 rounded border border-amber-100">{cp.note}</p>
+                    <p className="text-slate-600 text-[11px] bg-white p-2 rounded-lg border border-amber-100">{cp.note}</p>
                     <div className="text-right text-slate-500 font-bold">
                       適用件数: <span className="text-amber-800 text-sm">{appliedCount}</span> 件
                     </div>
@@ -506,7 +495,7 @@ export default function SalesPage() {
           </div>
 
           {/* 右：体験者管理 (CVR) */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-slate-800 text-sm">👟 体験者一覧 & 入会成約率 (CVR)</h3>
@@ -560,7 +549,7 @@ export default function SalesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* 回数券消化進捗 */}
-          <div className="md:col-span-2 bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+          <div className="md:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-slate-800 text-sm">🎫 会員別 回数券消化進捗 & 全体消化率</h3>
@@ -572,7 +561,7 @@ export default function SalesPage() {
               </div>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
               <div className="flex justify-between text-xs font-bold text-slate-600">
                 <span>発行累計: {ticketOverallStats.totalPurchased} 回</span>
                 <span>消化済み: {ticketOverallStats.totalUsed} 回 / 残り: {ticketOverallStats.totalRemaining} 回</span>
@@ -617,60 +606,43 @@ export default function SalesPage() {
           </div>
 
           {/* 過去の売上アーカイブ */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2">
               <h3 className="font-bold text-slate-800 text-sm">📁 過去売上アーカイブ (担当者毎)</h3>
-              <p className="text-[11px] text-slate-400">年月を選択して過去実績・担当者内訳を照会</p>
+              <p className="text-[11px] text-slate-400">過去の月別実績確認</p>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-500 mb-1 font-bold">年</label>
-                  <select
-                    value={selectedArchiveYear}
-                    onChange={e => setSelectedArchiveYear(e.target.value)}
-                    className="w-full border border-slate-300 rounded p-1.5 font-bold text-[#5e9bc4]"
-                  >
-                    <option value="2026">2026年</option>
-                    <option value="2025">2025年</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-500 mb-1 font-bold">月</label>
-                  <select
-                    value={selectedArchiveMonth}
-                    onChange={e => setSelectedArchiveMonth(e.target.value)}
-                    className="w-full border border-slate-300 rounded p-1.5 font-bold text-[#5e9bc4]"
-                  >
-                    <option value="10">10月</option>
-                    <option value="09">9月</option>
-                    <option value="08">8月</option>
-                    <option value="07">7月</option>
-                  </select>
-                </div>
+            <div className="flex gap-2 text-xs">
+              <select
+                value={selectedArchiveYear}
+                onChange={e => setSelectedArchiveYear(e.target.value)}
+                className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white outline-none flex-1"
+              >
+                <option value="2026">2026年</option>
+                <option value="2025">2025年</option>
+              </select>
+              <select
+                value={selectedArchiveMonth}
+                onChange={e => setSelectedArchiveMonth(e.target.value)}
+                className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white outline-none flex-1"
+              >
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i + 1} value={String(i + 1)}>{i + 1}月</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+              <div className="flex justify-between items-baseline">
+                <span className="font-bold text-slate-600">{selectedArchiveYear}年{selectedArchiveMonth}月 売上合計</span>
+                <span className="text-xl font-extrabold text-[#5e9bc4]">¥{archiveSales.toLocaleString()}</span>
               </div>
 
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 mt-2">
-                <div className="flex justify-between items-baseline border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-600">{selectedArchiveYear}年{selectedArchiveMonth}月 売上</span>
-                  <span className="text-lg font-extrabold text-[#5e9bc4]">¥{archiveSales.toLocaleString()}</span>
-                </div>
-
-                <div className="space-y-1.5 pt-1">
-                  <span className="font-bold text-slate-500 text-[11px] block">👤 担当者別内訳</span>
-                  <div className="flex justify-between items-center text-slate-700 font-semibold">
-                    <span className="text-sky-800">TAKA</span>
-                    <span>¥{archiveStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({archiveStaffSummary.takaRate}%)</span></span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-700 font-semibold">
-                    <span className="text-pink-800">NANA</span>
-                    <span>¥{archiveStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({archiveStaffSummary.nanaRate}%)</span></span>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-slate-400 text-right pt-1">
-                  対象件数: {archiveSalesRecords.length} 件
+              <div className="border-t border-slate-200 pt-2 space-y-1.5">
+                <span className="font-bold text-slate-700 block text-[11px]">👤 担当者別実績</span>
+                <div className="flex justify-between font-semibold">
+                  <span className="text-sky-800">TAKA: ¥{archiveStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.takaRate}%)</span></span>
+                  <span className="text-pink-800">NANA: ¥{archiveStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.nanaRate}%)</span></span>
                 </div>
               </div>
             </div>
@@ -678,7 +650,7 @@ export default function SalesPage() {
 
         </div>
 
-      </div>
+      </main>
     </div>
   );
 }
