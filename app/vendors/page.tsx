@@ -23,7 +23,7 @@ export default function VendorsPage() {
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/customers', icon: '📋' },
     { label: 'タスク・議事録', href: '/tasks', icon: '📝' },
-    { label: '近隣情報', href: '/neighbors', icon: '📍' },
+    { label: '近隣情報', href: '/local-info', icon: '📍' },
     { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
   ];
 
@@ -318,7 +318,7 @@ export default function VendorsPage() {
 
                 <button
                   type="submit"
-                  className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-extrabold py-2.5 rounded-lg shadow-sm transition text-xs mt-2"
+                  className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-extrabold py-2.5 rounded-lg shadow-sm transition text-xs mt-2 cursor-pointer"
                 >
                   保存する
                 </button>
