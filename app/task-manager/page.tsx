@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -43,6 +43,18 @@ export default function TasksPage() {
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
+
+  // --- 不要な共通ヘッダー（一番上の黒い文字のバー等）を非表示にするハック処理 ---
+  useEffect(() => {
+    // ページ外の共通ナビ等で不要なものが上部に出る場合、DOM操作で隠す
+    const globalNavs = document.querySelectorAll('header:not(main header), nav:not(main nav)');
+    globalNavs.forEach((el) => {
+      // 自前のヘッダー以外を非表示にする
+      if (!el.classList.contains('golazo-custom-header')) {
+        (el as HTMLElement).style.display = 'none';
+      }
+    });
+  }, []);
 
   // --- ナビゲーションメニュー設定（他のページと完全統一） ---
   const navItems = [
@@ -298,7 +310,7 @@ export default function TasksPage() {
   return (
     <div className="min-h-screen bg-slate-100 font-sans pb-12">
       {/* 水色のヘッダー帯：「パーソナルジム GOLAZO」と「管理システム」表記、ナビゲーションボタンの配置 */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
+      <header className="golazo-custom-header bg-[#5e9bc4] text-white px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
         <div className="flex items-center gap-2.5">
           <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs">G</span>
           <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
