@@ -1,6 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// --- Supabase クライアントの初期化 ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // --- 型定義 ---
 interface Session {
@@ -20,241 +26,229 @@ interface Student {
   sessions: Session[];
 }
 
-interface Parent {
-  id: string;
-  name: string;
-  email?: string;
-  phone?: string;
-}
-
-// --- 初期データ（localStorageにデータが存在しない場合に使用） ---
-const INITIAL_PARENTS: Parent[] = [
-  { id: 'p1', name: '保護者 太郎', email: 'parent1@example.com', phone: '090-0000-0000' }
-];
-
-const INITIAL_STUDENTS: Student[] = [
-  {
-    id: 's1',
-    parentId: 'p1',
-    name: 'ゴラッソ 陸手',
-    grade: '小学5年生',
-    goal: '体幹バランスの強化とアジリティ向上',
-    sessions: [
-      {
-        id: 'sess1',
-        date: '2026-09-01',
-        content: 'BOSUバランストレーナーを使用した体幹トレーニングおよびリアクションアジリティの測定。',
-        notes: 'バランス感覚が非常に良くなっています。'
-      }
-    ]
-  }
-];
-
 export default function StudentManager() {
-  // ハイドレーションエラー（SSRとクライアントのミスマッチ）を防ぐフラグ
   const [isMounted, setIsMounted] = useState<boolean>(false);
-
-  // 1. 保護者データ（localStorageから取得、無ければINITIAL_PARENTS）
-  const [parents, setParents] = useState<Parent[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('golazo_parents');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error('Failed to parse golazo_parents from localStorage', e);
-        }
-      }
-    }
-    return INITIAL_PARENTS;
-  });
-
-  // 2. 受講生データ（localStorageから取得、無ければINITIAL_STUDENTS）
-  const [students, setStudents] = useState<Student[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('golazo_students');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error('Failed to parse golazo_students from localStorage', e);
-        }
-      }
-    }
-    return INITIAL_STUDENTS;
-  });
-
-  // 選択中の生徒ID
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id || '');
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
 
   // 新規セッション追加フォームの状態
   const [newSessionDate, setNewSessionDate] = useState<string>('');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionNotes, setNewSessionNotes] = useState<string>('');
 
-  // クライアント側でのマウント完了を記録
   useEffect(() => {
     setIsMounted(true);
+    fetchDataFromSupabase();
   }, []);
 
-  // 3. parents の変更を検知して localStorage へ自動保存
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('golazo_parents', JSON.stringify(parents));
+  // --- 1. Supabaseからデータを取得する処理 ---
+  const fetchDataFromSupabase = async () => {
+    setLoading(true);
+    try {
+      // customersテーブル（生徒一覧）を取得
+      const { data: customersData, error: customersError } = await supabase
+        .from('customers')
+        .select('*');
+
+      if (customersError) throw customersError;
+
+      // salesテーブル（セッション記録）を取得
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('*');
+
+      if (salesError) throw salesError;
+
+      // データ整形（Supabaseのデータをアプリ用の型にマッピング）
+      if (customersData && customersData.length > 0) {
+        const formattedStudents: Student[] = customersData.map((c: any) => {
+          // 該当する生徒のセッション履歴をフィルター
+          const studentSessions: Session[] = (salesData || [])
+            .filter((s: any) => s.customer_square_id === c.id || s.customer_square_id === c.square_id)
+            .map((s: any) => ({
+              id: s.id,
+              date: s.created_at ? s.created_at.split('T')[0] : '日付なし',
+              content: s.source || '（内容なし）',
+              notes: s.square_payment_id ? `決済ID: ${s.square_payment_id}` : ''
+            }));
+
+          return {
+            id: c.id,
+            parentId: 'p1',
+            name: c.name || c.id,
+            grade: c.grade || '未設定',
+            goal: c.goal || '未設定',
+            sessions: studentSessions
+          };
+        });
+
+        setStudents(formattedStudents);
+        setSelectedStudentId(formattedStudents[0]?.id || '');
+      } else {
+        setStudents([]);
+      }
+    } catch (error) {
+      console.error('Supabaseからのデータ取得に失敗しました:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [parents, isMounted]);
+  };
 
-  // 4. students の変更を検知して localStorage へ自動保存
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('golazo_students', JSON.stringify(students));
-    }
-  }, [students, isMounted]);
-
-  // マウント前は何もレンダリングしない（SSRミスマッチの防止）
-  if (!isMounted) {
-    return null;
-  }
-
-  // 選択中の生徒オブジェクトの取得
-  const currentStudent = students.find((s) => s.id === selectedStudentId);
-
-  // セッション追加処理（データが更新されると自動的にlocalStorageへ保存されます）
-  const handleAddSession = (e: React.FormEvent) => {
+  // --- 2. Supabaseへ新規セッションを追加・保存する処理 ---
+  const handleAddSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudentId || !newSessionDate || !newSessionContent) return;
 
-    const newSession: Session = {
-      id: `sess_${Date.now()}`,
-      date: newSessionDate,
-      content: newSessionContent,
-      notes: newSessionNotes
-    };
+    try {
+      // Supabaseの sales テーブルにデータを挿入 (INSERT)
+      const { data, error } = await supabase
+        .from('sales')
+        .insert([
+          {
+            customer_square_id: selectedStudentId,
+            source: newSessionContent,
+            amount: 0,
+            square_payment_id: newSessionNotes || null
+          }
+        ])
+        .select();
 
-    setStudents((prevStudents) =>
-      prevStudents.map((student) => {
-        if (student.id === selectedStudentId) {
-          return {
-            ...student,
-            sessions: [newSession, ...student.sessions]
-          };
-        }
-        return student;
-      })
-    );
+      if (error) {
+        alert('Supabaseへの保存に失敗しました: ' + error.message);
+        return;
+      }
 
-    // フォームのリセット
-    setNewSessionDate('');
-    setNewSessionContent('');
-    setNewSessionNotes('');
+      alert('データがSupabaseに正常に保存されました！');
+
+      // フォームをリセットして最新データを再取得
+      setNewSessionDate('');
+      setNewSessionContent('');
+      setNewSessionNotes('');
+      fetchDataFromSupabase();
+
+    } catch (err) {
+      console.error('保存処理中にエラーが発生しました:', err);
+    }
   };
+
+  if (!isMounted) return null;
+
+  const currentStudent = students.find((s) => s.id === selectedStudentId);
 
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1 style={{ borderBottom: '2px solid #333', pb: '10px' }}>受講生カルテ管理</h1>
+      <h1 style={{ borderBottom: '2px solid #333', paddingBottom: '10px' }}>受講生カルテ管理 (Supabase連動版)</h1>
 
-      {/* 生徒選択ドロップダウン */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ fontWeight: 'bold', marginRight: '10px' }}>受講生を選択:</label>
-        <select
-          value={selectedStudentId}
-          onChange={(e) => setSelectedStudentId(e.target.value)}
-          style={{ padding: '8px', fontSize: '16px' }}
-        >
-          {students.map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.name} ({student.grade || '学年未設定'})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {currentStudent && (
-        <div>
-          {/* 基本情報表示 */}
-          <div style={{ backgroundColor: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-            <h2>{currentStudent.name} さんの情報</h2>
-            <p><strong>目標:</strong> {currentStudent.goal || '未設定'}</p>
+      {loading ? (
+        <p>Supabaseからデータを読み込み中...</p>
+      ) : students.length === 0 ? (
+        <p>生徒データが見つかりません。Supabaseの `customers` テーブルにデータを追加してください。</p>
+      ) : (
+        <>
+          {/* 生徒選択ドロップダウン */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontWeight: 'bold', marginRight: '10px' }}>受講生を選択:</label>
+            <select
+              value={selectedStudentId}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+              style={{ padding: '8px', fontSize: '16px' }}
+            >
+              {students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.name} ({student.grade})
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* 新規セッション登録フォーム */}
-          <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-            <h3>新規トレーニング記録の追加</h3>
-            <form onSubmit={handleAddSession}>
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>日付:</label>
-                <input
-                  type="date"
-                  value={newSessionDate}
-                  onChange={(e) => setNewSessionDate(e.target.value)}
-                  style={{ width: '100%', padding: '8px' }}
-                  required
-                />
+          {currentStudent && (
+            <div>
+              {/* 基本情報表示 */}
+              <div style={{ backgroundColor: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+                <h2>{currentStudent.name} さんの情報</h2>
+                <p><strong>目標:</strong> {currentStudent.goal}</p>
               </div>
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>トレーニング内容:</label>
-                <textarea
-                  value={newSessionContent}
-                  onChange={(e) => setNewSessionContent(e.target.value)}
-                  rows={3}
-                  style={{ width: '100%', padding: '8px' }}
-                  required
-                />
-              </div>
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>特記事項・所感:</label>
-                <input
-                  type="text"
-                  value={newSessionNotes}
-                  onChange={(e) => setNewSessionNotes(e.target.value)}
-                  style={{ width: '100%', padding: '8px' }}
-                />
-              </div>
-              <button
-                type="submit"
-                style={{
-                  backgroundColor: '#0070f3',
-                  color: '#fff',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                記録を保存（自動同期）
-              </button>
-            </form>
-          </div>
 
-          {/* 過去のセッション履歴 */}
-          <div>
-            <h3>トレーニング履歴</h3>
-            {currentStudent.sessions.length === 0 ? (
-              <p>履歴がありません。</p>
-            ) : (
-              currentStudent.sessions.map((session) => (
-                <div
-                  key={session.id}
-                  style={{
-                    borderLeft: '4px solid #0070f3',
-                    paddingLeft: '15px',
-                    marginBottom: '15px',
-                    backgroundColor: '#fafafa',
-                    padding: '10px'
-                  }}
-                >
-                  <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#555' }}>{session.date}</p>
-                  <p style={{ margin: '0 0 5px 0' }}>{session.content}</p>
-                  {session.notes && (
-                    <p style={{ margin: 0, fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                      メモ: {session.notes}
-                    </p>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+              {/* 新規セッション登録フォーム */}
+              <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+                <h3>新規トレーニング記録の追加（Supabaseに直接保存）</h3>
+                <form onSubmit={handleAddSession}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px' }}>日付:</label>
+                    <input
+                      type="date"
+                      value={newSessionDate}
+                      onChange={(e) => setNewSessionDate(e.target.value)}
+                      style={{ width: '100%', padding: '8px' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px' }}>トレーニング内容 (sourceに保存):</label>
+                    <textarea
+                      value={newSessionContent}
+                      onChange={(e) => setNewSessionContent(e.target.value)}
+                      rows={3}
+                      style={{ width: '100%', padding: '8px' }}
+                      required
+                    />
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px' }}>特記事項・メモ:</label>
+                    <input
+                      type="text"
+                      value={newSessionNotes}
+                      onChange={(e) => setNewSessionNotes(e.target.value)}
+                      style={{ width: '100%', padding: '8px' }}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    style={{
+                      backgroundColor: '#0070f3',
+                      color: '#fff',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Supabaseに保存
+                  </button>
+                </form>
+              </div>
+
+              {/* 過去のセッション履歴 */}
+              <div>
+                <h3>トレーニング履歴（Supabaseから読み込み）</h3>
+                {currentStudent.sessions.length === 0 ? (
+                  <p>履歴がありません。</p>
+                ) : (
+                  currentStudent.sessions.map((session) => (
+                    <div
+                      key={session.id}
+                      style={{
+                        borderLeft: '4px solid #0070f3',
+                        marginBottom: '15px',
+                        backgroundColor: '#fafafa',
+                        padding: '10px'
+                      }}
+                    >
+                      <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#555' }}>{session.date}</p>
+                      <p style={{ margin: '0 0 5px 0' }}>{session.content}</p>
+                      {session.notes && (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                          {session.notes}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
