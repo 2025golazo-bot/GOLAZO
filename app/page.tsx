@@ -3,10 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// --- Supabase クライアントの安全な初期化（ビルド時クラッシュ防止） ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// --- Supabase クライアントの完全安全な初期化 ---
+// ビルド時（プレレンダー時）に環境変数が無くても絶対にクラッシュしないようにガード
+const getSupabaseClient = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+  return createClient(url, key);
+};
+
+const supabase = getSupabaseClient();
 
 // --- 型定義 ---
 interface Session {
