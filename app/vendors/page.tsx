@@ -1,334 +1,244 @@
+// app/vendors/page.tsx
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Header from '@/components/Header';
 
-interface VendorItem {
-  id: string;
+type VendorItem = {
+  id: number;
   name: string;
-  usageDetail: string;
-  contactPerson: string;
+  category: 'マシン・器具' | 'メンテナンス' | 'プロテイン・消耗品' | '広告・Web';
+  contact: string;
   phone: string;
-  email: string;
-  url: string;
-  notes: { id: string; text: string; taskDate?: string; isDone?: boolean }[];
-}
+  memo: string;
+};
 
 export default function VendorsPage() {
-  const pathname = usePathname();
-
-  // --- ナビゲーションメニュー設定 (共通) ---
-  const navItems = [
-    { label: '売上管理', href: '/sales', icon: '📊' },
-    { label: '顧客リスト', href: '/clients', icon: '📋' },
-    { label: 'タスク・議事録', href: '/task-manager', icon: '📝' },
-    { label: '近隣情報', href: '/local-info', icon: '📍' },
-    { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
-  ];
-
-  // --- サンプルデータ & 状態管理 ---
-  const [searchQuery, setSearchQuery] = useState('');
   const [vendors, setVendors] = useState<VendorItem[]>([
     {
-      id: 'v-1',
-      name: 'BOSU バランストレーナー公式',
-      usageDetail: '体幹トレーニングおよびファンクショナルエリアで使用',
-      contactPerson: '佐藤 担当',
+      id: 1,
+      name: 'BOSUバランストレーナー正規代理店',
+      category: 'マシン・器具',
+      contact: '担当: 鈴木様',
       phone: '03-0000-0000',
-      email: 'support@example.com',
-      url: 'https://example.com/bosu',
-      notes: [
-        { id: 'n-1', text: 'メンテナンス時期について来月確認する', taskDate: '2026-09-20', isDone: false },
-        { id: 'n-2', text: '予備パーツのカタログ受取済み', isDone: true },
-      ],
+      memo: '体幹トレーニング用機器の保守・追加購入窓口。',
+    },
+    {
+      id: 2,
+      name: 'Hypervolt 2 Pro サポート窓口',
+      category: 'メンテナンス',
+      contact: 'カスタマーサポート',
+      phone: '0120-000-000',
+      memo: 'ケア機器の点検・修理依頼用。',
     },
   ]);
 
-  // 新規追加用フォーム入力状態
-  const [formData, setFormData] = useState({
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const [newVendor, setNewVendor] = useState({
     name: '',
-    usageDetail: '',
-    contactPerson: '',
+    category: 'マシン・器具' as const,
+    contact: '',
     phone: '',
-    email: '',
-    url: '',
+    memo: '',
   });
 
-  // 検索フィルター
-  const filteredVendors = vendors.filter(v => {
-    const q = searchQuery.toLowerCase();
-    return (
-      v.name.toLowerCase().includes(q) ||
-      v.usageDetail.toLowerCase().includes(q) ||
-      v.contactPerson.toLowerCase().includes(q) ||
-      v.phone.includes(q) ||
-      v.email.toLowerCase().includes(q)
-    );
+  const filteredVendors = vendors.filter((item) => {
+    const matchesSearch = item.name.includes(searchTerm) || item.memo.includes(searchTerm);
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
   });
 
   const handleAddVendor = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) return;
-    const newItem: VendorItem = {
-      id: `v-${Date.now()}`,
-      ...formData,
-      notes: [],
-    };
-    setVendors([newItem, ...vendors]);
-    setFormData({ name: '', usageDetail: '', contactPerson: '', phone: '', email: '', url: '' });
-  };
+    if (!newVendor.name) return;
 
-  const handleDelete = (id: string) => {
-    if (confirm('この業者・マシン情報を削除しますか？')) {
-      setVendors(vendors.filter(v => v.id !== id));
-    }
+    const vendorToAdd: VendorItem = {
+      id: Date.now(),
+      name: newVendor.name,
+      category: newVendor.category,
+      contact: newVendor.contact,
+      phone: newVendor.phone,
+      memo: newVendor.memo,
+    };
+
+    setVendors([vendorToAdd, ...vendors]);
+    setNewVendor({ name: '', category: 'マシン・器具', contact: '', phone: '', memo: '' });
+    setIsModalOpen(false);
   };
 
   return (
-    <div className="bg-slate-100 min-h-screen text-slate-800">
-      {/* 統一ナビゲーションバー (#5e9bc4) */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3 shadow border-b border-sky-600 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm shadow-sm">G</span>
-            <h1 className="text-lg font-extrabold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
-          </div>
+    <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
+      <Header />
 
-          <nav className="flex items-center gap-1.5 bg-sky-800/40 p-1 rounded-lg border border-white/20">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${
-                    isActive
-                      ? 'bg-white text-[#5e9bc4]'
-                      : 'text-sky-100 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span>{item.icon}</span> {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+      <main className="p-6 max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <span>🏋️</span> マシン・業者一覧
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              ジムで使用しているマシン、メンテナンス業者、取引先を管理します。
+            </p>
+          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center gap-2"
+          >
+            <span>＋</span> 業者・マシン追加
+          </button>
         </div>
-      </header>
 
-      {/* メインコンテンツエリア */}
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
-
-        {/* ページヘッダー ＆ 検索バー */}
-        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <span>⚙️</span> 使用マシン・業者情報管理
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                ジムで使用しているマシンや取引業者の詳細、担当者、タスク連携メモを管理します。
-              </p>
-            </div>
-            <span className="bg-sky-50 text-[#5e9bc4] px-3 py-1 rounded-full text-xs font-bold border border-sky-100">
-              登録件数: {vendors.length} 件
-            </span>
-          </div>
-
-          {/* 検索入力欄 */}
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">
-              🔍 キーワード検索:
-            </span>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="w-full md:w-96">
             <input
               type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="名前、使用詳細、担当者、メール、電話番号、メモで検索..."
-              className="w-full pl-32 pr-4 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] text-slate-700 transition"
+              placeholder="業者名やメモで検索..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
             />
           </div>
+          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedCategory === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              すべて
+            </button>
+            <button
+              onClick={() => setSelectedCategory('マシン・器具')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedCategory === 'マシン・器具' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              マシン・器具
+            </button>
+            <button
+              onClick={() => setSelectedCategory('メンテナンス')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedCategory === 'メンテナンス' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              メンテナンス
+            </button>
+          </div>
         </div>
 
-        {/* 2カラムレイアウト: 左一覧 / 右フォーム */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* 左側: マシン・業者カード一覧 (2カラム分) */}
-          <div className="lg:col-span-2 space-y-4">
-            {filteredVendors.length > 0 ? (
-              filteredVendors.map(vendor => (
-                <div key={vendor.id} className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4 hover:border-sky-200 transition">
-                  {/* カード見出し */}
-                  <div className="flex justify-between items-start border-b border-slate-100 pb-3">
-                    <div>
-                      <h3 className="text-base font-extrabold text-slate-800">{vendor.name}</h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                        <span className="font-semibold text-slate-400">使用詳細:</span> {vendor.usageDetail}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button className="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded font-bold transition">
-                        編集
-                      </button>
-                      <button
-                        onClick={() => handleDelete(vendor.id)}
-                        className="text-xs px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded font-bold transition"
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 連絡先情報グリッド */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">👤 担当者:</span>
-                      <span className="font-bold text-slate-700">{vendor.contactPerson || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">📞 連絡先:</span>
-                      <span className="font-bold text-slate-700">{vendor.phone || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 col-span-1 md:col-span-2">
-                      <span className="text-slate-400">✉️ メール:</span>
-                      <span className="font-mono text-slate-700">{vendor.email || '-'}</span>
-                    </div>
-                    {vendor.url && (
-                      <div className="flex items-center gap-1.5 col-span-1 md:col-span-2 pt-1 border-t border-slate-200/60">
-                        <span className="text-slate-400">🔗 URL:</span>
-                        <a
-                          href={vendor.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#5e9bc4] hover:underline font-medium truncate"
-                        >
-                          {vendor.url}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* メモ & タスク連携 */}
-                  <div className="space-y-2 pt-1">
-                    <span className="text-[11px] font-bold text-slate-500 block">📝 メモ & タスク連携</span>
-                    <div className="space-y-1.5">
-                      {vendor.notes.map(note => (
-                        <div
-                          key={note.id}
-                          className="flex justify-between items-center bg-white p-2.5 rounded border border-slate-200 text-xs"
-                        >
-                          <span className={note.isDone ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}>
-                            ・ {note.text}
-                          </span>
-                          {note.taskDate && (
-                            <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded">
-                              📌 タスク化 ({note.taskDate} / {note.isDone ? '完了' : '未着手'})
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredVendors.length > 0 ? (
+            filteredVendors.map((item) => (
+              <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                <div className="flex justify-between items-start">
+                  <h3 className="font-bold text-slate-800 text-base">{item.name}</h3>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                    {item.category}
+                  </span>
                 </div>
-              ))
-            ) : (
-              <div className="bg-white p-12 text-center text-slate-400 rounded-lg border border-slate-200 text-xs">
-                該当するマシン・業者情報が見つかりません。
+                <div className="text-xs text-slate-500 space-y-1">
+                  <div>👤 担当: {item.contact || '未登録'}</div>
+                  <div>📞 電話: {item.phone || '未登録'}</div>
+                </div>
+                <p className="text-xs bg-slate-50 p-2.5 rounded-xl text-slate-600">
+                  {item.memo || 'メモなし'}
+                </p>
               </div>
-            )}
-          </div>
+            ))
+          ) : (
+            <div className="col-span-full p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-slate-200">
+              該当する業者・マシンデータが見つかりませんでした。
+            </div>
+          )}
+        </div>
+      </main>
 
-          {/* 右側: 新規情報の追加フォーム (1カラム分) */}
-          <div>
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4 sticky top-20">
-              <h3 className="font-extrabold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
-                <span>➕</span> 新規情報の追加
-              </h3>
-
-              <form onSubmit={handleAddVendor} className="space-y-3 text-xs">
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">業者・マシンの追加</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <form onSubmit={handleAddVendor} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">名称・業者名 *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例: 〇〇フィットネス機器"
+                  value={newVendor.name}
+                  onChange={(e) => setNewVendor({ ...newVendor, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    名前 (マシン名 / 業者名) <span className="text-rose-500">*</span>
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリ</label>
+                  <select
+                    value={newVendor.category}
+                    onChange={(e: any) => setNewVendor({ ...newVendor, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                  >
+                    <option value="マシン・器具">マシン・器具</option>
+                    <option value="メンテナンス">メンテナンス</option>
+                    <option value="プロテイン・消耗品">プロテイン・消耗品</option>
+                    <option value="広告・Web">広告・Web</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">電話番号</label>
                   <input
                     type="text"
-                    required
-                    placeholder="例: BOSUバランストレーナー"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                    placeholder="03-0000-0000"
+                    value={newVendor.phone}
+                    onChange={(e) => setNewVendor({ ...newVendor, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">使用詳細</label>
-                  <textarea
-                    rows={2}
-                    placeholder="例: スタジオのバランス運動で使用"
-                    value={formData.usageDetail}
-                    onChange={e => setFormData({ ...formData, usageDetail: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">担当者名</label>
-                    <input
-                      type="text"
-                      placeholder="例: 佐藤 担当"
-                      value={formData.contactPerson}
-                      onChange={e => setFormData({ ...formData, contactPerson: e.target.value })}
-                      className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">連絡先 (電話)</label>
-                    <input
-                      type="text"
-                      placeholder="03-0000-0000"
-                      value={formData.phone}
-                      onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">メールアドレス</label>
-                  <input
-                    type="email"
-                    placeholder="support@example.com"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">URL</label>
-                  <input
-                    type="url"
-                    placeholder="https://"
-                    value={formData.url}
-                    onChange={e => setFormData({ ...formData, url: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
-                  />
-                </div>
-
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">担当者名</label>
+                <input
+                  type="text"
+                  placeholder="担当: 〇〇様"
+                  value={newVendor.contact}
+                  onChange={(e) => setNewVendor({ ...newVendor, contact: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">メモ</label>
+                <textarea
+                  rows={3}
+                  placeholder="保守内容や特記事項..."
+                  value={newVendor.memo}
+                  onChange={(e) => setNewVendor({ ...newVendor, memo: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
+                >
+                  キャンセル
+                </button>
                 <button
                   type="submit"
-                  className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-extrabold py-2.5 rounded-lg shadow-sm transition text-xs mt-2 cursor-pointer"
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
                 >
-                  保存する
+                  追加する
                 </button>
-              </form>
-            </div>
+              </div>
+            </form>
           </div>
-
         </div>
-
-      </div>
+      )}
     </div>
   );
 }
