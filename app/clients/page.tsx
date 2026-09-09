@@ -320,33 +320,30 @@ export default function ClientsPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* 水色のヘッダー帯：「パーソナルジム GOLAZO」と「管理システム」表記、ナビゲーションボタンの配置 */}
+      {/* 水色のヘッダー帯：タスク管理画面と完全に同じレイアウト（ロゴ＆名称＋ナビゲーション） */}
       <header className="golazo-custom-header bg-[#5e9bc4] text-white px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
         <div className="flex items-center gap-2.5">
           <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs">G</span>
           <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-white/90 bg-white/15 px-2.5 py-1 rounded-md border border-white/20">管理システム</span>
-          <nav className="flex flex-wrap gap-1.5 text-xs font-semibold">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
-                      : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
-                  }`}
-                >
-                  <span>{item.icon}</span> {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        <nav className="flex flex-wrap gap-1.5 text-xs font-semibold">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
+                }`}
+              >
+                <span>{item.icon}</span> {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
