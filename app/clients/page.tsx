@@ -405,29 +405,20 @@ export default function ClientsPage() {
           <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         </div>
         <nav className="flex gap-2 text-xs font-semibold">
-          <a
-            href="/sales"
-            className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
-          >
+          <a href="/" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
+            ダッシュボード・カルテ
+          </a>
+          <a href="/sales" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
             売上管理
           </a>
-          <a
-            href="/clients"
-            className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition"
-          >
-            顧客カルテ
+          <a href="/tasks" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
+            タスク
           </a>
-          <a
-            href="/local-info"
-            className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
-          >
-            近隣・イベント情報
+          <a href="/transactions" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
+            取引詳細
           </a>
-          <a
-            href="/vendors"
-            className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
-          >
-            マシン・業者一覧
+          <a href="/local-info" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
+            近隣情報
           </a>
         </nav>
       </header>
