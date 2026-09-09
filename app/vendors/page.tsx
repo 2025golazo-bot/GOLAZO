@@ -26,7 +26,6 @@ export default function VendorsPage() {
   ]);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [newVendor, setNewVendor] = useState({
@@ -39,8 +38,7 @@ export default function VendorsPage() {
 
   const filteredVendors = vendors.filter((item) => {
     const matchesSearch = item.name.includes(searchTerm) || item.memo.includes(searchTerm);
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   const handleAddVendor = (e: React.FormEvent) => {
@@ -63,7 +61,7 @@ export default function VendorsPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* 共通ヘッダーのみを配置 */}
+      {/* 共通ヘッダーコンポーネントのみを配置（独自の古いヘッダーは完全に削除済み） */}
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
