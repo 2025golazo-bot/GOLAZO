@@ -44,6 +44,15 @@ export default function TasksPage() {
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
 
+  // --- ナビゲーションメニュー設定（他のページと完全統一） ---
+  const navItems = [
+    { label: '売上管理', href: '/sales', icon: '📊' },
+    { label: '顧客リスト', href: '/clients', icon: '📋' },
+    { label: 'タスク・議事録', href: '/task-manager', icon: '📝' },
+    { label: '近隣情報', href: '/local-info', icon: '📍' },
+    { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
+  ];
+
   // 状態管理
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
@@ -288,11 +297,32 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans pb-12">
-      {/* ヘッダーレイアウト変更：ナビゲーションを排除し、「パーソナルジム GOLAZO 管理システム」のみに変更 */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
-          <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
+      {/* 水色のヘッダー帯：「パーソナルジム GOLAZO」と「管理システム」表記、ナビゲーションボタンの配置 */}
+      <header className="bg-[#5e9bc4] text-white px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs">G</span>
+          <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold text-white/90 bg-white/15 px-2.5 py-1 rounded-md border border-white/20">管理システム</span>
+          <nav className="flex flex-wrap gap-1.5 text-xs font-semibold">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                      : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
+                  }`}
+                >
+                  <span>{item.icon}</span> {item.label}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
 
@@ -347,9 +377,12 @@ export default function TasksPage() {
               onClick={() => setActiveTab('list')}
               className={`px-4 py-2 rounded-lg font-bold transition ${
                 activeTab === 'list'
-                  ? 'bg-[#5e9bc4] text-white shadow-sm'
-                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  ? 'text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
+              style={{
+                backgroundColor: activeTab === 'list' ? '#5e9bc4' : undefined,
+              }}
             >
               タスク一覧・編集
             </button>
@@ -357,9 +390,12 @@ export default function TasksPage() {
               onClick={() => setActiveTab('calendar')}
               className={`px-4 py-2 rounded-lg font-bold transition ${
                 activeTab === 'calendar'
-                  ? 'bg-[#5e9bc4] text-white shadow-sm'
-                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  ? 'text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
+              style={{
+                backgroundColor: activeTab === 'calendar' ? '#5e9bc4' : undefined,
+              }}
             >
               カレンダー表示
             </button>
@@ -368,7 +404,7 @@ export default function TasksPage() {
               className={`px-4 py-2 rounded-lg font-bold relative transition ${
                 activeTab === 'minutes'
                   ? 'bg-purple-600 text-white shadow-sm'
-                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
               📝 議事録詳細 ＆ 複数タスク登録
@@ -438,7 +474,8 @@ export default function TasksPage() {
                           <td className="py-2.5 px-3">
                             <button
                               onClick={() => handleSelectTask(task)}
-                              className="font-bold text-[#5e9bc4] hover:underline"
+                              className="font-bold hover:underline"
+                              style={{ color: '#5e9bc4' }}
                             >
                               詳細
                             </button>
@@ -549,7 +586,8 @@ export default function TasksPage() {
                 <div className="flex gap-2 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 bg-[#5e9bc4] hover:bg-sky-600 text-white py-2.5 rounded-lg font-bold transition shadow-sm"
+                    className="flex-1 text-white py-2.5 rounded-lg font-bold transition shadow-sm hover:opacity-90"
+                    style={{ backgroundColor: '#5e9bc4' }}
                   >
                     {isEditing ? '変更を保存' : '追加する'}
                   </button>
