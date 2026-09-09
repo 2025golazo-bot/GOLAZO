@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -20,7 +20,17 @@ interface EventItem {
 export default function LocalEventsPage() {
   const pathname = usePathname();
 
-  // --- ナビゲーションメニュー設定 ---
+  // --- 不要な共通ヘッダー（一番上の黒い文字のバー等）を非表示にするハック処理 ---
+  useEffect(() => {
+    const globalNavs = document.querySelectorAll('header:not(main header), nav:not(main nav)');
+    globalNavs.forEach((el) => {
+      if (!el.classList.contains('golazo-custom-header')) {
+        (el as HTMLElement).style.display = 'none';
+      }
+    });
+  }, []);
+
+  // --- ナビゲーションメニュー設定（他のページと完全統一） ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/clients', icon: '📋' },
@@ -130,41 +140,38 @@ export default function LocalEventsPage() {
   };
 
   return (
-    <div className="bg-slate-100 min-h-screen text-slate-800">
-      {/* 統一ナビゲーションバー (#5e9bc4) */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3 shadow border-b border-sky-600 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm shadow-sm">G</span>
-            <h1 className="text-lg font-extrabold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
-          </div>
-
-          <nav className="flex items-center gap-1.5 bg-sky-800/40 p-1 rounded-lg border border-white/20">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${
-                    isActive
-                      ? 'bg-white text-[#5e9bc4]'
-                      : 'text-sky-100 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span>{item.icon}</span> {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+    <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
+      {/* 水色のヘッダー帯：タスク管理・顧客リスト画面と完全に同じレイアウト */}
+      <header className="golazo-custom-header bg-[#5e9bc4] text-white px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs">G</span>
+          <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
         </div>
+        <nav className="flex flex-wrap gap-1.5 text-xs font-semibold">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
+                }`}
+              >
+                <span>{item.icon}</span> {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
       {/* メインコンテンツエリア */}
       <div className="p-6 max-w-7xl mx-auto space-y-6">
 
         {/* ページヘッダー ＆ 検索・フィルターバー */}
-        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
@@ -220,7 +227,7 @@ export default function LocalEventsPage() {
           <div className="lg:col-span-2 space-y-4">
             {filteredEvents.length > 0 ? (
               filteredEvents.map(item => (
-                <div key={item.id} className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4 hover:border-sky-200 transition">
+                <div key={item.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 hover:border-sky-200 transition">
                   {/* カード見出し */}
                   <div className="flex justify-between items-start border-b border-slate-100 pb-3">
                     <div>
@@ -306,7 +313,7 @@ export default function LocalEventsPage() {
                 </div>
               ))
             ) : (
-              <div className="bg-white p-12 text-center text-slate-400 rounded-lg border border-slate-200 text-xs">
+              <div className="bg-white p-12 text-center text-slate-400 rounded-xl border border-slate-200 text-xs">
                 該当するイベント情報が見つかりません。
               </div>
             )}
@@ -314,7 +321,7 @@ export default function LocalEventsPage() {
 
           {/* 右側: 新規イベント情報の登録フォーム (1カラム分) */}
           <div>
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4 sticky top-20">
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 sticky top-20">
               <h3 className="font-extrabold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
                 <span>➕</span> 新規イベント情報の登録
               </h3>
@@ -325,7 +332,7 @@ export default function LocalEventsPage() {
                   <select
                     value={formData.category}
                     onChange={e => setFormData({ ...formData, category: e.target.value as EventItem['category'] })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] bg-white"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] bg-white"
                   >
                     <option value="school">学校行事（運動会等）</option>
                     <option value="tournament">大会・マッチ</option>
@@ -344,7 +351,7 @@ export default function LocalEventsPage() {
                     placeholder="例: 浮間小学校、赤羽FC"
                     value={formData.organizer}
                     onChange={e => setFormData({ ...formData, organizer: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
@@ -358,7 +365,7 @@ export default function LocalEventsPage() {
                     placeholder="例: 運動会、秋季ジュニア大会"
                     value={formData.title}
                     onChange={e => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
@@ -367,7 +374,7 @@ export default function LocalEventsPage() {
                   <select
                     value={formData.targetArea}
                     onChange={e => setFormData({ ...formData, targetArea: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] bg-white"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] bg-white"
                   >
                     <option value="北区">北区</option>
                     <option value="板橋区">板橋区</option>
@@ -383,7 +390,7 @@ export default function LocalEventsPage() {
                     type="date"
                     value={formData.eventDate}
                     onChange={e => setFormData({ ...formData, eventDate: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
@@ -394,7 +401,7 @@ export default function LocalEventsPage() {
                     placeholder="https://"
                     value={formData.url}
                     onChange={e => setFormData({ ...formData, url: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
@@ -405,7 +412,7 @@ export default function LocalEventsPage() {
                     placeholder="例: チラシ配布のタイミング、協賛打診など"
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] resize-none"
                   />
                 </div>
 
