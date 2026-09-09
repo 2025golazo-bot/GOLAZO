@@ -61,8 +61,9 @@ interface Student {
   physicalHistory: PhysicalData[];
   sessions: Session[];
 }
+export default function clientsPage() {
+  const pathname = usePathname();
 
-export default function ClientsPage() {
   // --- ナビゲーションメニュー設定 ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
@@ -71,6 +72,7 @@ export default function ClientsPage() {
     { label: '近隣情報', href: '/local-info', icon: '📍' },
     { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
   ];
+
 
   // 保護者データ (Square連携・チケット管理)
   const [parents, setParents] = useState<Parent[]>([
