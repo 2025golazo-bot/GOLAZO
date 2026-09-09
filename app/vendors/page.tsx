@@ -1,4 +1,3 @@
-'default client';
 'use client';
 
 import React, { useState } from 'react';
@@ -109,7 +108,7 @@ export default function VendorsPage() {
     memo3Alarm: false,
   });
 
-  // 画像のドラッグ＆ドロップ / ファイル選択ハンドラー
+  // 画像のファイル選択ハンドラー
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, cardKey: 'businessCard1' | 'businessCard2') => {
     const file = e.target.files?.[0];
     if (file) {
@@ -398,7 +397,7 @@ export default function VendorsPage() {
               />
             </div>
 
-            {/* 名刺保存 2枚 (ドラッグ＆ドロップ風ファイルアップロード) */}
+            {/* 名刺保存 2枚 */}
             <div className="space-y-2 pt-2 border-t">
               <label className="block font-bold text-gray-800 text-xs">📇 名刺保存 (2枚まで)</label>
               <div className="grid grid-cols-2 gap-2">
