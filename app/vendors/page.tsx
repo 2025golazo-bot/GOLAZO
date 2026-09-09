@@ -5,16 +5,15 @@ import React, { useState } from 'react';
 // マシン・業者情報の型定義
 interface VendorItem {
   id: string;
-  name: string; // 名前
-  usageDetails: string; // 使用詳細
-  contactPerson: string; // 業者の担当者名
-  url: string; // URL
-  email: string; // メールアドレス
-  phone: string; // 連絡先
-  businessCard1: string; // 名刺画像1 (Base64)
-  businessCard2: string; // 名刺画像2 (Base64)
+  name: string;
+  usageDetails: string;
+  contactPerson: string;
+  url: string;
+  email: string;
+  phone: string;
+  businessCard1: string;
+  businessCard2: string;
   
-  // メモ1 ＆ タスク連携
   memo1: string;
   memo1TaskEnabled: boolean;
   memo1Date: string;
@@ -22,7 +21,6 @@ interface VendorItem {
   memo1Important: boolean;
   memo1Alarm: boolean;
 
-  // メモ2 ＆ タスク連携
   memo2: string;
   memo2TaskEnabled: boolean;
   memo2Date: string;
@@ -30,7 +28,6 @@ interface VendorItem {
   memo2Important: boolean;
   memo2Alarm: boolean;
 
-  // メモ3 ＆ タスク連携
   memo3: string;
   memo3TaskEnabled: boolean;
   memo3Date: string;
@@ -78,7 +75,6 @@ export default function VendorsPage() {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // フォーム状態
   const [form, setForm] = useState<Omit<VendorItem, 'id'>>({
     name: '',
     usageDetails: '',
@@ -108,7 +104,6 @@ export default function VendorsPage() {
     memo3Alarm: false,
   });
 
-  // 画像のファイル選択ハンドラー
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, cardKey: 'businessCard1' | 'businessCard2') => {
     const file = e.target.files?.[0];
     if (file) {
@@ -120,7 +115,6 @@ export default function VendorsPage() {
     }
   };
 
-  // 保存・追加処理
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name) return;
@@ -183,7 +177,6 @@ export default function VendorsPage() {
     });
   };
 
-  // キーワード検索フィルター
   const filteredVendors = vendors.filter(item => {
     const q = searchQuery.toLowerCase();
     return (
@@ -200,6 +193,11 @@ export default function VendorsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-sans">
+      {/* ヘッダータイトル：パーソナルジムGOLAZO */}
+      <div className="mb-4">
+        <h2 className="text-xl font-extrabold text-blue-900 tracking-wide">パーソナルジムGOLAZO</h2>
+      </div>
+
       {/* ページ切り替えナビゲーション */}
       <div className="flex flex-wrap gap-2 mb-6 bg-gray-100 p-3 rounded-lg border">
         <a href="/sales" className="px-3 py-1.5 bg-white border rounded text-sm font-medium hover:bg-gray-50">💰 売上管理</a>
