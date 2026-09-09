@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 
 // --- 型定義 ---
 interface Session {
@@ -186,7 +185,7 @@ export default function ClientsPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
 
   // 新規セッションフォーム
-  const [newSessionDate, setNewSessionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newSessionDate, setNewSessionDate] = useState<string>('2026-10-06');
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
@@ -383,7 +382,6 @@ export default function ClientsPage() {
 
     const formattedStr = diff > 0 ? `+${diff}${unit}` : `${diff}${unit}`;
 
-    // 体脂肪率は減少が改善、筋肉量は増加が改善
     let colorClass = 'bg-slate-100 text-slate-700';
     if (isImprovementWhenIncrease) {
       colorClass = diff > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
@@ -407,30 +405,30 @@ export default function ClientsPage() {
           <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         </div>
         <nav className="flex gap-2 text-xs font-semibold">
-          <Link
+          <a
             href="/sales"
             className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
           >
             売上管理
-          </Link>
-          <Link
+          </a>
+          <a
             href="/clients"
             className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition"
           >
             顧客カルテ
-          </Link>
-          <Link
+          </a>
+          <a
             href="/local-info"
             className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
           >
             近隣・イベント情報
-          </Link>
-          <Link
+          </a>
+          <a
             href="/vendors"
             className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
           >
             マシン・業者一覧
-          </Link>
+          </a>
         </nav>
       </header>
 
