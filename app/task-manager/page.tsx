@@ -24,11 +24,11 @@ export default function TasksPage() {
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
 
-  // --- ナビゲーションメニュー設定（5ページで完全統一） ---
+  // --- ナビゲーションメニュー設定（タスク管理のパスを /task-manager に修正） ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/clients', icon: '📋' },
-    { label: 'タスク・議事録', href: '/tasks', icon: '📝' },
+    { label: 'タスク・議事録', href: '/task-manager', icon: '📝' },
     { label: '近隣情報', href: '/local-info', icon: '📍' },
     { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
   ];
