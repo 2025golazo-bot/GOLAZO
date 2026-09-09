@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 
 // --- 型定義 ---
 interface Session {
@@ -406,15 +407,30 @@ export default function ClientsPage() {
           <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
         </div>
         <nav className="flex gap-2 text-xs font-semibold">
-          <button className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
+          <Link
+            href="/sales"
+            className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
+          >
             売上管理
-          </button>
-          <button className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition">
+          </Link>
+          <Link
+            href="/clients"
+            className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition"
+          >
             顧客カルテ
-          </button>
-          <button className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">
-            タスク・議事録
-          </button>
+          </Link>
+          <Link
+            href="/local-info"
+            className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
+          >
+            近隣・イベント情報
+          </Link>
+          <Link
+            href="/vendors"
+            className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition"
+          >
+            マシン・業者一覧
+          </Link>
         </nav>
       </header>
 
@@ -741,7 +757,7 @@ export default function ClientsPage() {
                                 step="0.1"
                                 value={beforePhysical.weight}
                                 onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold"
+                                className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
                             <div>
@@ -751,7 +767,7 @@ export default function ClientsPage() {
                                 step="0.1"
                                 value={beforePhysical.fat}
                                 onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold"
+                                className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
                             <div>
@@ -761,55 +777,58 @@ export default function ClientsPage() {
                                 step="0.1"
                                 value={beforePhysical.muscle}
                                 onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold"
+                                className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* After 数値 & 差分 */}
-                      {afterPhysical && beforePhysical && (
+                      {/* After 数値 & 変化量 */}
+                      {afterPhysical && (
                         <div className="bg-sky-50/40 p-3.5 rounded-xl border border-sky-200 space-y-2">
-                          <span className="font-bold text-[#5e9bc4] block border-b border-sky-200 pb-1"> After: {afterPhysical.date}</span>
+                          <div className="flex justify-between items-center border-b pb-1">
+                            <span className="font-bold text-[#5e9bc4]"> After: {afterPhysical.date}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold">Before比</span>
+                          </div>
                           <div className="grid grid-cols-3 gap-2">
                             <div>
-                              <div className="flex justify-between items-center">
-                                <label className="text-slate-400 text-[10px]">体重</label>
-                                {calcDiff(afterPhysical.weight, beforePhysical.weight, 'kg', true)}
+                              <div className="flex justify-between items-center mb-0.5">
+                                <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
+                                {beforePhysical && calcDiff(afterPhysical.weight, beforePhysical.weight, 'kg', true)}
                               </div>
                               <input
                                 type="number"
                                 step="0.1"
                                 value={afterPhysical.weight}
                                 onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold text-[#5e9bc4] mt-0.5"
+                                className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
                             <div>
-                              <div className="flex justify-between items-center">
-                                <label className="text-slate-400 text-[10px]">体脂肪率</label>
-                                {calcDiff(afterPhysical.fat, beforePhysical.fat, '%', false)}
+                              <div className="flex justify-between items-center mb-0.5">
+                                <label className="text-slate-400 block text-[10px]">体脂肪率 (%)</label>
+                                {beforePhysical && calcDiff(afterPhysical.fat, beforePhysical.fat, '%', false)}
                               </div>
                               <input
                                 type="number"
                                 step="0.1"
                                 value={afterPhysical.fat}
                                 onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold text-[#5e9bc4] mt-0.5"
+                                className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
                             <div>
-                              <div className="flex justify-between items-center">
-                                <label className="text-slate-400 text-[10px]">筋肉量</label>
-                                {calcDiff(afterPhysical.muscle, beforePhysical.muscle, 'kg', true)}
+                              <div className="flex justify-between items-center mb-0.5">
+                                <label className="text-slate-400 block text-[10px]">筋肉量 (kg)</label>
+                                {beforePhysical && calcDiff(afterPhysical.muscle, beforePhysical.muscle, 'kg', true)}
                               </div>
                               <input
                                 type="number"
                                 step="0.1"
                                 value={afterPhysical.muscle}
                                 onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold text-[#5e9bc4] mt-0.5"
+                                className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
                           </div>
@@ -818,74 +837,79 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 姿勢写真 Visual Comparison */}
+                  {/* 姿勢写真 縦横比較 (Front, Side, Back) */}
                   <div className="space-y-3">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
-                      <span>📸</span> 姿勢写真 ビフォーアフター比較
+                      <span>🚶‍♂️</span> 姿勢写真 ビフォーアフター比較 (正面・側面・背面)
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                      {(['front', 'side', 'back'] as const).map(angle => {
-                        const angleLabel = angle === 'front' ? '正面' : angle === 'side' ? '側面' : '背面';
-                        const beforeImg = beforePhysical?.posturePhotos?.[angle];
-                        const afterImg = afterPhysical?.posturePhotos?.[angle];
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {(['front', 'side', 'back'] as const).map(keyName => {
+                        const labelMap = { front: '正面 (Front)', side: '側面 (Side)', back: '背面 (Back)' };
+                        const beforeImg = beforePhysical?.posturePhotos?.[keyName];
+                        const afterImg = afterPhysical?.posturePhotos?.[keyName];
 
                         return (
-                          <div key={angle} className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
-                            <span className="font-bold text-slate-700 block text-center border-b pb-1">
-                              【{angleLabel}】比較
+                          <div key={keyName} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                            <span className="font-bold text-xs text-slate-700 block text-center bg-white py-1 rounded border border-slate-200">
+                              {labelMap[keyName]}
                             </span>
-
                             <div className="grid grid-cols-2 gap-2">
                               {/* Before 写真 */}
-                              <div className="space-y-1">
-                                <span className="text-[10px] text-slate-500 font-semibold block text-center">Before</span>
-                                {beforeImg ? (
-                                  <div className="relative group">
-                                    <img src={beforeImg} alt="Before" className="w-full h-32 object-cover rounded-lg border" />
-                                    <button
-                                      onClick={() => handleDeletePosturePhoto(beforeDate, angle)}
-                                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 text-[10px] opacity-0 group-hover:opacity-100 transition shadow"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <label className="border-2 border-dashed border-slate-300 rounded-lg h-32 flex flex-col justify-center items-center cursor-pointer hover:border-[#5e9bc4] bg-white transition">
-                                    <span className="text-slate-400 text-xs">＋ 追加</span>
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      onChange={e => handleFileUpload(e, beforeDate, 'posture', angle)}
-                                    />
-                                  </label>
-                                )}
+                              <div className="space-y-1 text-center">
+                                <span className="text-[10px] font-bold text-slate-500 block">Before</span>
+                                <div className="relative aspect-[3/4] bg-slate-200 rounded-lg border border-slate-300 overflow-hidden flex flex-col items-center justify-center">
+                                  {beforeImg ? (
+                                    <>
+                                      <img src={beforeImg} alt="Before" className="w-full h-full object-cover" />
+                                      <button
+                                        onClick={() => handleDeletePosturePhoto(beforeDate, keyName)}
+                                        className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
+                                      >
+                                        ✕
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <label className="cursor-pointer p-2 text-center text-slate-400 hover:text-[#5e9bc4] transition">
+                                      <span className="text-xl block">📷</span>
+                                      <span className="text-[10px] block font-bold">追加</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={e => handleFileUpload(e, beforeDate, 'posture', keyName)}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
                               </div>
 
                               {/* After 写真 */}
-                              <div className="space-y-1">
-                                <span className="text-[10px] text-[#5e9bc4] font-bold block text-center">After</span>
-                                {afterImg ? (
-                                  <div className="relative group">
-                                    <img src={afterImg} alt="After" className="w-full h-32 object-cover rounded-lg border border-[#5e9bc4]" />
-                                    <button
-                                      onClick={() => handleDeletePosturePhoto(afterDate, angle)}
-                                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 text-[10px] opacity-0 group-hover:opacity-100 transition shadow"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <label className="border-2 border-dashed border-sky-300 rounded-lg h-32 flex flex-col justify-center items-center cursor-pointer hover:border-[#5e9bc4] bg-sky-50/50 transition">
-                                    <span className="text-[#5e9bc4] text-xs font-bold">＋ 追加</span>
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      onChange={e => handleFileUpload(e, afterDate, 'posture', angle)}
-                                    />
-                                  </label>
-                                )}
+                              <div className="space-y-1 text-center">
+                                <span className="text-[10px] font-bold text-[#5e9bc4] block">After</span>
+                                <div className="relative aspect-[3/4] bg-slate-200 rounded-lg border border-sky-300 overflow-hidden flex flex-col items-center justify-center">
+                                  {afterImg ? (
+                                    <>
+                                      <img src={afterImg} alt="After" className="w-full h-full object-cover" />
+                                      <button
+                                        onClick={() => handleDeletePosturePhoto(afterDate, keyName)}
+                                        className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
+                                      >
+                                        ✕
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <label className="cursor-pointer p-2 text-center text-slate-400 hover:text-[#5e9bc4] transition">
+                                      <span className="text-xl block">📷</span>
+                                      <span className="text-[10px] block font-bold">追加</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={e => handleFileUpload(e, afterDate, 'posture', keyName)}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -894,31 +918,18 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* フィジカルテスト・ケガゼロ等 判定シート */}
-                  <div className="space-y-3">
+                  {/* テスト結果写真（ケガゼロ / フィジカルチェックシート等） */}
+                  <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
-                      <span>📝</span> フィジカルテスト・判定シート写真
+                      <span>📄</span> フィジカルチェックシート & ケガゼロ測定結果
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Before テスト写真 */}
-                      <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
-                        <span className="font-bold text-slate-600 block border-b pb-1">
-                          Before ({beforeDate}) シート
-                        </span>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(beforePhysical?.testPhotos || []).map((img, idx) => (
-                            <div key={idx} className="relative group">
-                              <img src={img} alt="test" className="w-full h-20 object-cover rounded-lg border" />
-                              <button
-                                onClick={() => handleDeleteTestPhoto(beforeDate, idx)}
-                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 text-[10px] opacity-0 group-hover:opacity-100 transition shadow"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          <label className="border-2 border-dashed border-slate-300 rounded-lg h-20 flex justify-center items-center cursor-pointer hover:border-[#5e9bc4] bg-white transition">
-                            <span className="text-slate-400 text-xs">＋ 追加</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Before テスト画像 */}
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-xs text-slate-600">Before ({beforeDate}) シート</span>
+                          <label className="cursor-pointer text-[10px] bg-white border border-slate-300 hover:border-[#5e9bc4] text-slate-600 hover:text-[#5e9bc4] px-2 py-1 rounded-md font-bold transition">
+                            ＋ 写真を追加
                             <input
                               type="file"
                               accept="image/*"
@@ -927,27 +938,33 @@ export default function ClientsPage() {
                             />
                           </label>
                         </div>
+                        <div className="grid grid-cols-3 gap-2 min-h-[100px] bg-white p-2 rounded-lg border border-slate-200">
+                          {beforePhysical?.testPhotos && beforePhysical.testPhotos.length > 0 ? (
+                            beforePhysical.testPhotos.map((img, idx) => (
+                              <div key={idx} className="relative aspect-square bg-slate-100 rounded border overflow-hidden">
+                                <img src={img} alt="test" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={() => handleDeleteTestPhoto(beforeDate, idx)}
+                                  className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-span-3 flex items-center justify-center text-slate-400 text-[11px]">
+                              シート写真が未登録です
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* After テスト写真 */}
-                      <div className="border border-sky-200 rounded-xl p-3 bg-sky-50/30 space-y-2">
-                        <span className="font-bold text-[#5e9bc4] block border-b border-sky-200 pb-1">
-                          After ({afterDate}) シート
-                        </span>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(afterPhysical?.testPhotos || []).map((img, idx) => (
-                            <div key={idx} className="relative group">
-                              <img src={img} alt="test" className="w-full h-20 object-cover rounded-lg border border-sky-300" />
-                              <button
-                                onClick={() => handleDeleteTestPhoto(afterDate, idx)}
-                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 text-[10px] opacity-0 group-hover:opacity-100 transition shadow"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          <label className="border-2 border-dashed border-sky-300 rounded-lg h-20 flex justify-center items-center cursor-pointer hover:border-[#5e9bc4] bg-sky-50/50 transition">
-                            <span className="text-[#5e9bc4] text-xs font-bold">＋ 追加</span>
+                      {/* After テスト画像 */}
+                      <div className="bg-sky-50/40 p-3 rounded-xl border border-sky-200 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-xs text-[#5e9bc4]">After ({afterDate}) シート</span>
+                          <label className="cursor-pointer text-[10px] bg-white border border-sky-300 hover:bg-sky-50 text-[#5e9bc4] px-2 py-1 rounded-md font-bold transition">
+                            ＋ 写真を追加
                             <input
                               type="file"
                               accept="image/*"
@@ -956,33 +973,62 @@ export default function ClientsPage() {
                             />
                           </label>
                         </div>
+                        <div className="grid grid-cols-3 gap-2 min-h-[100px] bg-white p-2 rounded-lg border border-slate-200">
+                          {afterPhysical?.testPhotos && afterPhysical.testPhotos.length > 0 ? (
+                            afterPhysical.testPhotos.map((img, idx) => (
+                              <div key={idx} className="relative aspect-square bg-slate-100 rounded border overflow-hidden">
+                                <img src={img} alt="test" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={() => handleDeleteTestPhoto(afterDate, idx)}
+                                  className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-span-3 flex items-center justify-center text-slate-400 text-[11px]">
+                              シート写真が未登録です
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-
                 </div>
 
               </div>
             )}
 
-            {/* TAB 2: チケット履歴 */}
+            {/* TAB 2: チケット購入履歴 & Square連携 */}
             {activeTab === 'tickets' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
-                <h3 className="font-bold text-slate-800 text-sm border-b pb-2 flex items-center gap-1.5">
-                  <span>🎟️</span> 回数券購入・決済履歴 (Square自動連携)
-                </h3>
-                <div className="space-y-2">
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+                <div className="flex justify-between items-center border-b pb-3">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                      <span>🎟️</span> チケット（回数券）購入履歴 & Square決済連携情報
+                    </h3>
+                    <p className="text-[11px] text-slate-400">保護者アカウント ({currentParent.name} 様) に紐づく購入履歴</p>
+                  </div>
+                  <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-lg text-xs">
+                    現在の残り回数: <strong className="text-base">{currentParent.ticketRemaining}</strong> 回
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
                   {currentParent.ticketsHistory.map(ticket => (
-                    <div key={ticket.id} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                    <div key={ticket.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                       <div>
-                        <span className="font-bold text-slate-800 text-sm block">{ticket.title}</span>
-                        <span className="text-slate-400 text-[11px]">購入日: {ticket.date} | 有効期限: {ticket.expire}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 text-sm">{ticket.title}</span>
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
+                            ＋{ticket.count}回分 付与
+                          </span>
+                        </div>
+                        <p className="text-slate-500 mt-1">購入日: {ticket.date} | 有効期限: {ticket.expire}</p>
                       </div>
-                      <div className="text-right">
-                        <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-md inline-block mb-1">
-                          +{ticket.count} 回付与
-                        </span>
-                        <span className="block text-[10px] text-slate-400">Square ID: {ticket.squarePaymentId}</span>
+                      <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 font-mono text-[11px] text-slate-600">
+                        Square Payment ID: <strong className="text-slate-800">{ticket.squarePaymentId}</strong>
                       </div>
                     </div>
                   ))}
@@ -990,71 +1036,73 @@ export default function ClientsPage() {
               </div>
             )}
 
-            {/* TAB 3: 基本情報編集 */}
+            {/* TAB 3: 基本情報・手動編集 */}
             {activeTab === 'edit_info' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
-                <h3 className="font-bold text-slate-800 text-sm border-b pb-2 flex items-center gap-1.5">
-                  <span>✏️</span> 受講生・保護者 基本情報編集
+                <h3 className="font-bold text-slate-800 text-sm border-b pb-3 flex items-center gap-1.5">
+                  <span>✏️</span> 受講生・保護者基本情報の編集
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-500 mb-1 font-semibold">受講生 氏名</label>
+                    <label className="block text-slate-600 mb-1 font-semibold">受講生 氏名</label>
                     <input
                       type="text"
                       value={editForm.name}
                       onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 mb-1 font-semibold">フリガナ</label>
+                    <label className="block text-slate-600 mb-1 font-semibold">フリガナ</label>
                     <input
                       type="text"
                       value={editForm.kana}
                       onChange={e => setEditForm({ ...editForm, kana: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 mb-1 font-semibold">保護者 連絡先 TEL</label>
+                    <label className="block text-slate-600 mb-1 font-semibold">保護者 連絡先（電話番号）</label>
                     <input
                       type="text"
                       value={editForm.phone}
                       onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 mb-1 font-semibold">課題・悩み</label>
+                    <label className="block text-slate-600 mb-1 font-semibold">現在のお悩み・課題</label>
                     <input
                       type="text"
                       value={editForm.concern}
                       onChange={e => setEditForm({ ...editForm, concern: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-slate-500 mb-1 font-semibold">目標</label>
+                  <div className="md:col-span-2">
+                    <label className="block text-slate-600 mb-1 font-semibold">目標・目指す姿</label>
                     <input
                       type="text"
                       value={editForm.target}
                       onChange={e => setEditForm({ ...editForm, target: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-slate-500 mb-1 font-semibold">特記事項・メモ</label>
+                  <div className="md:col-span-2">
+                    <label className="block text-slate-600 mb-1 font-semibold">特記事項・カルテメモ (既往歴・特徴など)</label>
                     <textarea
                       rows={3}
                       value={editForm.memo}
                       onChange={e => setEditForm({ ...editForm, memo: e.target.value })}
-                      className="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
                     />
                   </div>
                 </div>
+
                 <button
                   onClick={handleSaveInfo}
-                  className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-6 py-2.5 rounded-lg text-xs transition shadow-sm"
+                  className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-6 py-2.5 rounded-lg transition shadow-sm"
                 >
                   基本情報を保存する
                 </button>
@@ -1062,6 +1110,7 @@ export default function ClientsPage() {
             )}
 
           </div>
+
         </div>
       </main>
     </div>
