@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 // --- 型定義 ---
 interface Session {
@@ -63,7 +65,19 @@ interface Student {
 }
 
 export default function ClientsPage() {
-  // --- ナビゲーションメニュー設定 ---
+  const pathname = usePathname();
+
+  // --- 不要な共通ヘッダー（一番上の黒い文字のバー等）を非表示にするハック処理 ---
+  useEffect(() => {
+    const globalNavs = document.querySelectorAll('header:not(main header), nav:not(main nav)');
+    globalNavs.forEach((el) => {
+      if (!el.classList.contains('golazo-custom-header')) {
+        (el as HTMLElement).style.display = 'none';
+      }
+    });
+  }, []);
+
+  // --- ナビゲーションメニュー設定（他のページと完全統一） ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/clients', icon: '📋' },
@@ -265,85 +279,6 @@ export default function ClientsPage() {
     setNewSessionHomework('');
   };
 
-  // 画像アップロード・差し替えハンドラー
-  const handleFileUpload = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    targetDate: string,
-    type: 'posture' | 'test',
-    keyName?: 'front' | 'side' | 'back'
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-
-        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-
-          if (type === 'posture' && keyName) {
-            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-            return {
-              ...m,
-              posturePhotos: {
-                ...currentPhotos,
-                [keyName]: url
-              }
-            };
-          } else if (type === 'test') {
-            return {
-              ...m,
-              testPhotos: [...(m.testPhotos || []), url]
-            };
-          }
-          return m;
-        });
-
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-  };
-
-  // 姿勢写真 削除ハンドラー
-  const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-          const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-          return {
-            ...m,
-            posturePhotos: {
-              ...currentPhotos,
-              [keyName]: null
-            }
-          };
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-  };
-
-  // テスト結果写真 削除ハンドラー
-  const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-          return {
-            ...m,
-            testPhotos: (m.testPhotos || []).filter((_, idx) => idx !== indexToDelete)
-          };
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-  };
-
   // 身体データ更新
   const handleUpdatePhysicalValue = (targetDate: string, field: keyof PhysicalData, val: any) => {
     setStudents(prev =>
@@ -383,54 +318,35 @@ export default function ClientsPage() {
     return matchYear && matchMonth;
   });
 
-  // 数値変化（増減値）計算ヘルパー
-  const calcDiff = (afterVal: number, beforeVal: number, unit: string, isImprovementWhenIncrease: boolean = true) => {
-    if (afterVal === undefined || beforeVal === undefined) return null;
-    const diff = Number((afterVal - beforeVal).toFixed(1));
-    if (diff === 0) return <span className="text-slate-400 font-normal">±0{unit}</span>;
-
-    const formattedStr = diff > 0 ? `+${diff}${unit}` : `${diff}${unit}`;
-
-    let colorClass = 'bg-slate-100 text-slate-700';
-    if (isImprovementWhenIncrease) {
-      colorClass = diff > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
-    } else {
-      colorClass = diff < 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
-    }
-
-    return (
-      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${colorClass}`}>
-        {formattedStr}
-      </span>
-    );
-  };
-
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* 統一ヘッダーナビゲーション */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
-          <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
+      {/* 水色のヘッダー帯：「パーソナルジム GOLAZO」と「管理システム」表記、ナビゲーションボタンの配置 */}
+      <header className="golazo-custom-header bg-[#5e9bc4] text-white px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-50 gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs">G</span>
+          <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
         </div>
-        <nav className="flex gap-2 text-xs font-semibold">
-          {navItems.map((item) => {
-            const isActive = item.href === '/clients';
-            return (
-              <a
-                key={item.href}
-                href={item.href}
-                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
-                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
-                }`}
-              >
-                <span>{item.icon}</span> {item.label}
-              </a>
-            );
-          })}
-        </nav>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold text-white/90 bg-white/15 px-2.5 py-1 rounded-md border border-white/20">管理システム</span>
+          <nav className="flex flex-wrap gap-1.5 text-xs font-semibold">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                      : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
+                  }`}
+                >
+                  <span>{item.icon}</span> {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
       </header>
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
@@ -636,7 +552,7 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                {/* 2. 上部：時系列セッション履歴（年度・月度選択フィルター付き） */}
+                {/* 2. 時系列セッション履歴（年度・月度選択フィルター付き） */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                     <div>
@@ -700,19 +616,18 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 3. 下部：3ヶ月定期計測・身体データ推移 & 写真ビフォーアフター比較 */}
+                {/* 3. 3ヶ月定期計測・身体データ */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
                   <div className="border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                       <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート比較
                     </h3>
-                    <p className="text-[11px] text-slate-400">選択した2つの年月での数値変化を自動計算・縦横写真の比較・差し替えが可能です</p>
+                    <p className="text-[11px] text-slate-400">選択した2つの年月での数値変化を確認できます</p>
                   </div>
 
-                  {/* 比較年月セレクター */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-md">過去 (Before)</span>
+                      <span className="font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-md">Before</span>
                       <select
                         value={beforeDate}
                         onChange={e => setBeforeDate(e.target.value)}
@@ -725,7 +640,7 @@ export default function ClientsPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-white bg-[#5e9bc4] px-2.5 py-1 rounded-md">最新 (After)</span>
+                      <span className="font-bold text-white bg-[#5e9bc4] px-2.5 py-1 rounded-md">After</span>
                       <select
                         value={afterDate}
                         onChange={e => setAfterDate(e.target.value)}
@@ -738,297 +653,66 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 数値データ比較 & 自動増減差分表示 */}
-                  <div className="space-y-3">
-                    <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
-                      <span>📈</span> 身体データ数値変化（自動算出）
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Before 数値 */}
-                      {beforePhysical && (
-                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-                          <span className="font-bold text-slate-600 block border-b pb-1"> Before: {beforePhysical.date}</span>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={beforePhysical.weight}
-                                onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold bg-white"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-slate-400 block text-[10px]">体脂肪率 (%)</label>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={beforePhysical.fat}
-                                onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold bg-white"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-slate-400 block text-[10px]">筋肉量 (kg)</label>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={beforePhysical.muscle}
-                                onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold bg-white"
-                              />
-                            </div>
-                          </div>
+                  {beforePhysical && (
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-3">
+                      <span className="font-bold text-slate-700 block border-b pb-1">計測データ編集 ({beforePhysical.date})</span>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-slate-500 block text-[11px] mb-1">体重 (kg)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={beforePhysical.weight}
+                            onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))}
+                            className="w-full border border-slate-300 rounded-md p-1.5 font-bold bg-white outline-none"
+                          />
                         </div>
-                      )}
-
-                      {/* After 数値 & 変化量 */}
-                      {afterPhysical && (
-                        <div className="bg-sky-50/40 p-3.5 rounded-xl border border-sky-200 space-y-2">
-                          <div className="flex justify-between items-center border-b pb-1">
-                            <span className="font-bold text-[#5e9bc4]"> After: {afterPhysical.date}</span>
-                            <span className="text-[10px] text-slate-400 font-semibold">Before比</span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <div className="flex justify-between items-center mb-0.5">
-                                <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
-                                {beforePhysical && calcDiff(afterPhysical.weight, beforePhysical.weight, 'kg', true)}
-                              </div>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={afterPhysical.weight}
-                                onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold bg-white"
-                              />
-                            </div>
-                            <div>
-                              <div className="flex justify-between items-center mb-0.5">
-                                <label className="text-slate-400 block text-[10px]">体脂肪率 (%)</label>
-                                {beforePhysical && calcDiff(afterPhysical.fat, beforePhysical.fat, '%', false)}
-                              </div>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={afterPhysical.fat}
-                                onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold bg-white"
-                              />
-                            </div>
-                            <div>
-                              <div className="flex justify-between items-center mb-0.5">
-                                <label className="text-slate-400 block text-[10px]">筋肉量 (kg)</label>
-                                {beforePhysical && calcDiff(afterPhysical.muscle, beforePhysical.muscle, 'kg', true)}
-                              </div>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={afterPhysical.muscle}
-                                onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value))}
-                                className="w-full border rounded-md p-1 font-bold bg-white"
-                              />
-                            </div>
-                          </div>
+                        <div>
+                          <label className="text-slate-500 block text-[11px] mb-1">体脂肪率 (%)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={beforePhysical.fat}
+                            onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))}
+                            className="w-full border border-slate-300 rounded-md p-1.5 font-bold bg-white outline-none"
+                          />
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 姿勢写真 縦横比較 (Front, Side, Back) */}
-                  <div className="space-y-3">
-                    <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
-                      <span>🚶‍♂️</span> 姿勢写真 ビフォーアフター比較 (正面・側面・背面)
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {(['front', 'side', 'back'] as const).map(keyName => {
-                        const labelMap = { front: '正面 (Front)', side: '側面 (Side)', back: '背面 (Back)' };
-                        const beforeImg = beforePhysical?.posturePhotos?.[keyName];
-                        const afterImg = afterPhysical?.posturePhotos?.[keyName];
-
-                        return (
-                          <div key={keyName} className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                            <span className="font-bold text-xs text-slate-700 block text-center bg-white py-1 rounded border border-slate-200">
-                              {labelMap[keyName]}
-                            </span>
-                            <div className="grid grid-cols-2 gap-2">
-                              {/* Before 写真 */}
-                              <div className="space-y-1 text-center">
-                                <span className="text-[10px] font-bold text-slate-500 block">Before</span>
-                                <div className="relative aspect-[3/4] bg-slate-200 rounded-lg border border-slate-300 overflow-hidden flex flex-col items-center justify-center">
-                                  {beforeImg ? (
-                                    <>
-                                      <img src={beforeImg} alt="Before" className="w-full h-full object-cover" />
-                                      <button
-                                        onClick={() => handleDeletePosturePhoto(beforeDate, keyName)}
-                                        className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
-                                      >
-                                        ✕
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <label className="cursor-pointer p-2 text-center text-slate-400 hover:text-[#5e9bc4] transition">
-                                      <span className="text-xl block">📷</span>
-                                      <span className="text-[10px] block font-bold">追加</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={e => handleFileUpload(e, beforeDate, 'posture', keyName)}
-                                      />
-                                    </label>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* After 写真 */}
-                              <div className="space-y-1 text-center">
-                                <span className="text-[10px] font-bold text-[#5e9bc4] block">After</span>
-                                <div className="relative aspect-[3/4] bg-slate-200 rounded-lg border border-sky-300 overflow-hidden flex flex-col items-center justify-center">
-                                  {afterImg ? (
-                                    <>
-                                      <img src={afterImg} alt="After" className="w-full h-full object-cover" />
-                                      <button
-                                        onClick={() => handleDeletePosturePhoto(afterDate, keyName)}
-                                        className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
-                                      >
-                                        ✕
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <label className="cursor-pointer p-2 text-center text-slate-400 hover:text-[#5e9bc4] transition">
-                                      <span className="text-xl block">📷</span>
-                                      <span className="text-[10px] block font-bold">追加</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={e => handleFileUpload(e, afterDate, 'posture', keyName)}
-                                      />
-                                    </label>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* テスト結果写真（ケガゼロ / フィジカルチェックシート等） */}
-                  <div className="space-y-3 pt-2">
-                    <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
-                      <span>📄</span> フィジカルチェックシート & ケガゼロ測定結果
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Before テスト画像 */}
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-xs text-slate-600">Before ({beforeDate}) シート</span>
-                          <label className="cursor-pointer text-[10px] bg-white border border-slate-300 hover:border-[#5e9bc4] text-slate-600 hover:text-[#5e9bc4] px-2 py-1 rounded-md font-bold transition">
-                            ＋ 写真を追加
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={e => handleFileUpload(e, beforeDate, 'test')}
-                            />
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 min-h-[100px] bg-white p-2 rounded-lg border border-slate-200">
-                          {beforePhysical?.testPhotos && beforePhysical.testPhotos.length > 0 ? (
-                            beforePhysical.testPhotos.map((img, idx) => (
-                              <div key={idx} className="relative aspect-square bg-slate-100 rounded border overflow-hidden">
-                                <img src={img} alt="test" className="w-full h-full object-cover" />
-                                <button
-                                  onClick={() => handleDeleteTestPhoto(beforeDate, idx)}
-                                  className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="col-span-3 flex items-center justify-center text-slate-400 text-[11px]">
-                              シート写真が未登録です
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* After テスト画像 */}
-                      <div className="bg-sky-50/40 p-3 rounded-xl border border-sky-200 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-xs text-[#5e9bc4]">After ({afterDate}) シート</span>
-                          <label className="cursor-pointer text-[10px] bg-white border border-sky-300 hover:bg-sky-50 text-[#5e9bc4] px-2 py-1 rounded-md font-bold transition">
-                            ＋ 写真を追加
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={e => handleFileUpload(e, afterDate, 'test')}
-                            />
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 min-h-[100px] bg-white p-2 rounded-lg border border-slate-200">
-                          {afterPhysical?.testPhotos && afterPhysical.testPhotos.length > 0 ? (
-                            afterPhysical.testPhotos.map((img, idx) => (
-                              <div key={idx} className="relative aspect-square bg-slate-100 rounded border overflow-hidden">
-                                <img src={img} alt="test" className="w-full h-full object-cover" />
-                                <button
-                                  onClick={() => handleDeleteTestPhoto(afterDate, idx)}
-                                  className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1 text-[10px] leading-none transition"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="col-span-3 flex items-center justify-center text-slate-400 text-[11px]">
-                              シート写真が未登録です
-                            </div>
-                          )}
+                        <div>
+                          <label className="text-slate-500 block text-[11px] mb-1">筋肉量 (kg)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={beforePhysical.muscle}
+                            onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))}
+                            className="w-full border border-slate-300 rounded-md p-1.5 font-bold bg-white outline-none"
+                          />
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
               </div>
             )}
 
-            {/* TAB 2: チケット購入履歴 & Square連携 */}
+            {/* TAB 2: チケット購入履歴 */}
             {activeTab === 'tickets' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
-                <div className="flex justify-between items-center border-b pb-3">
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                      <span>🎟️</span> チケット（回数券）購入履歴 & Square決済連携情報
-                    </h3>
-                    <p className="text-[11px] text-slate-400">保護者アカウント ({currentParent.name} 様) に紐づく購入履歴</p>
-                  </div>
-                  <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-lg text-xs">
-                    現在の残り回数: <strong className="text-base">{currentParent.ticketRemaining}</strong> 回
-                  </span>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  {currentParent.ticketsHistory.map(ticket => (
-                    <div key={ticket.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
+                <h3 className="font-bold text-slate-800 text-sm border-b pb-3">🎟️ チケット購入履歴 & Square連携詳細</h3>
+                <p className="text-slate-600">保護者氏名: <strong>{currentParent.name}</strong> 様</p>
+                <p className="text-slate-600">家族共通回数券 残数: <strong className="text-sm text-[#5e9bc4]">{currentParent.ticketRemaining} 回</strong></p>
+                
+                <div className="border-t pt-3 space-y-2">
+                  <h4 className="font-bold text-slate-700">決済履歴一覧</h4>
+                  {currentParent.ticketsHistory.map(th => (
+                    <div key={th.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex justify-between items-center">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 text-sm">{ticket.title}</span>
-                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                            ＋{ticket.count}回分 付与
-                          </span>
-                        </div>
-                        <p className="text-slate-500 mt-1">購入日: {ticket.date} | 有効期限: {ticket.expire}</p>
+                        <p className="font-bold text-slate-800">{th.title} ({th.count}回分)</p>
+                        <p className="text-slate-400 text-[11px]">購入日: {th.date} / 有効期限: {th.expire}</p>
                       </div>
-                      <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 font-mono text-[11px] text-slate-600">
-                        Square Payment ID: <strong className="text-slate-800">{ticket.squarePaymentId}</strong>
-                      </div>
+                      <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded text-[10px]">
+                        Square決済ID: {th.squarePaymentId}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1037,74 +721,72 @@ export default function ClientsPage() {
 
             {/* TAB 3: 基本情報・手動編集 */}
             {activeTab === 'edit_info' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
-                <h3 className="font-bold text-slate-800 text-sm border-b pb-3 flex items-center gap-1.5">
-                  <span>✏️</span> 受講生・保護者基本情報の編集
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
+                <h3 className="font-bold text-slate-800 text-sm border-b pb-3">✏️ 受講生・保護者 基本情報の編集</h3>
+                
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-slate-600 mb-1 font-semibold">受講生 氏名</label>
+                    <label className="block text-slate-600 font-semibold mb-1">受講生 氏名</label>
                     <input
                       type="text"
                       value={editForm.name}
                       onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+                      className="w-full border border-slate-300 rounded-lg p-2 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-600 mb-1 font-semibold">フリガナ</label>
+                    <label className="block text-slate-600 font-semibold mb-1">受講生 フリガナ</label>
                     <input
                       type="text"
                       value={editForm.kana}
                       onChange={e => setEditForm({ ...editForm, kana: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+                      className="w-full border border-slate-300 rounded-lg p-2 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-600 mb-1 font-semibold">保護者 連絡先（電話番号）</label>
+                    <label className="block text-slate-600 font-semibold mb-1">保護者 電話番号</label>
                     <input
                       type="text"
                       value={editForm.phone}
                       onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+                      className="w-full border border-slate-300 rounded-lg p-2 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-600 mb-1 font-semibold">現在のお悩み・課題</label>
-                    <input
-                      type="text"
+                    <label className="block text-slate-600 font-semibold mb-1">お悩み・課題</label>
+                    <textarea
+                      rows={2}
                       value={editForm.concern}
                       onChange={e => setEditForm({ ...editForm, concern: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+                      className="w-full border border-slate-300 rounded-lg p-2 outline-none resize-none"
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-slate-600 mb-1 font-semibold">目標・目指す姿</label>
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">目標</label>
                     <input
                       type="text"
                       value={editForm.target}
                       onChange={e => setEditForm({ ...editForm, target: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+                      className="w-full border border-slate-300 rounded-lg p-2 outline-none"
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-slate-600 mb-1 font-semibold">特記事項・カルテメモ (既往歴・特徴など)</label>
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">特記事項・メモ</label>
                     <textarea
-                      rows={3}
+                      rows={2}
                       value={editForm.memo}
                       onChange={e => setEditForm({ ...editForm, memo: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+                      className="w-full border border-slate-300 rounded-lg p-2 outline-none resize-none"
                     />
                   </div>
-                </div>
 
-                <button
-                  onClick={handleSaveInfo}
-                  className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-6 py-2.5 rounded-lg transition shadow-sm"
-                >
-                  基本情報を保存する
-                </button>
+                  <button
+                    onClick={handleSaveInfo}
+                    className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg transition shadow-sm"
+                  >
+                    変更を保存する
+                  </button>
+                </div>
               </div>
             )}
 
