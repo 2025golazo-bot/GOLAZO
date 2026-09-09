@@ -81,14 +81,13 @@ export default function NeighborsPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 追加処理（ビルドエラーを修正した部分）
+  // 追加処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
 
     const catObj = CATEGORIES.find((c) => c.value === formData.category);
 
-    // 重複の原因となっていた `category: formData.category,` を完全に除外
     const newItem: NeighborItem = {
       id: `n-${Date.now()}`,
       categoryLabel: catObj ? catObj.label : 'その他',
