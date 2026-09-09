@@ -18,30 +18,12 @@ export default function SalesPage() {
   const [sales, setSales] = useState<SaleItem[]>([
     {
       id: 1,
-      date: '2026-09-07',
-      clientName: '山田 太郎',
+      date: '2026-10-05',
+      clientName: '藤田 奈々 様',
       category: '月謝・コース',
-      amount: 33000,
+      amount: 60000,
       paymentMethod: 'Square決済',
-      memo: '9月分月謝',
-    },
-    {
-      id: 2,
-      date: '2026-09-06',
-      clientName: '佐藤 花子',
-      category: '月謝・コース',
-      amount: 44000,
-      paymentMethod: 'Square決済',
-      memo: '9月分月謝（月8回）',
-    },
-    {
-      id: 3,
-      date: '2026-09-05',
-      clientName: '鈴木 一郎',
-      category: '体験料',
-      amount: 3000,
-      paymentMethod: '現金',
-      memo: '体験レッスン代',
+      memo: '10回券（共通）',
     },
   ]);
 
@@ -94,6 +76,7 @@ export default function SalesPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
+      {/* 共通ヘッダーのみを配置 */}
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
@@ -141,32 +124,6 @@ export default function SalesPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
             />
-          </div>
-          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-            <button
-              onClick={() => setSelectedCategory('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedCategory === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              すべて
-            </button>
-            <button
-              onClick={() => setSelectedCategory('月謝・コース')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedCategory === '月謝・コース' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              月謝・コース
-            </button>
-            <button
-              onClick={() => setSelectedCategory('体験料')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedCategory === '体験料' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              体験料
-            </button>
           </div>
         </div>
 
@@ -268,28 +225,6 @@ export default function SalesPage() {
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">決済方法</label>
-                <select
-                  value={newSale.paymentMethod}
-                  onChange={(e: any) => setNewSale({ ...newSale, paymentMethod: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
-                >
-                  <option value="Square決済">Square決済</option>
-                  <option value="現金">現金</option>
-                  <option value="銀行振込">銀行振込</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">メモ</label>
-                <input
-                  type="text"
-                  placeholder="9月分月謝など"
-                  value={newSale.memo}
-                  onChange={(e) => setNewSale({ ...newSale, memo: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
-                />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
