@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 // --- 型定義 ---
 interface SaleRecord {
@@ -41,6 +43,17 @@ interface MemberTicketStatus {
 }
 
 export default function SalesPage() {
+  const pathname = usePathname();
+
+  // --- ナビゲーションメニュー設定 ---
+  const navItems = [
+    { label: '売上管理', href: '/sales', icon: '📊' },
+    { label: '顧客リスト', href: '/customers', icon: '📋' },
+    { label: 'タスク・議事録', href: '/tasks', icon: '📝' },
+    { label: '近隣情報', href: '/neighbors', icon: '📍' },
+    { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
+  ];
+
   // --- 目標金額（手入力・状態管理） ---
   const [monthlyTarget, setMonthlyTarget] = useState<number>(1000000); // 今月目標 (例: 100万円)
   const [yearlyTarget, setYearlyTarget] = useState<number>(12000000); // 今年度目標 (例: 1,200万円)
@@ -85,7 +98,7 @@ export default function SalesPage() {
     { id: 'm-4', parentName: '鈴木 一郎', studentName: '鈴木 拓海', totalPurchased: 5, remaining: 1 },
   ]);
 
-  // --- 集計ヘルパー関数 (担当者別内訳算出) ---
+  // --- 集計ヘルパー関数 ---
   const calcStaffBreakdown = (records: SaleRecord[]) => {
     let taka = 0;
     let nana = 0;
@@ -102,27 +115,21 @@ export default function SalesPage() {
     };
   };
 
-  // --- 各領域の集計 ---
-
-  // 1. 本日売上
+  // --- 集計データ算出 ---
   const todaySalesRecords = useMemo(() => salesHistory.filter(s => s.date === todayStr), [salesHistory, todayStr]);
   const todaySales = useMemo(() => todaySalesRecords.reduce((sum, s) => sum + s.amount, 0), [todaySalesRecords]);
 
-  // 2. 今月売上 (2026年10月固定計算) & 担当者別
   const currentMonthSalesRecords = useMemo(() => salesHistory.filter(s => s.date.startsWith('2026-10')), [salesHistory]);
   const currentMonthSales = useMemo(() => currentMonthSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentMonthSalesRecords]);
   const currentMonthStaff = useMemo(() => calcStaffBreakdown(currentMonthSalesRecords), [currentMonthSalesRecords]);
 
-  // 3. 今年度売上 (2026年度: 2026-04 〜 2027-03) & 担当者別
   const currentYearSalesRecords = useMemo(() => salesHistory.filter(s => s.date >= '2026-04-01' && s.date <= '2027-03-31'), [salesHistory]);
   const currentYearSales = useMemo(() => currentYearSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentYearSalesRecords]);
   const currentYearStaff = useMemo(() => calcStaffBreakdown(currentYearSalesRecords), [currentYearSalesRecords]);
 
-  // 今月回数券販売数 & 体験者数
   const monthlyTicketCount = useMemo(() => currentMonthSalesRecords.filter(s => s.productName.includes('回券')).length, [currentMonthSalesRecords]);
   const monthlyTrialCount = useMemo(() => trialClients.filter(t => t.date.startsWith('2026-10')).length, [trialClients]);
 
-  // 4. 期間指定フィルター（設定期間）での集計 & 担当者別
   const filteredSalesByDate = useMemo(() => {
     return salesHistory.filter(s => s.date >= startDate && s.date <= endDate);
   }, [salesHistory, startDate, endDate]);
@@ -133,7 +140,6 @@ export default function SalesPage() {
 
   const filteredStaffSummary = useMemo(() => calcStaffBreakdown(filteredSalesByDate), [filteredSalesByDate]);
 
-  // 商品別カウント（件数 & 金額）
   const productSummary = useMemo(() => {
     const map: { [key: string]: { count: number; total: number } } = {};
     filteredSalesByDate.forEach(s => {
@@ -146,7 +152,6 @@ export default function SalesPage() {
     return map;
   }, [filteredSalesByDate]);
 
-  // 5. 体験者コンバージョン（成約）率計算
   const trialConversionStats = useMemo(() => {
     const total = trialClients.length;
     const converted = trialClients.filter(t => t.converted).length;
@@ -154,7 +159,6 @@ export default function SalesPage() {
     return { total, converted, rate };
   }, [trialClients]);
 
-  // 6. 全体回数券消化率
   const ticketOverallStats = useMemo(() => {
     const totalPurchased = memberTickets.reduce((sum, m) => sum + m.totalPurchased, 0);
     const totalRemaining = memberTickets.reduce((sum, m) => sum + m.remaining, 0);
@@ -163,7 +167,6 @@ export default function SalesPage() {
     return { totalPurchased, totalRemaining, totalUsed, usedRate };
   }, [memberTickets]);
 
-  // 7. 過去アーカイブ売上（選択された年月） & 担当者別
   const archiveSalesRecords = useMemo(() => {
     const prefix = `${selectedArchiveYear}-${selectedArchiveMonth.padStart(2, '0')}`;
     return salesHistory.filter(s => s.date.startsWith(prefix));
@@ -174,19 +177,43 @@ export default function SalesPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800">
-      {/* ヘッダー */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3 flex justify-between items-center shadow">
-        <h1 className="text-xl font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
-        <nav className="flex gap-4 text-xs font-semibold">
-          <span className="bg-white text-[#5e9bc4] px-3 py-1 rounded shadow-sm font-bold">売上管理</span>
-          <span className="opacity-80 cursor-pointer hover:opacity-100">顧客カルテ</span>
-          <span className="opacity-80 cursor-pointer hover:opacity-100">タスク・議事録</span>
-        </nav>
+      {/* ナビゲーションバー (5つの各ページパスへ遷移) */}
+      <header className="bg-[#5e9bc4] text-white px-6 py-3 shadow border-b border-sky-600 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+          
+          {/* ロゴ / タイトル */}
+          <div className="flex items-center gap-2">
+            <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm shadow-sm">G</span>
+            <h1 className="text-lg font-extrabold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
+          </div>
+
+          {/* ナビゲーションボタンエリア (5機能) */}
+          <nav className="flex items-center gap-1.5 bg-sky-800/40 p-1 rounded-lg border border-white/20">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${
+                    isActive
+                      ? 'bg-white text-[#5e9bc4]'
+                      : 'text-sky-100 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <span>{item.icon}</span> {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+        </div>
       </header>
 
+      {/* 売上管理 メインコンテンツ */}
       <div className="p-6 max-w-7xl mx-auto space-y-6">
 
-        {/* 上部ステータスバー: Square同期状態 & 目標設定エリア */}
+        {/* 上部ステータスバー: Square自動連携 & 目標設定エリア */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg border border-slate-200 shadow-sm gap-4">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200">
@@ -223,7 +250,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 1. 売上サマリー & 目標達成プログレスバー (担当者毎内訳付き) */}
+        {/* 売上サマリー & 目標達成プログレスバー (担当者毎内訳付き) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* 本日売上 */}
@@ -305,7 +332,7 @@ export default function SalesPage() {
 
         </div>
 
-        {/* 2. 任意設定期間フィルター（何日〜何日）& 担当者毎売上 & 販売商品内訳 */}
+        {/* 任意設定期間フィルター & 担当者毎売上 & 販売商品内訳 */}
         <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
             <div>
@@ -335,16 +362,14 @@ export default function SalesPage() {
           {/* 指定期間のサマリー ＆ 担当者毎売上カード */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
-            {/* 設定期間内の売上合計 & 担当者毎売上（グラフィカル表示） */}
+            {/* 設定期間内の売上合計 & 担当者毎売上 */}
             <div className="bg-sky-50/50 p-4 rounded-lg border border-sky-100 space-y-3">
               <span className="text-xs font-bold text-slate-500 block">設定期間内の売上合計</span>
               <p className="text-2xl font-extrabold text-[#5e9bc4]">¥{filteredTotalAmount.toLocaleString()}</p>
 
-              {/* 担当者毎売上カード */}
               <div className="border-t border-sky-200 pt-2 space-y-2 text-xs">
                 <span className="font-bold text-slate-700 block">👨‍🏫 担当者毎売上 (設定期間内)</span>
                 
-                {/* TAKA */}
                 <div className="space-y-0.5">
                   <div className="flex justify-between items-center text-slate-700 font-bold">
                     <span className="text-sky-800">TAKA</span>
@@ -355,7 +380,6 @@ export default function SalesPage() {
                   </div>
                 </div>
 
-                {/* NANA */}
                 <div className="space-y-0.5 pt-1">
                   <div className="flex justify-between items-center text-slate-700 font-bold">
                     <span className="text-pink-800">NANA</span>
@@ -444,10 +468,10 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 3. 中段グリッド: キャンペーン効果 & 体験者管理 (コンバージョン率) */}
+        {/* キャンペーン効果 & 体験者管理 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-          {/* 左：キャンペーン効果・連動（議事録連携） */}
+          {/* 左：キャンペーン効果 */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2 flex justify-between items-center">
               <div>
@@ -481,7 +505,7 @@ export default function SalesPage() {
             </div>
           </div>
 
-          {/* 右：体験者管理 & 回数券購入率（コンバージョン集計） */}
+          {/* 右：体験者管理 (CVR) */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2 flex justify-between items-center">
               <div>
@@ -532,10 +556,10 @@ export default function SalesPage() {
 
         </div>
 
-        {/* 4. 下部：回数券消化進捗 & 過去売上アーカイブ (担当者毎内訳付き) */}
+        {/* 回数券消化進捗 & 過去売上アーカイブ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-          {/* 回数券消化進捗 (2カラム分) */}
+          {/* 回数券消化進捗 */}
           <div className="md:col-span-2 bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2 flex justify-between items-center">
               <div>
@@ -548,7 +572,6 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* 全体プログレスバー */}
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
               <div className="flex justify-between text-xs font-bold text-slate-600">
                 <span>発行累計: {ticketOverallStats.totalPurchased} 回</span>
@@ -559,7 +582,6 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* 会員別残り回数テーブル */}
             <table className="w-full text-xs text-left text-slate-600 border-collapse">
               <thead>
                 <tr className="border-b bg-slate-50 text-slate-500 font-bold">
@@ -594,7 +616,7 @@ export default function SalesPage() {
             </table>
           </div>
 
-          {/* 過去の売上（月・年）アーカイブ閲覧 & 担当者毎売上 */}
+          {/* 過去の売上アーカイブ */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
             <div className="border-b pb-2">
               <h3 className="font-bold text-slate-800 text-sm">📁 過去売上アーカイブ (担当者毎)</h3>
@@ -629,7 +651,6 @@ export default function SalesPage() {
                 </div>
               </div>
 
-              {/* アーカイブ集計結果表示エリア */}
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 mt-2">
                 <div className="flex justify-between items-baseline border-b border-slate-200 pb-2">
                   <span className="font-bold text-slate-600">{selectedArchiveYear}年{selectedArchiveMonth}月 売上</span>
