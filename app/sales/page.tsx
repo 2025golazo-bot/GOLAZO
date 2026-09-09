@@ -1,49 +1,48 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// --- 型定義 ---
-interface SaleRecord {
+// タスクの型定義
+interface Task {
   id: string;
+  title: string;
+  category: 'Instagram' | '週例業務' | 'キャンペーン議事録' | 'その他';
   date: string; // YYYY-MM-DD
-  time: string;
-  customerName: string; // 購入者名（保護者名等）
-  studentName?: string; // 対象受講生名
-  productName: string; // 商品名（10回券、単発等）
-  amount: number;
-  staff: 'TAKA' | 'NANA';
-  campaignName?: string; // 適用キャンペーン
-  squarePaymentId: string;
+  fiscalYear: number;
+  month: number;
+  status: '未着手' | '進行中' | '完了';
+  dueDateAlarm: boolean;
+  isImportant: boolean;
+  memo: string;
 }
 
-interface TrialClient {
+// 議事録内で登録する個別タスクの型
+interface SubTaskItem {
   id: string;
-  date: string;
-  name: string;
-  age: number;
-  staff: 'TAKA' | 'NANA';
-  converted: boolean; // 回数券購入有無
-  productPurchased?: string;
+  title: string;
+  dueDate: string;
+  assignee: string; // 担当者
 }
 
-interface CampaignSummary {
+// 議事録の型定義（複数タスク保持対応）
+interface MeetingMinutes {
   id: string;
-  name: string;
-  note: string; // 議事録メモ連携
+  title: string;          // 議事録タイトル
+  date: string;           // 開催日
+  participants: string;   // 参加者
+  agenda: string;         // アジェンダ・議題
+  decisions: string;      // 決定事項
+  freeMemo: string;       // 自由メモ・特記事項
+  subTasks: SubTaskItem[]; // 議事録から派生する複数のタスク
 }
 
-interface MemberTicketStatus {
-  id: string;
-  parentName: string;
-  studentName: string;
-  totalPurchased: number;
-  remaining: number;
-}
-
-export default function SalesPage() {
+export default function TasksPage() {
   const pathname = usePathname();
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
 
   // --- ナビゲーションメニュー設定 ---
   const navItems = [
@@ -54,129 +53,253 @@ export default function SalesPage() {
     { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
   ];
 
-  // --- 目標金額（手入力・状態管理） ---
-  const [monthlyTarget, setMonthlyTarget] = useState<number>(1000000); // 今月目標 (例: 100万円)
-  const [yearlyTarget, setYearlyTarget] = useState<number>(12000000); // 今年度目標 (例: 1,200万円)
-
-  // --- 期間指定フィルター（何日〜何日） ---
-  const todayStr = '2026-10-05'; // デモ用本日日付
-  const [startDate, setStartDate] = useState<string>('2026-10-01');
-  const [endDate, setEndDate] = useState<string>('2026-10-31');
-
-  // --- 過去売上表示用の選択 ---
-  const [selectedArchiveYear, setSelectedArchiveYear] = useState<string>('2026');
-  const [selectedArchiveMonth, setSelectedArchiveMonth] = useState<string>('10');
-
-  // --- Square自動連携売上データ (サンプル) ---
-  const [salesHistory] = useState<SaleRecord[]>([
-    { id: 's-1', date: '2026-10-05', time: '10:30', customerName: '藤田 奈々', studentName: '藤田 陸', productName: '10回券 (共通)', amount: 60000, staff: 'TAKA', campaignName: '秋の体験入会CP', squarePaymentId: 'sq_pay_998811' },
-    { id: 's-2', date: '2026-10-05', time: '14:00', customerName: '山田 太郎', studentName: '山田 花', productName: '5回券', amount: 32000, staff: 'NANA', squarePaymentId: 'sq_pay_772200' },
-    { id: 's-3', date: '2026-10-02', time: '16:15', customerName: '佐藤 健', studentName: '佐藤 翔', productName: '単発パーソナル', amount: 7500, staff: 'TAKA', squarePaymentId: 'sq_pay_554433' },
-    { id: 's-4', date: '2026-09-28', time: '11:00', customerName: '高橋 恵', studentName: '高橋 蓮', productName: '10回券 (共通)', amount: 60000, staff: 'NANA', campaignName: '秋の体験入会CP', squarePaymentId: 'sq_pay_112233' },
-    { id: 's-5', date: '2026-09-15', time: '15:30', customerName: '鈴木 一郎', studentName: '鈴木 拓海', productName: '5回券', amount: 32000, staff: 'TAKA', squarePaymentId: 'sq_pay_445566' },
+  // 状態管理
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
+  
+  // タスク一覧データ
+  const [tasks, setTasks] = useState<Task[]>([
+    {
+      id: '1',
+      title: 'ストーリー（過去投稿）',
+      category: 'Instagram',
+      date: '2026-09-07',
+      fiscalYear: 2026,
+      month: 9,
+      status: '未着手',
+      dueDateAlarm: true,
+      isImportant: false,
+      memo: '',
+    },
+    {
+      id: '2',
+      title: '秋のキャンペーン広告バナー作成',
+      category: 'キャンペーン議事録',
+      date: '2026-09-15',
+      fiscalYear: 2026,
+      month: 9,
+      status: '未着手',
+      dueDateAlarm: true,
+      isImportant: true,
+      memo: '議事録派生タスク',
+    },
   ]);
 
-  // --- 体験者データ ---
-  const [trialClients] = useState<TrialClient[]>([
-    { id: 't-1', date: '2026-10-04', name: '渡辺 颯太', age: 10, staff: 'TAKA', converted: true, productPurchased: '10回券' },
-    { id: 't-2', date: '2026-10-02', name: '伊藤 結衣', age: 7, staff: 'NANA', converted: false },
-    { id: 't-3', date: '2026-09-25', name: '小林 蒼空', age: 11, staff: 'TAKA', converted: true, productPurchased: '5回券' },
-    { id: 't-4', date: '2026-09-18', name: '加藤 陽菜', age: 9, staff: 'NANA', converted: true, productPurchased: '10回券' },
+  // 議事録データ
+  const [minutesList, setMinutesList] = useState<MeetingMinutes[]>([
+    {
+      id: 'min-1',
+      title: '秋の体験入会キャンペーン方針決定会議',
+      date: '2026-09-09',
+      participants: 'TAKA, NANA',
+      agenda: '1. 特典内容の確認\n2. 告知スケジュール',
+      decisions: '当日入会で10回券5,000円引き＋評価シート無料プレゼントに決定。',
+      freeMemo: 'SNS広告の予算配分も合わせて見直すこと。',
+      subTasks: [
+        { id: 'sub-1', title: '秋のキャンペーン広告バナー作成', dueDate: '2026-09-15', assignee: 'TAKA' },
+        { id: 'sub-2', title: 'LINE公式アカウントで一斉配信設定', dueDate: '2026-09-18', assignee: 'NANA' }
+      ]
+    }
   ]);
 
-  // --- 議事録連携キャンペーン情報 ---
-  const [campaigns] = useState<CampaignSummary[]>([
-    { id: 'c-1', name: '秋の体験入会CP', note: '体験当日入会で10回券 5,000円引き＋評価シート無料プレゼント' },
-    { id: 'c-2', name: '兄弟・家族紹介CP', note: 'ご紹介者様・ご新規様ともに1チケット進呈' }
-  ]);
+  // タブ切り替え ('list' | 'calendar' | 'minutes')
+  const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'minutes'>('list');
+  
+  // タスク登録・編集フォーム状態
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editForm, setEditForm] = useState<Partial<Task>>({
+    title: '',
+    category: 'Instagram',
+    date: '2026-09-01',
+    fiscalYear: 2026,
+    month: 9,
+    status: '未着手',
+    dueDateAlarm: false,
+    isImportant: false,
+    memo: '',
+  });
 
-  // --- 会員別 回数券保有・消化状況 ---
-  const [memberTickets] = useState<MemberTicketStatus[]>([
-    { id: 'm-1', parentName: '藤田 奈々', studentName: '藤田 陸 / 翔', totalPurchased: 20, remaining: 8 },
-    { id: 'm-2', parentName: '山田 太郎', studentName: '山田 花', totalPurchased: 10, remaining: 3 },
-    { id: 'm-3', parentName: '高橋 恵', studentName: '高橋 蓮', totalPurchased: 10, remaining: 7 },
-    { id: 'm-4', parentName: '鈴木 一郎', studentName: '鈴木 拓海', totalPurchased: 5, remaining: 1 },
-  ]);
+  // 議事録編集・新規フォーム状態（複数タスク入力欄つき）
+  const [selectedMinutesId, setSelectedMinutesId] = useState<string | null>(null);
+  const [isMinutesEditing, setIsMinutesEditing] = useState<boolean>(false);
+  const [minutesForm, setMinutesForm] = useState<Partial<MeetingMinutes>>({
+    title: '',
+    date: '2026-09-09',
+    participants: 'TAKA, NANA',
+    agenda: '',
+    decisions: '',
+    freeMemo: '',
+    subTasks: []
+  });
 
-  // --- 集計ヘルパー関数 ---
-  const calcStaffBreakdown = (records: SaleRecord[]) => {
-    let taka = 0;
-    let nana = 0;
-    records.forEach(s => {
-      if (s.staff === 'TAKA') taka += s.amount;
-      if (s.staff === 'NANA') nana += s.amount;
-    });
-    const total = taka + nana;
-    return {
-      taka,
-      nana,
-      takaRate: total > 0 ? ((taka / total) * 100).toFixed(0) : '0',
-      nanaRate: total > 0 ? ((nana / total) * 100).toFixed(0) : '0',
-    };
+  // 議事録フォーム内での一時的な「追加用タスク入力フィールド」
+  const [tempSubTaskTitle, setTempSubTaskTitle] = useState('');
+  const [tempSubTaskDate, setTempSubTaskDate] = useState('2026-09-15');
+  const [tempSubTaskAssignee, setTempSubTaskAssignee] = useState('TAKA');
+
+  // プリセット
+  const presetCampaignOptions = [
+    'キックオフミーティング決定事項',
+    'SNS広告運用方針のすり合わせ',
+    '夏期クリニック振り返り議事録',
+  ];
+
+  // フィルター
+  const filteredTasks = tasks.filter(
+    (task) => task.fiscalYear === selectedFiscalYear && task.month === selectedMonth
+  );
+
+  const uncompletedCampaignTasks = tasks.filter(
+    (task) => task.category === 'キャンペーン議事録' && task.status !== '完了'
+  );
+
+  // タスク保存処理
+  const handleSaveTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm.title) return;
+
+    if (selectedTaskId && isEditing) {
+      setTasks(tasks.map(t => t.id === selectedTaskId ? { ...t, ...editForm } as Task : t));
+    } else {
+      const newTask: Task = {
+        id: Date.now().toString(),
+        title: editForm.title || '無題のタスク',
+        category: editForm.category || 'その他',
+        date: editForm.date || '2026-09-01',
+        fiscalYear: editForm.fiscalYear || selectedFiscalYear,
+        month: editForm.month || selectedMonth,
+        status: editForm.status || '未着手',
+        dueDateAlarm: editForm.dueDateAlarm || false,
+        isImportant: editForm.isImportant || false,
+        memo: editForm.memo || '',
+      };
+      setTasks([...tasks, newTask]);
+    }
+    resetForm();
   };
 
-  // --- 集計データ算出 ---
-  const todaySalesRecords = useMemo(() => salesHistory.filter(s => s.date === todayStr), [salesHistory, todayStr]);
-  const todaySales = useMemo(() => todaySalesRecords.reduce((sum, s) => sum + s.amount, 0), [todaySalesRecords]);
-
-  const currentMonthSalesRecords = useMemo(() => salesHistory.filter(s => s.date.startsWith('2026-10')), [salesHistory]);
-  const currentMonthSales = useMemo(() => currentMonthSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentMonthSalesRecords]);
-  const currentMonthStaff = useMemo(() => calcStaffBreakdown(currentMonthSalesRecords), [currentMonthSalesRecords]);
-
-  const currentYearSalesRecords = useMemo(() => salesHistory.filter(s => s.date >= '2026-04-01' && s.date <= '2027-03-31'), [salesHistory]);
-  const currentYearSales = useMemo(() => currentYearSalesRecords.reduce((sum, s) => sum + s.amount, 0), [currentYearSalesRecords]);
-  const currentYearStaff = useMemo(() => calcStaffBreakdown(currentYearSalesRecords), [currentYearSalesRecords]);
-
-  const monthlyTicketCount = useMemo(() => currentMonthSalesRecords.filter(s => s.productName.includes('回券')).length, [currentMonthSalesRecords]);
-  const monthlyTrialCount = useMemo(() => trialClients.filter(t => t.date.startsWith('2026-10')).length, [trialClients]);
-
-  const filteredSalesByDate = useMemo(() => {
-    return salesHistory.filter(s => s.date >= startDate && s.date <= endDate);
-  }, [salesHistory, startDate, endDate]);
-
-  const filteredTotalAmount = useMemo(() => {
-    return filteredSalesByDate.reduce((sum, s) => sum + s.amount, 0);
-  }, [filteredSalesByDate]);
-
-  const filteredStaffSummary = useMemo(() => calcStaffBreakdown(filteredSalesByDate), [filteredSalesByDate]);
-
-  const productSummary = useMemo(() => {
-    const map: { [key: string]: { count: number; total: number } } = {};
-    filteredSalesByDate.forEach(s => {
-      if (!map[s.productName]) {
-        map[s.productName] = { count: 0, total: 0 };
-      }
-      map[s.productName].count += 1;
-      map[s.productName].total += s.amount;
+  const resetForm = () => {
+    setSelectedTaskId(null);
+    setIsEditing(false);
+    setEditForm({
+      title: '',
+      category: 'Instagram',
+      date: `${selectedFiscalYear}-${String(selectedMonth).padStart(2, '0')}-01`,
+      fiscalYear: selectedFiscalYear,
+      month: selectedMonth,
+      status: '未着手',
+      dueDateAlarm: false,
+      isImportant: false,
+      memo: '',
     });
-    return map;
-  }, [filteredSalesByDate]);
+  };
 
-  const trialConversionStats = useMemo(() => {
-    const total = trialClients.length;
-    const converted = trialClients.filter(t => t.converted).length;
-    const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0';
-    return { total, converted, rate };
-  }, [trialClients]);
+  const handleSelectTask = (task: Task) => {
+    setSelectedTaskId(task.id);
+    setEditForm(task);
+    setIsEditing(true);
+    setActiveTab('list');
+  };
 
-  const ticketOverallStats = useMemo(() => {
-    const totalPurchased = memberTickets.reduce((sum, m) => sum + m.totalPurchased, 0);
-    const totalRemaining = memberTickets.reduce((sum, m) => sum + m.remaining, 0);
-    const totalUsed = totalPurchased - totalRemaining;
-    const usedRate = totalPurchased > 0 ? ((totalUsed / totalPurchased) * 100).toFixed(1) : '0';
-    return { totalPurchased, totalRemaining, totalUsed, usedRate };
-  }, [memberTickets]);
+  // 議事録フォーム内：派生タスクの追加
+  const handleAddSubTaskToMinutes = () => {
+    if (!tempSubTaskTitle.trim()) return;
+    const newSub: SubTaskItem = {
+      id: `sub-${Date.now()}`,
+      title: tempSubTaskTitle,
+      dueDate: tempSubTaskDate,
+      assignee: tempSubTaskAssignee
+    };
+    setMinutesForm(prev => ({
+      ...prev,
+      subTasks: [...(prev.subTasks || []), newSub]
+    }));
+    setTempSubTaskTitle('');
+  };
 
-  const archiveSalesRecords = useMemo(() => {
-    const prefix = `${selectedArchiveYear}-${selectedArchiveMonth.padStart(2, '0')}`;
-    return salesHistory.filter(s => s.date.startsWith(prefix));
-  }, [salesHistory, selectedArchiveYear, selectedArchiveMonth]);
+  // 議事録フォーム内：派生タスクの削除
+  const handleRemoveSubTaskFromMinutes = (subId: string) => {
+    setMinutesForm(prev => ({
+      ...prev,
+      subTasks: (prev.subTasks || []).filter(s => s.id !== subId)
+    }));
+  };
 
-  const archiveSales = useMemo(() => archiveSalesRecords.reduce((sum, s) => sum + s.amount, 0), [archiveSalesRecords]);
-  const archiveStaffSummary = useMemo(() => calcStaffBreakdown(archiveSalesRecords), [archiveSalesRecords]);
+  // 議事録保存処理（サブタスクをメインのタスク一覧にも自動反映）
+  const handleSaveMinutes = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!minutesForm.title) return;
+
+    const currentSubTasks = minutesForm.subTasks || [];
+
+    if (selectedMinutesId && isMinutesEditing) {
+      // 編集
+      setMinutesList(minutesList.map(m => m.id === selectedMinutesId ? { ...m, ...minutesForm } as MeetingMinutes : m));
+    } else {
+      // 新規作成
+      const newMinutes: MeetingMinutes = {
+        id: `min-${Date.now()}`,
+        title: minutesForm.title || '無題の議事録',
+        date: minutesForm.date || '2026-09-09',
+        participants: minutesForm.participants || 'TAKA, NANA',
+        agenda: minutesForm.agenda || '',
+        decisions: minutesForm.decisions || '',
+        freeMemo: minutesForm.freeMemo || '',
+        subTasks: currentSubTasks
+      };
+      setMinutesList([newMinutes, ...minutesList]);
+    }
+
+    // 議事録に含まれる複数のサブタスクを、メインの「キャンペーン議事録」タスクとしても自動登録・同期する
+    const newlyGeneratedTasks: Task[] = currentSubTasks.map((sub, idx) => {
+      const d = new Date(sub.dueDate);
+      const fYear = !isNaN(d.getFullYear()) ? d.getFullYear() : selectedFiscalYear;
+      const fMonth = !isNaN(d.getMonth()) ? d.getMonth() + 1 : selectedMonth;
+      return {
+        id: `task-sub-${Date.now()}-${idx}`,
+        title: `[議事録タスク] ${sub.title} (担当: ${sub.assignee})`,
+        category: 'キャンペーン議事録',
+        date: sub.dueDate,
+        fiscalYear: fYear,
+        month: fMonth,
+        status: '未着手',
+        dueDateAlarm: true,
+        isImportant: true,
+        memo: `議事録「${minutesForm.title}」より派生`
+      };
+    });
+
+    if (newlyGeneratedTasks.length > 0) {
+      setTasks(prev => [...newlyGeneratedTasks, ...prev]);
+    }
+
+    resetMinutesForm();
+  };
+
+  const resetMinutesForm = () => {
+    setSelectedMinutesId(null);
+    setIsMinutesEditing(false);
+    setMinutesForm({
+      title: '',
+      date: '2026-09-09',
+      participants: 'TAKA, NANA',
+      agenda: '',
+      decisions: '',
+      freeMemo: '',
+      subTasks: []
+    });
+    setTempSubTaskTitle('');
+  };
+
+  const handleSelectMinutes = (minutes: MeetingMinutes) => {
+    setSelectedMinutesId(minutes.id);
+    setMinutesForm(minutes);
+    setIsMinutesEditing(true);
+  };
 
   return (
-    <div className="bg-slate-100 min-h-screen text-slate-800 pb-12">
+    <div className="min-h-screen bg-slate-100 font-sans pb-12">
       {/* 統一ヘッダーナビゲーション */}
       <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -203,453 +326,516 @@ export default function SalesPage() {
         </nav>
       </header>
 
-      {/* 売上管理 メインコンテンツ */}
+      {/* メインコンテンツエリア */}
       <main className="p-6 max-w-7xl mx-auto space-y-6">
+        <h2 className="text-xl font-bold text-slate-800">GOLAZO 業務タスク管理 & 議事録</h2>
 
-        {/* 上部ステータスバー: Square自動連携 & 目標設定エリア */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Square API 自動連携中 (最終同期: 本日 10:30)
-            </span>
-            <span className="text-xs text-slate-400">※Squareで決済された売上データがリアルタイム反映されます</span>
-          </div>
-
-          {/* 目標金額 手入力フォーム */}
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5">
-              <label className="font-bold text-slate-600">🎯 今月目標:</label>
-              <input
-                type="number"
-                step="10000"
-                value={monthlyTarget}
-                onChange={e => setMonthlyTarget(Number(e.target.value))}
-                className="w-28 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
-              />
-              <span className="text-slate-500">円</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <label className="font-bold text-slate-600">🏆 今年度目標:</label>
-              <input
-                type="number"
-                step="100000"
-                value={yearlyTarget}
-                onChange={e => setYearlyTarget(Number(e.target.value))}
-                className="w-32 border border-slate-300 rounded px-2 py-1 font-bold text-right text-slate-700 outline-none focus:ring-1 focus:ring-[#5e9bc4]"
-              />
-              <span className="text-slate-500">円</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 売上サマリー & 目標達成プログレスバー (担当者毎内訳付き) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-          {/* 本日売上 */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Today's Sales</span>
-            <div className="flex justify-between items-baseline">
-              <h2 className="text-3xl font-extrabold text-slate-800">¥{todaySales.toLocaleString()}</h2>
-              <span className="text-xs font-bold text-slate-500">{todayStr}</span>
-            </div>
-            <p className="text-[11px] text-slate-400">Square決済完了件数: {todaySalesRecords.length} 件</p>
-          </div>
-
-          {/* 今月売上 (月別) & 担当者毎売上 */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <div className="flex justify-between items-baseline">
-              <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">Monthly Progress (今月)</span>
-              <span className="text-xs font-bold bg-sky-100 text-[#5e9bc4] px-2 py-0.5 rounded">
-                達成率: {((currentMonthSales / (monthlyTarget || 1)) * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <h2 className="text-3xl font-extrabold text-[#5e9bc4]">¥{currentMonthSales.toLocaleString()}</h2>
-              <span className="text-xs text-slate-400">/ ¥{monthlyTarget.toLocaleString()}</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div
-                className="bg-[#5e9bc4] h-2 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (currentMonthSales / (monthlyTarget || 1)) * 100)}%` }}
-              ></div>
-            </div>
-
-            <div className="bg-sky-50/60 p-2.5 rounded border border-sky-100 text-xs space-y-1 mt-2">
-              <span className="font-bold text-slate-600 block text-[11px]">👤 今月の担当者別売上</span>
-              <div className="flex justify-between text-slate-700 font-semibold">
-                <span className="text-sky-800">TAKA: ¥{currentMonthStaff.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({currentMonthStaff.takaRate}%)</span></span>
-                <span className="text-pink-800">NANA: ¥{currentMonthStaff.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({currentMonthStaff.nanaRate}%)</span></span>
-              </div>
-            </div>
-
-            <div className="flex justify-between text-[11px] text-slate-500 pt-1">
-              <span>🎟️ 回数券販売: <strong>{monthlyTicketCount}</strong> 件</span>
-              <span>👟 体験者数: <strong>{monthlyTrialCount}</strong> 名</span>
-            </div>
-          </div>
-
-          {/* 今年度売上 (年度) & 担当者毎売上 */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <div className="flex justify-between items-baseline">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Annual Progress (今年度)</span>
-              <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                達成率: {((currentYearSales / (yearlyTarget || 1)) * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <h2 className="text-3xl font-extrabold text-emerald-800">¥{currentYearSales.toLocaleString()}</h2>
-              <span className="text-xs text-slate-400">/ ¥{yearlyTarget.toLocaleString()}</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div
-                className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (currentYearSales / (yearlyTarget || 1)) * 100)}%` }}
-              ></div>
-            </div>
-
-            <div className="bg-emerald-50/60 p-2.5 rounded border border-emerald-100 text-xs space-y-1 mt-2">
-              <span className="font-bold text-slate-600 block text-[11px]">👤 今年度の担当者別売上</span>
-              <div className="flex justify-between text-slate-700 font-semibold">
-                <span className="text-sky-800">TAKA: ¥{currentYearStaff.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({currentYearStaff.takaRate}%)</span></span>
-                <span className="text-pink-800">NANA: ¥{currentYearStaff.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({currentYearStaff.nanaRate}%)</span></span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400">2026年度 累計実績 (4月〜翌3月)</p>
-          </div>
-
-        </div>
-
-        {/* 任意設定期間フィルター & 担当者毎売上 & 販売商品内訳 */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
+        {/* 画面上部：未完了アラームバナー */}
+        {uncompletedCampaignTasks.length > 0 && (
+          <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 rounded-xl shadow-sm flex items-center justify-between text-xs">
             <div>
-              <h3 className="font-bold text-slate-800 text-sm">📅 設定期間 売上 & 担当者毎分析</h3>
-              <p className="text-[11px] text-slate-400">指定した期間内の売上合計・担当者毎の内訳・商品別販売件数を集計します</p>
+              <p className="font-bold text-sm">⚠️ キャンペーン議事録関連の未完了タスクがあります</p>
+              <p className="text-slate-600 mt-0.5">未完了のタスクが {uncompletedCampaignTasks.length} 件残っています。</p>
             </div>
+            <button 
+              onClick={() => setActiveTab('minutes')}
+              className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-amber-700 font-bold transition shadow-sm"
+            >
+              議事録ページで確認
+            </button>
+          </div>
+        )}
 
-            {/* 期間選択カレンダー */}
-            <div className="flex items-center gap-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
-              <span className="font-bold text-slate-600">設定期間:</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white outline-none"
-              />
-              <span className="text-slate-400">〜</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="border border-slate-300 rounded p-1 font-semibold text-slate-700 bg-white outline-none"
-              />
-            </div>
+        {/* コントロールパネル */}
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
+          <div className="flex items-center gap-3">
+            <label className="font-bold text-slate-700">📅 表示選択:</label>
+            <select 
+              value={selectedFiscalYear} 
+              onChange={(e) => setSelectedFiscalYear(Number(e.target.value))}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white font-bold text-[#5e9bc4] outline-none"
+            >
+              {[2024, 2025, 2026, 2027, 2028].map((year) => (
+                <option key={year} value={year}>{year}年度</option>
+              ))}
+            </select>
+
+            <select 
+              value={selectedMonth} 
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 bg-white font-bold text-[#5e9bc4] outline-none"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>{m}月度</option>
+              ))}
+            </select>
           </div>
 
-          {/* 指定期間のサマリー ＆ 担当者毎売上カード */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* 設定期間内の売上合計 & 担当者毎売上 */}
-            <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 space-y-3">
-              <span className="text-xs font-bold text-slate-500 block">設定期間内の売上合計</span>
-              <p className="text-2xl font-extrabold text-[#5e9bc4]">¥{filteredTotalAmount.toLocaleString()}</p>
-
-              <div className="border-t border-sky-200 pt-2 space-y-2 text-xs">
-                <span className="font-bold text-slate-700 block">👨‍🏫 担当者毎売上 (設定期間内)</span>
-                
-                <div className="space-y-0.5">
-                  <div className="flex justify-between items-center text-slate-700 font-bold">
-                    <span className="text-sky-800">TAKA</span>
-                    <span>¥{filteredStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({filteredStaffSummary.takaRate}%)</span></span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-sky-500 h-1.5" style={{ width: `${filteredStaffSummary.takaRate}%` }}></div>
-                  </div>
-                </div>
-
-                <div className="space-y-0.5 pt-1">
-                  <div className="flex justify-between items-center text-slate-700 font-bold">
-                    <span className="text-pink-800">NANA</span>
-                    <span>¥{filteredStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">({filteredStaffSummary.nanaRate}%)</span></span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-pink-400 h-1.5" style={{ width: `${filteredStaffSummary.nanaRate}%` }}></div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* 購入商品の件数サマリー */}
-            <div className="md:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-              <span className="text-xs font-bold text-slate-600 block">🛍️ 設定期間内の商品別 販売件数・内訳</span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {Object.keys(productSummary).length > 0 ? (
-                  Object.entries(productSummary).map(([pName, data]) => (
-                    <div key={pName} className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-xs">
-                      <span className="font-bold text-slate-800 block truncate">{pName}</span>
-                      <div className="flex justify-between items-baseline mt-1">
-                        <span className="text-sm font-extrabold text-[#5e9bc4]">{data.count} <span className="text-[10px] font-normal">件</span></span>
-                        <span className="text-[11px] text-slate-500">¥{data.total.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-slate-400 col-span-3 py-2">該当期間の購入商品はありません</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 期間内の購入者明細テーブル */}
-          <div className="space-y-2">
-            <h4 className="font-bold text-xs text-slate-700">🧾 購入日・商品購入者 明細一覧 ({filteredSalesByDate.length}件)</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left text-slate-600 border-collapse">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-slate-500 font-bold">
-                    <th className="py-2.5 px-3">購入日時</th>
-                    <th className="py-2.5 px-3">購入者名 (保護者)</th>
-                    <th className="py-2.5 px-3">受講生名</th>
-                    <th className="py-2.5 px-3">購入商品</th>
-                    <th className="py-2.5 px-3">金額</th>
-                    <th className="py-2.5 px-3">担当</th>
-                    <th className="py-2.5 px-3">適用キャンペーン</th>
-                    <th className="py-2.5 px-3">Square決済ID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSalesByDate.length > 0 ? (
-                    filteredSalesByDate.map(sale => (
-                      <tr key={sale.id} className="border-b hover:bg-slate-50 transition">
-                        <td className="py-2.5 px-3 font-semibold">{sale.date} <span className="text-slate-400 text-[10px]">{sale.time}</span></td>
-                        <td className="py-2.5 px-3 font-bold text-slate-800">{sale.customerName} 様</td>
-                        <td className="py-2.5 px-3 text-slate-600">{sale.studentName || '-'}</td>
-                        <td className="py-2.5 px-3 font-bold text-[#5e9bc4]">{sale.productName}</td>
-                        <td className="py-2.5 px-3 font-extrabold text-slate-800">¥{sale.amount.toLocaleString()}</td>
-                        <td className="py-2.5 px-3">
-                          <span className={`px-2 py-0.5 rounded font-bold ${sale.staff === 'TAKA' ? 'bg-sky-100 text-sky-800' : 'bg-pink-100 text-pink-800'}`}>
-                            {sale.staff}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {sale.campaignName ? (
-                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold text-[10px]">
-                              🏷️ {sale.campaignName}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">-</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400">{sale.squarePaymentId}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="py-6 text-center text-slate-400">選択された期間内の売上データはありません</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {/* タブ切り替え */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-2 rounded-lg font-bold transition ${
+                activeTab === 'list'
+                  ? 'bg-[#5e9bc4] text-white shadow-sm'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              タスク一覧・編集
+            </button>
+            <button
+              onClick={() => setActiveTab('calendar')}
+              className={`px-4 py-2 rounded-lg font-bold transition ${
+                activeTab === 'calendar'
+                  ? 'bg-[#5e9bc4] text-white shadow-sm'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              カレンダー表示
+            </button>
+            <button
+              onClick={() => setActiveTab('minutes')}
+              className={`px-4 py-2 rounded-lg font-bold relative transition ${
+                activeTab === 'minutes'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              📝 議事録詳細 ＆ 複数タスク登録
+              {uncompletedCampaignTasks.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                  {uncompletedCampaignTasks.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* キャンペーン効果 & 体験者管理 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* 左：キャンペーン効果 */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-800 text-sm">📣 キャンペーン効果 & 売上貢献度</h3>
-                <p className="text-[11px] text-slate-400">議事録で設定したキャンペーンの適用状況</p>
+        {/* --- タブ1: タスク一覧・編集 --- */}
+        {activeTab === 'list' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b pb-3">
+                <h3 className="font-bold text-slate-800 text-sm">{selectedFiscalYear}年度 {selectedMonth}月度 タスク一覧</h3>
+                <button 
+                  onClick={resetForm}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm"
+                >
+                  + 新規タスク追加
+                </button>
               </div>
-              <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold">議事録連動中</span>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b text-slate-500 font-bold">
+                      <th className="py-2.5 px-3">日付</th>
+                      <th className="py-2.5 px-3">カテゴリ</th>
+                      <th className="py-2.5 px-3">タスク名</th>
+                      <th className="py-2.5 px-3">ステータス</th>
+                      <th className="py-2.5 px-3">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTasks.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-8 text-slate-400">該当するタスクはありません。</td>
+                      </tr>
+                    ) : (
+                      filteredTasks.map((task) => (
+                        <tr key={task.id} className="border-b hover:bg-slate-50 transition">
+                          <td className="py-2.5 px-3 font-semibold text-slate-700">{task.date}</td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                              task.category === 'キャンペーン議事録' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}>
+                              {task.category}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-800 flex items-center gap-1.5">
+                            {task.isImportant && <span className="text-red-500" title="重要">⭐</span>}
+                            {task.title}
+                            {task.dueDateAlarm && <span className="text-sky-500 text-[10px]" title="期日アラーム">🔔</span>}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              task.status === '完了' ? 'bg-emerald-100 text-emerald-800' : 
+                              task.status === '進行中' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {task.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <button
+                              onClick={() => handleSelectTask(task)}
+                              className="font-bold text-[#5e9bc4] hover:underline"
+                            >
+                              詳細
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <div className="space-y-3">
-              {campaigns.map(cp => {
-                const appliedSales = salesHistory.filter(s => s.campaignName === cp.name);
-                const appliedCount = appliedSales.length;
-                const totalContribution = appliedSales.reduce((sum, s) => sum + s.amount, 0);
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4 text-xs">
+              <h3 className="font-bold text-slate-800 text-sm border-b pb-3">{isEditing ? 'タスク詳細・編集' : '新規タスク登録'}</h3>
+              <form onSubmit={handleSaveTask} className="space-y-3">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">カテゴリ</label>
+                  <select
+                    value={editForm.category}
+                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value as Task['category'] })}
+                    className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                  >
+                    <option value="Instagram">Instagram</option>
+                    <option value="週例業務">週例業務</option>
+                    <option value="キャンペーン議事録">キャンペーン議事録</option>
+                    <option value="その他">その他</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">タスク名</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.title || ''}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none"
+                    placeholder="例: ストーリー投稿"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">日付</label>
+                    <input
+                      type="date"
+                      value={editForm.date || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const d = new Date(val);
+                        setEditForm({ 
+                          ...editForm, 
+                          date: val,
+                          fiscalYear: !isNaN(d.getFullYear()) ? d.getFullYear() : editForm.fiscalYear,
+                          month: !isNaN(d.getMonth()) ? d.getMonth() + 1 : editForm.month
+                        });
+                      }}
+                      className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">ステータス</label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Task['status'] })}
+                      className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                    >
+                      <option value="未着手">未着手</option>
+                      <option value="進行中">進行中</option>
+                      <option value="完了">完了</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2 py-2 border-t border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="importantCheck"
+                      checked={editForm.isImportant || false}
+                      onChange={(e) => setEditForm({ ...editForm, isImportant: e.target.checked })}
+                      className="w-4 h-4 text-red-600 rounded border-slate-300"
+                    />
+                    <label htmlFor="importantCheck" className="font-bold cursor-pointer text-red-600">⭐ 重要タスクに設定</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="alarmCheck"
+                      checked={editForm.dueDateAlarm || false}
+                      onChange={(e) => setEditForm({ ...editForm, dueDateAlarm: e.target.checked })}
+                      className="w-4 h-4 text-sky-600 rounded border-slate-300"
+                    />
+                    <label htmlFor="alarmCheck" className="font-bold cursor-pointer text-slate-700">🔔 期日アラームを設定</label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">メモ欄</label>
+                  <textarea
+                    value={editForm.memo || ''}
+                    onChange={(e) => setEditForm({ ...editForm, memo: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 h-20 text-slate-800 outline-none resize-none"
+                    placeholder="詳細や特記事項を記入..."
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-[#5e9bc4] hover:bg-sky-600 text-white py-2.5 rounded-lg font-bold transition shadow-sm"
+                  >
+                    {isEditing ? '変更を保存' : '追加する'}
+                  </button>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="px-4 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 font-bold transition"
+                    >
+                      キャンセル
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* --- タブ2: カレンダー表示 --- */}
+        {activeTab === 'calendar' && (
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm">{selectedFiscalYear}年度 {selectedMonth}月度 カレンダー</h3>
+              <p className="text-xs text-slate-400 mt-0.5">カレンダー内のタスクをクリックすると、該当タスクの詳細・編集画面に移行します。</p>
+            </div>
+            
+            <div className="grid grid-cols-7 gap-2">
+              {['日', '月', '火', '水', '木', '金', '土'].map((day, idx) => (
+                <div key={idx} className="text-center font-bold text-xs bg-slate-50 py-2 rounded-lg text-slate-600 border border-slate-200">{day}</div>
+              ))}
+              {Array.from({ length: 31 }, (_, i) => {
+                const dayNum = i + 1;
+                const dateStr = `${selectedFiscalYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                const dayTasks = filteredTasks.filter(t => t.date === dateStr);
 
                 return (
-                  <div key={cp.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-200 space-y-2 text-xs">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-amber-900 text-sm">🏷️ {cp.name}</span>
-                      <span className="bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded text-[11px]">
-                        売上貢献: ¥{totalContribution.toLocaleString()}
-                      </span>
-                    </div>
-                    <p className="text-slate-600 text-[11px] bg-white p-2 rounded-lg border border-amber-100">{cp.note}</p>
-                    <div className="text-right text-slate-500 font-bold">
-                      適用件数: <span className="text-amber-800 text-sm">{appliedCount}</span> 件
+                  <div key={i} className="min-h-[110px] border border-slate-200 rounded-xl p-2 flex flex-col bg-white overflow-hidden shadow-sm">
+                    <span className="text-xs font-bold text-slate-400 mb-1">{dayNum}</span>
+                    <div className="flex flex-col gap-1 overflow-y-auto">
+                      {dayTasks.map(task => (
+                        <button
+                          key={task.id}
+                          onClick={() => handleSelectTask(task)}
+                          className={`text-left text-[11px] p-1.5 rounded-lg truncate transition font-bold ${
+                            task.category === 'キャンペーン議事録' ? 'bg-purple-100 text-purple-900 border border-purple-200' : 'bg-sky-50 text-sky-900 border border-sky-100'
+                          }`}
+                          title={task.title}
+                        >
+                          {task.isImportant && '⭐'}{task.dueDateAlarm && '🔔'} {task.title}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+        )}
 
-          {/* 右：体験者管理 (CVR) */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-800 text-sm">👟 体験者一覧 & 入会成約率 (CVR)</h3>
-                <p className="text-[11px] text-slate-400">体験レッスンから回数券購入への転換率</p>
+        {/* --- タブ3: 議事録詳細 ＆ 複数タスク登録 --- */}
+        {activeTab === 'minutes' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 左側：保存済み議事録一覧 */}
+            <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b pb-3">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span>📝</span> キャンペーン・会議 議事録一覧
+                </h3>
+                <button 
+                  onClick={resetMinutesForm}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm"
+                >
+                  + 新規議事録作成
+                </button>
               </div>
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 block font-bold">体験成約率 (CVR)</span>
-                <span className="text-base font-extrabold text-[#5e9bc4]">{trialConversionStats.rate}%</span>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <table className="w-full text-xs text-left text-slate-600 border-collapse">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-slate-500">
-                    <th className="py-2 px-2">体験日</th>
-                    <th className="py-2 px-2">体験者名</th>
-                    <th className="py-2 px-2">年齢</th>
-                    <th className="py-2 px-2">担当</th>
-                    <th className="py-2 px-2">回数券購入</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trialClients.map(tc => (
-                    <tr key={tc.id} className="border-b">
-                      <td className="py-2 px-2 font-semibold">{tc.date}</td>
-                      <td className="py-2 px-2 font-bold text-slate-800">{tc.name} 様</td>
-                      <td className="py-2 px-2">{tc.age} 歳</td>
-                      <td className="py-2 px-2 font-bold text-slate-600">{tc.staff}</td>
-                      <td className="py-2 px-2">
-                        {tc.converted ? (
-                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                            ✅ 成約 ({tc.productPurchased})
-                          </span>
+              <div className="space-y-4">
+                {minutesList.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-8">登録されている議事録はありません。</p>
+                ) : (
+                  minutesList.map((m) => (
+                    <div key={m.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-purple-900 text-sm">{m.title}</span>
+                        <span className="text-slate-400 font-semibold">{m.date}</span>
+                      </div>
+                      <p className="text-slate-600"><strong>参加者:</strong> {m.participants}</p>
+                      
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                        <p className="font-bold text-slate-700">【決定事項】</p>
+                        <p className="text-slate-800 whitespace-pre-wrap">{m.decisions || '未記入'}</p>
+                      </div>
+
+                      {/* 議事録に紐づく複数タスクの表示 */}
+                      <div className="space-y-1.5 pt-1">
+                        <p className="font-bold text-purple-800">📋 この議事録から登録されたタスク ({m.subTasks?.length || 0}件)</p>
+                        {(!m.subTasks || m.subTasks.length === 0) ? (
+                          <p className="text-slate-400">登録されたタスクはありません</p>
                         ) : (
-                          <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded font-bold">
-                            未購入
-                          </span>
+                          <div className="space-y-1">
+                            {m.subTasks.map(sub => (
+                              <div key={sub.id} className="bg-purple-50/70 border border-purple-100 p-2 rounded-lg flex justify-between items-center">
+                                <span className="font-bold text-slate-800">📌 {sub.title}</span>
+                                <span className="text-slate-500 font-semibold">期日: {sub.dueDate} (担当: {sub.assignee})</span>
+                              </div>
+                            ))}
+                          </div>
                         )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      </div>
 
-        </div>
-
-        {/* 回数券消化進捗 & 過去売上アーカイブ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-          {/* 回数券消化進捗 */}
-          <div className="md:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-800 text-sm">🎫 会員別 回数券消化進捗 & 全体消化率</h3>
-                <p className="text-[11px] text-slate-400">会員ごとの残りチケット数と全体の消費スピード</p>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 block font-bold">全体消化率</span>
-                <span className="text-base font-extrabold text-emerald-700">{ticketOverallStats.usedRate}%</span>
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={() => handleSelectMinutes(m)}
+                          className="bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg font-bold transition shadow-sm"
+                        >
+                          内容を編集する
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-              <div className="flex justify-between text-xs font-bold text-slate-600">
-                <span>発行累計: {ticketOverallStats.totalPurchased} 回</span>
-                <span>消化済み: {ticketOverallStats.totalUsed} 回 / 残り: {ticketOverallStats.totalRemaining} 回</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${ticketOverallStats.usedRate}%` }}></div>
-              </div>
-            </div>
-
-            <table className="w-full text-xs text-left text-slate-600 border-collapse">
-              <thead>
-                <tr className="border-b bg-slate-50 text-slate-500 font-bold">
-                  <th className="py-2 px-2">保護者名</th>
-                  <th className="py-2 px-2">受講生（お子様）</th>
-                  <th className="py-2 px-2">累計購入回数</th>
-                  <th className="py-2 px-2">残り回数</th>
-                  <th className="py-2 px-2">ステータス</th>
-                </tr>
-              </thead>
-              <tbody>
-                {memberTickets.map(m => (
-                  <tr key={m.id} className="border-b">
-                    <td className="py-2 px-2 font-bold text-slate-800">{m.parentName} 様</td>
-                    <td className="py-2 px-2">{m.studentName}</td>
-                    <td className="py-2 px-2 font-bold text-slate-600">{m.totalPurchased} 回</td>
-                    <td className="py-2 px-2 font-extrabold text-[#5e9bc4]">{m.remaining} 回</td>
-                    <td className="py-2 px-2">
-                      {m.remaining <= 2 ? (
-                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold text-[10px]">
-                          ⚠️ 次回追加提案対象
-                        </span>
-                      ) : (
-                        <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold text-[10px]">
-                          正常
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 過去の売上アーカイブ */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-            <div className="border-b pb-2">
-              <h3 className="font-bold text-slate-800 text-sm">📁 過去売上アーカイブ (担当者毎)</h3>
-              <p className="text-[11px] text-slate-400">過去の月別実績確認</p>
-            </div>
-
-            <div className="flex gap-2 text-xs">
-              <select
-                value={selectedArchiveYear}
-                onChange={e => setSelectedArchiveYear(e.target.value)}
-                className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white outline-none flex-1"
-              >
-                <option value="2026">2026年</option>
-                <option value="2025">2025年</option>
-              </select>
-              <select
-                value={selectedArchiveMonth}
-                onChange={e => setSelectedArchiveMonth(e.target.value)}
-                className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white outline-none flex-1"
-              >
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={String(i + 1)}>{i + 1}月</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
-              <div className="flex justify-between items-baseline">
-                <span className="font-bold text-slate-600">{selectedArchiveYear}年{selectedArchiveMonth}月 売上合計</span>
-                <span className="text-xl font-extrabold text-[#5e9bc4]">¥{archiveSales.toLocaleString()}</span>
-              </div>
-
-              <div className="border-t border-slate-200 pt-2 space-y-1.5">
-                <span className="font-bold text-slate-700 block text-[11px]">👤 担当者別実績</span>
-                <div className="flex justify-between font-semibold">
-                  <span className="text-sky-800">TAKA: ¥{archiveStaffSummary.taka.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.takaRate}%)</span></span>
-                  <span className="text-pink-800">NANA: ¥{archiveStaffSummary.nana.toLocaleString()} <span className="text-[10px] text-slate-400">({archiveStaffSummary.nanaRate}%)</span></span>
+            {/* 右側：議事録作成フォーム ＆ 複数タスク追加機能 */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4 text-xs">
+              <h3 className="font-bold text-slate-800 text-sm border-b pb-3">
+                {isMinutesEditing ? '議事録の編集' : '新規議事録 ＆ 複数タスク登録'}
+              </h3>
+              <form onSubmit={handleSaveMinutes} className="space-y-3">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">議事録タイトル</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="例: 10月度プロモーション戦略会議"
+                    value={minutesForm.title || ''}
+                    onChange={(e) => setMinutesForm({ ...minutesForm, title: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none focus:ring-1 focus:ring-purple-500"
+                  />
                 </div>
-              </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">開催日</label>
+                    <input
+                      type="date"
+                      value={minutesForm.date || ''}
+                      onChange={(e) => setMinutesForm({ ...minutesForm, date: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">参加者</label>
+                    <input
+                      type="text"
+                      placeholder="TAKA, NANA"
+                      value={minutesForm.participants || ''}
+                      onChange={(e) => setMinutesForm({ ...minutesForm, participants: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">決定事項</label>
+                  <textarea
+                    rows={2}
+                    placeholder="会議で決定した内容を記入..."
+                    value={minutesForm.decisions || ''}
+                    onChange={(e) => setMinutesForm({ ...minutesForm, decisions: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 outline-none resize-none"
+                  />
+                </div>
+
+                {/* --- 別建て：複数のタスク登録エリア --- */}
+                <div className="border border-purple-200 bg-purple-50/40 p-3 rounded-xl space-y-3">
+                  <label className="block font-bold text-purple-900 text-xs">📋 議事録から派生するタスク登録（複数追加可能）</label>
+                  
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="タスク名 (例: バナー作成)"
+                      value={tempSubTaskTitle}
+                      onChange={(e) => setTempSubTaskTitle(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        value={tempSubTaskDate}
+                        onChange={(e) => setTempSubTaskDate(e.target.value)}
+                        className="border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="担当者 (例: TAKA)"
+                        value={tempSubTaskAssignee}
+                        onChange={(e) => setTempSubTaskAssignee(e.target.value)}
+                        className="border border-slate-300 rounded-lg p-2 bg-white text-slate-800 outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSubTaskToMinutes}
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white py-1.5 rounded-lg font-bold transition shadow-sm text-xs"
+                    >
+                      + このタスクをリストに追加する
+                    </button>
+                  </div>
+
+                  {/* 追加されたサブタスクの一覧（フォーム内） */}
+                  <div className="space-y-1.5 pt-1">
+                    {(minutesForm.subTasks || []).length === 0 ? (
+                      <p className="text-[11px] text-slate-400 text-center">まだタスクが追加されていません</p>
+                    ) : (
+                      (minutesForm.subTasks || []).map(sub => (
+                        <div key={sub.id} className="bg-white border border-purple-200 p-2 rounded-lg flex justify-between items-center text-[11px]">
+                          <div>
+                            <span className="font-bold text-slate-800">📌 {sub.title}</span>
+                            <span className="text-slate-500 block">期日: {sub.dueDate} / 担当: {sub.assignee}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSubTaskFromMinutes(sub.id)}
+                            className="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-lg font-bold transition shadow-sm"
+                  >
+                    {isMinutesEditing ? '議事録の変更を保存' : '議事録を保存 ＆ タスクを一括登録'}
+                  </button>
+                  {isMinutesEditing && (
+                    <button
+                      type="button"
+                      onClick={resetMinutesForm}
+                      className="px-4 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 font-bold transition"
+                    >
+                      キャンセル
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
           </div>
-
-        </div>
-
+        )}
       </main>
     </div>
   );
