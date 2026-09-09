@@ -4,23 +4,23 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-interface NeighborItem {
+interface EventItem {
   id: string;
-  category: 'sports' | 'medical' | 'food' | 'facility' | 'other';
+  category: 'school' | 'tournament' | 'festival' | 'other';
   categoryLabel: string;
-  name: string;
-  description: string;
-  address: string;
-  phone: string;
-  url: string;
-  mapUrl?: string;
+  title: string;          // イベント名
+  organizer: string;      // 学校・チーム・主催者名
+  targetArea: string;     // 対象区・地域
+  eventDate: string;      // 開催日
+  description: string;    // 詳細・メモ
+  url: string;            // 詳細URL
   notes: { id: string; text: string; taskDate?: string; isDone?: boolean }[];
 }
 
-export default function NeighborsPage() {
+export default function LocalEventsPage() {
   const pathname = usePathname();
 
-  // --- ナビゲーションメニュー設定 (共通) ---
+  // --- ナビゲーションメニュー設定 ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/customers', icon: '📋' },
@@ -32,10 +32,9 @@ export default function NeighborsPage() {
   // --- カテゴリ定義 ---
   const categories = [
     { key: 'all', label: 'すべて' },
-    { key: 'sports', label: 'スポーツ・グラウンド' },
-    { key: 'medical', label: '医療・整体' },
-    { key: 'food', label: '飲食店・栄養' },
-    { key: 'facility', label: '周辺施設' },
+    { key: 'school', label: '学校行事（運動会等）' },
+    { key: 'tournament', label: '大会・マッチ' },
+    { key: 'festival', label: '地域イベント・祭り' },
     { key: 'other', label: 'その他' },
   ];
 
@@ -43,92 +42,90 @@ export default function NeighborsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [neighbors, setNeighbors] = useState<NeighborItem[]>([
+  const [events, setEvents] = useState<EventItem[]>([
     {
-      id: 'n-1',
-      category: 'sports',
-      categoryLabel: 'スポーツ・グラウンド',
-      name: '赤羽スポーツの森公園競技場',
-      description: 'ジュニアサッカースクールやトレーニングイベントの会場候補',
-      address: '東京都北区赤羽西5-2-27',
-      phone: '03-3906-4171',
-      url: 'https://www.city.kita.tokyo.jp/shisetsu/sports/akabanesports.html',
-      mapUrl: 'https://maps.google.com/?q=赤羽スポーツの森公園競技場',
+      id: 'e-1',
+      category: 'school',
+      categoryLabel: '学校行事（運動会等）',
+      title: '秋季大運動会',
+      organizer: '浮間小学校',
+      targetArea: '北区',
+      eventDate: '2026-10-10',
+      description: '体験レッスンチラシの配布タイミング要検討。前週に集客アプローチを実施する。',
+      url: '',
       notes: [
-        { id: 'nt-1', text: '10月のイベント予約抽選申し込み日を確認する', taskDate: '2026-09-15', isDone: false },
-        { id: 'nt-2', text: '人工芝ピッチの使用ルールおよび設備利用料のヒアリング完了', isDone: true },
+        { id: 'nt-1', text: '校門前チラシ配布の許可申請確認', taskDate: '2026-09-25', isDone: false },
       ],
     },
     {
-      id: 'n-2',
-      category: 'medical',
-      categoryLabel: '医療・整体',
-      name: '赤羽整形外科整形リハビリクリニック',
-      description: 'クライアントのケガ・スポーツ障害時の連携・紹介先候補',
-      address: '東京都北区赤羽1-XX-X',
-      phone: '03-1234-5678',
-      url: 'https://example.com/clinic',
-      mapUrl: 'https://maps.google.com/?q=赤羽整形外科',
+      id: 'e-2',
+      category: 'tournament',
+      categoryLabel: '大会・マッチ',
+      title: '北区ジュニアサッカー秋季大会',
+      organizer: '北区サッカー協会',
+      targetArea: '北区',
+      eventDate: '2026-10-18',
+      description: '赤羽スポーツの森公園で開催。ブース出展および協賛の打診を行う。',
+      url: 'https://example.com/tournament',
       notes: [
-        { id: 'nt-3', text: '提携・情報共有についての問い合わせメール送信', isDone: false },
+        { id: 'nt-2', text: '主催者へ協賛案のメール送信', isDone: true },
       ],
     },
   ]);
 
   // 新規追加用フォーム状態
   const [formData, setFormData] = useState({
-    category: 'sports' as NeighborItem['category'],
-    name: '',
+    category: 'school' as EventItem['category'],
+    title: '',
+    organizer: '',
+    targetArea: '北区',
+    eventDate: '',
     description: '',
-    address: '',
-    phone: '',
     url: '',
-    mapUrl: '',
   });
 
   // フィルタリング処理（カテゴリ ＆ 検索キーワード）
-  const filteredNeighbors = neighbors.filter(item => {
+  const filteredEvents = events.filter(item => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const q = searchQuery.toLowerCase();
     const matchesSearch =
-      item.name.toLowerCase().includes(q) ||
+      item.title.toLowerCase().includes(q) ||
+      item.organizer.toLowerCase().includes(q) ||
       item.description.toLowerCase().includes(q) ||
-      item.address.toLowerCase().includes(q) ||
-      item.phone.includes(q);
+      item.targetArea.toLowerCase().includes(q);
 
     return matchesCategory && matchesSearch;
   });
 
   // 保存（追加）処理
-  const handleAddNeighbor = (e: React.FormEvent) => {
+  const handleAddEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) return;
+    if (!formData.title || !formData.organizer) return;
 
     const catObj = categories.find(c => c.key === formData.category);
-    const newItem: NeighborItem = {
+    const newItem: EventItem = {
       ...formData,
-      id: `n-${Date.now()}`,
+      id: `e-${Date.now()}`,
       categoryLabel: catObj ? catObj.label : 'その他',
-      mapUrl: formData.mapUrl || (formData.address ? `https://maps.google.com/?q=${encodeURIComponent(formData.address)}` : ''),
       notes: [],
     };
 
-    setNeighbors([newItem, ...neighbors]);
+    setEvents([newItem, ...events]);
     setFormData({
-      category: 'sports',
-      name: '',
+      category: 'school',
+      title: '',
+      organizer: '',
+      targetArea: '北区',
+      eventDate: '',
       description: '',
-      address: '',
-      phone: '',
       url: '',
-      mapUrl: '',
     });
   };
 
   // 削除処理
   const handleDelete = (id: string) => {
-    if (confirm('この近隣情報を削除しますか？')) {
-      setNeighbors(neighbors.filter(item => item.id !== id));
+    if (confirm('このイベント情報を削除しますか？')) {
+      setEvents(events.filter(item => item.id !== id));
     }
   };
 
@@ -171,14 +168,14 @@ export default function NeighborsPage() {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <span>📍</span> 近隣情報・連携施設管理
+                <span>🏆</span> 近隣学校・チーム・イベント情報
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                ジム周辺のグラウンド、医療機関、提携店舗、イベント会場などの情報と連携メモを管理します。
+                周辺学校の運動会や地域のスポーツ大会・イベント日程を管理し、集客施策や販促活動に活用します。
               </p>
             </div>
             <span className="bg-sky-50 text-[#5e9bc4] px-3 py-1 rounded-full text-xs font-bold border border-sky-100">
-              登録件数: {neighbors.length} 件
+              登録件数: {events.length} 件
             </span>
           </div>
 
@@ -192,7 +189,7 @@ export default function NeighborsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="施設名、住所、電話番号、概要から検索..."
+                placeholder="イベント名、学校・団体名、メモなどから検索..."
                 className="w-full pl-20 pr-4 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] text-slate-700 transition"
               />
             </div>
@@ -219,10 +216,10 @@ export default function NeighborsPage() {
         {/* 2カラムレイアウト: 左一覧 / 右フォーム */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* 左側: 近隣情報カード一覧 (2カラム分) */}
+          {/* 左側: イベントカード一覧 (2カラム分) */}
           <div className="lg:col-span-2 space-y-4">
-            {filteredNeighbors.length > 0 ? (
-              filteredNeighbors.map(item => (
+            {filteredEvents.length > 0 ? (
+              filteredEvents.map(item => (
                 <div key={item.id} className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4 hover:border-sky-200 transition">
                   {/* カード見出し */}
                   <div className="flex justify-between items-start border-b border-slate-100 pb-3">
@@ -231,13 +228,14 @@ export default function NeighborsPage() {
                         <span className="bg-sky-50 text-[#5e9bc4] text-[10px] font-extrabold px-2 py-0.5 rounded border border-sky-100">
                           {item.categoryLabel}
                         </span>
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded">
+                          対象: {item.targetArea}
+                        </span>
                       </div>
-                      <h3 className="text-base font-extrabold text-slate-800">{item.name}</h3>
-                      {item.description && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          {item.description}
-                        </p>
-                      )}
+                      <h3 className="text-base font-extrabold text-slate-800">{item.title}</h3>
+                      <p className="text-xs font-bold text-sky-700 mt-0.5">
+                        🏫 学校・主催: {item.organizer}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -249,29 +247,15 @@ export default function NeighborsPage() {
                     </div>
                   </div>
 
-                  {/* 住所・連絡先情報グリッド */}
+                  {/* 開催日・詳細グリッド */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <div className="flex items-center gap-1.5 col-span-1 md:col-span-2">
-                      <span className="text-slate-400">📍 住所:</span>
-                      <span className="font-medium text-slate-700">{item.address || '-'}</span>
-                      {item.mapUrl && (
-                        <a
-                          href={item.mapUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="ml-auto text-[11px] bg-white border border-slate-200 hover:bg-slate-100 text-[#5e9bc4] font-bold px-2 py-0.5 rounded flex items-center gap-0.5 shadow-sm"
-                        >
-                          🗺️ Googleマップで開く
-                        </a>
-                      )}
-                    </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">📞 電話:</span>
-                      <span className="font-bold text-slate-700">{item.phone || '-'}</span>
+                      <span className="text-slate-400">📅 開催日:</span>
+                      <span className="font-extrabold text-slate-800">{item.eventDate || '未定'}</span>
                     </div>
                     {item.url && (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-slate-400">🔗 公式Web:</span>
+                        <span className="text-slate-400">🔗 詳細URL:</span>
                         <a
                           href={item.url}
                           target="_blank"
@@ -282,11 +266,19 @@ export default function NeighborsPage() {
                         </a>
                       </div>
                     )}
+                    {item.description && (
+                      <div className="col-span-1 md:col-span-2 pt-1 text-slate-600">
+                        <span className="text-slate-400 block mb-0.5">💬 イベント詳細・メモ:</span>
+                        <p className="bg-white p-2 rounded border border-slate-200 text-xs">
+                          {item.description}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* メモ & タスク連携 */}
+                  {/* 連携タスク */}
                   <div className="space-y-2 pt-1">
-                    <span className="text-[11px] font-bold text-slate-500 block">📝 連携メモ & タスク</span>
+                    <span className="text-[11px] font-bold text-slate-500 block">📝 アプローチ・タスク</span>
                     {item.notes.length > 0 ? (
                       <div className="space-y-1.5">
                         {item.notes.map(note => (
@@ -299,7 +291,7 @@ export default function NeighborsPage() {
                             </span>
                             {note.taskDate && (
                               <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded">
-                                📌 タスク化 ({note.taskDate} / {note.isDone ? '完了' : '未着手'})
+                                📌 期限: {note.taskDate} ({note.isDone ? '完了' : '未完了'})
                               </span>
                             )}
                           </div>
@@ -307,7 +299,7 @@ export default function NeighborsPage() {
                       </div>
                     ) : (
                       <div className="text-[11px] text-slate-400 italic bg-slate-50/50 p-2 rounded border border-dashed border-slate-200">
-                        メモ・関連タスクはまだ登録されていません。
+                        関連タスクはまだ登録されていません。
                       </div>
                     )}
                   </div>
@@ -315,83 +307,88 @@ export default function NeighborsPage() {
               ))
             ) : (
               <div className="bg-white p-12 text-center text-slate-400 rounded-lg border border-slate-200 text-xs">
-                該当する近隣情報が見つかりません。
+                該当するイベント情報が見つかりません。
               </div>
             )}
           </div>
 
-          {/* 右側: 新規情報の追加フォーム (1カラム分) */}
+          {/* 右側: 新規イベント情報の登録フォーム (1カラム分) */}
           <div>
             <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4 sticky top-20">
               <h3 className="font-extrabold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
-                <span>➕</span> 新規近隣情報の追加
+                <span>➕</span> 新規イベント情報の登録
               </h3>
 
-              <form onSubmit={handleAddNeighbor} className="space-y-3 text-xs">
+              <form onSubmit={handleAddEvent} className="space-y-3 text-xs">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">カテゴリ</label>
+                  <label className="block font-bold text-slate-700 mb-1">種別</label>
                   <select
                     value={formData.category}
-                    onChange={e => setFormData({ ...formData, category: e.target.value as NeighborItem['category'] })}
+                    onChange={e => setFormData({ ...formData, category: e.target.value as EventItem['category'] })}
                     className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] bg-white"
                   >
-                    <option value="sports">スポーツ・グラウンド</option>
-                    <option value="medical">医療・整体</option>
-                    <option value="food">飲食店・栄養</option>
-                    <option value="facility">周辺施設</option>
+                    <option value="school">学校行事（運動会等）</option>
+                    <option value="tournament">大会・マッチ</option>
+                    <option value="festival">地域イベント・祭り</option>
                     <option value="other">その他</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    施設・店舗名 <span className="text-rose-500">*</span>
+                    学校・チーム名 <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="例: 赤羽スポーツの森公園"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="例: 浮間小学校、赤羽FC"
+                    value={formData.organizer}
+                    onChange={e => setFormData({ ...formData, organizer: e.target.value })}
                     className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">概要・用途</label>
-                  <textarea
-                    rows={2}
-                    placeholder="例: サッカースクールのグラウンド利用候補"
-                    value={formData.description}
-                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">住所</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    イベント名 <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="東京都北区..."
-                    value={formData.address}
-                    onChange={e => setFormData({ ...formData, address: e.target.value })}
+                    required
+                    placeholder="例: 運動会、秋季ジュニア大会"
+                    value={formData.title}
+                    onChange={e => setFormData({ ...formData, title: e.target.value })}
                     className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">電話番号</label>
+                  <label className="block font-bold text-slate-700 mb-1">対象区・地域</label>
+                  <select
+                    value={formData.targetArea}
+                    onChange={e => setFormData({ ...formData, targetArea: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4] bg-white"
+                  >
+                    <option value="北区">北区</option>
+                    <option value="板橋区">板橋区</option>
+                    <option value="足立区">足立区</option>
+                    <option value="川口市">川口市</option>
+                    <option value="その他">その他</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">開催日</label>
                   <input
-                    type="text"
-                    placeholder="03-0000-0000"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                    type="date"
+                    value={formData.eventDate}
+                    onChange={e => setFormData({ ...formData, eventDate: e.target.value })}
                     className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">公式Webサイト URL</label>
+                  <label className="block font-bold text-slate-700 mb-1">詳細URL (任意)</label>
                   <input
                     type="url"
                     placeholder="https://"
@@ -402,12 +399,12 @@ export default function NeighborsPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Googleマップ URL (任意)</label>
-                  <input
-                    type="url"
-                    placeholder="https://maps.google.com/..."
-                    value={formData.mapUrl}
-                    onChange={e => setFormData({ ...formData, mapUrl: e.target.value })}
+                  <label className="block font-bold text-slate-700 mb-1">メモ・施策メモ</label>
+                  <textarea
+                    rows={3}
+                    placeholder="例: チラシ配布のタイミング、協賛打診など"
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                     className="w-full border border-slate-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]"
                   />
                 </div>
@@ -416,7 +413,7 @@ export default function NeighborsPage() {
                   type="submit"
                   className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-extrabold py-2.5 rounded-lg shadow-sm transition text-xs mt-2 cursor-pointer"
                 >
-                  保存する
+                  イベント情報を追加する
                 </button>
               </form>
             </div>
