@@ -21,7 +21,7 @@ export default function VendorsPage() {
   // --- ナビゲーションメニュー設定 (共通) ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
-    { label: '顧客リスト', href: '/customers', icon: '📋' },
+    { label: '顧客リスト', href: '/clients', icon: '📋' },
     { label: 'タスク・議事録', href: '/tasks', icon: '📝' },
     { label: '近隣情報', href: '/local-info', icon: '📍' },
     { label: 'マシン・業者一覧', href: '/vendors', icon: '🏋️' },
