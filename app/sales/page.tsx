@@ -45,7 +45,7 @@ interface MemberTicketStatus {
 export default function SalesPage() {
   const pathname = usePathname();
 
-  // --- ナビゲーションメニュー設定 ---
+  // --- ナビゲーションメニュー設定 (/task-managerと完全統一) ---
   const navItems = [
     { label: '売上管理', href: '/sales', icon: '📊' },
     { label: '顧客リスト', href: '/clients', icon: '📋' },
@@ -55,10 +55,10 @@ export default function SalesPage() {
   ];
 
   // --- 目標金額（手入力・状態管理） ---
-  const [monthlyTarget, setMonthlyTarget] = useState<number>(1000000); // 今月目標 (例: 100万円)
-  const [yearlyTarget, setYearlyTarget] = useState<number>(12000000); // 今年度目標 (例: 1,200万円)
+  const [monthlyTarget, setMonthlyTarget] = useState<number>(1000000); // 今月目標 (100万円)
+  const [yearlyTarget, setYearlyTarget] = useState<number>(12000000); // 今年度目標 (1,200万円)
 
-  // --- 期間指定フィルター（何日〜何日） ---
+  // --- 期間指定フィルター ---
   const todayStr = '2026-10-05'; // デモ用本日日付
   const [startDate, setStartDate] = useState<string>('2026-10-01');
   const [endDate, setEndDate] = useState<string>('2026-10-31');
@@ -84,7 +84,7 @@ export default function SalesPage() {
     { id: 't-4', date: '2026-09-18', name: '加藤 陽菜', age: 9, staff: 'NANA', converted: true, productPurchased: '10回券' },
   ]);
 
-  // --- 議事録連携キャンペーン情報 ---
+  // --- キャンペーン情報 ---
   const [campaigns] = useState<CampaignSummary[]>([
     { id: 'c-1', name: '秋の体験入会CP', note: '体験当日入会で10回券 5,000円引き＋評価シート無料プレゼント' },
     { id: 'c-2', name: '兄弟・家族紹介CP', note: 'ご紹介者様・ご新規様ともに1チケット進呈' }
@@ -177,7 +177,7 @@ export default function SalesPage() {
 
   return (
     <div style={{ display: 'contents' }}>
-      {/* 共通レイアウト上の重複ナビゲーションを確実に隠すためのグローバルCSS制御 */}
+      {/* 共通レイアウト上の重複ナビゲーションを確実に隠すためのCSS */}
       <style jsx global>{`
         header nav, 
         body > header, 
@@ -188,30 +188,35 @@ export default function SalesPage() {
       `}</style>
 
       <div className="bg-slate-100 min-h-screen text-slate-800 pb-12">
-        {/* 統一ヘッダーナビゲーション */}
-        <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
+        {/* /task-manager と完全に統一されたヘッダーデザイン */}
+        <header className="bg-[#5e9bc4] text-white px-6 py-3 flex justify-between items-center shadow-md sticky top-0 z-50">
           <div className="flex items-center gap-3">
-            <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
-            <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
+            <span className="bg-white text-[#5e9bc4] px-2 py-1 rounded font-black text-xs shadow-sm">G</span>
+            <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
           </div>
-          <nav className="flex gap-2 text-xs font-semibold">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
-                      : 'bg-white/10 text-white hover:bg-white/20 border border-white/30'
-                  }`}
-                >
-                  <span>{item.icon}</span> {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="flex items-center gap-3">
+            <span className="bg-white/20 px-3 py-1 rounded text-xs font-bold border border-white/30 text-white">
+              管理システム
+            </span>
+            <nav className="flex gap-1 text-xs font-semibold">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`px-3 py-1.5 rounded transition flex items-center gap-1 ${
+                      isActive
+                        ? 'bg-white text-[#5e9bc4] font-bold shadow-sm'
+                        : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
+                    }`}
+                  >
+                    <span>{item.icon}</span> {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         </header>
 
         {/* 売上管理 メインコンテンツ */}
@@ -259,7 +264,7 @@ export default function SalesPage() {
 
             {/* 本日売上 */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Today's Sales</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">TODAY'S SALES</span>
               <div className="flex justify-between items-baseline">
                 <h2 className="text-3xl font-extrabold text-slate-800">¥{todaySales.toLocaleString()}</h2>
                 <span className="text-xs font-bold text-slate-500">{todayStr}</span>
@@ -270,7 +275,7 @@ export default function SalesPage() {
             {/* 今月売上 (月別) & 担当者毎売上 */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
               <div className="flex justify-between items-baseline">
-                <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">Monthly Progress (今月)</span>
+                <span className="text-xs font-bold text-[#5e9bc4] uppercase tracking-wider">MONTHLY PROGRESS (今月)</span>
                 <span className="text-xs font-bold bg-sky-100 text-[#5e9bc4] px-2 py-0.5 rounded">
                   達成率: {((currentMonthSales / (monthlyTarget || 1)) * 100).toFixed(1)}%
                 </span>
@@ -303,7 +308,7 @@ export default function SalesPage() {
             {/* 今年度売上 (年度) & 担当者毎売上 */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
               <div className="flex justify-between items-baseline">
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Annual Progress (今年度)</span>
+                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">ANNUAL PROGRESS (今年度)</span>
                 <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
                   達成率: {((currentYearSales / (yearlyTarget || 1)) * 100).toFixed(1)}%
                 </span>
@@ -336,7 +341,7 @@ export default function SalesPage() {
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
               <div>
-                <h3 className="font-bold text-slate-800 text-sm">📅 設定期間 売上 & 担当者毎分析</h3>
+                <h3 className="font-bold text-slate-800 text-sm">📊 設定期間 売上 & 担当者毎分析</h3>
                 <p className="text-[11px] text-slate-400">指定した期間内の売上合計・担当者毎の内訳・商品別販売件数を集計します</p>
               </div>
 
@@ -631,7 +636,7 @@ export default function SalesPage() {
                 >
                   <option value="2025">2025年</option>
                   <option value="2026">2026年</option>
-                </Link>
+                </select>
                 <select
                   value={selectedArchiveMonth}
                   onChange={e => setSelectedArchiveMonth(e.target.value)}
