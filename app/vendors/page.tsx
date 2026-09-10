@@ -155,7 +155,7 @@ export default function MachineMakersPage() {
     alert('新しいマシン業者を登録しました！');
   };
 
-  // 編集内容の保存
+  // 編集内容の保存（修正ボタンの処理）
   const handleSaveEdit = () => {
     setMakers(prev =>
       prev.map(m => {
@@ -175,21 +175,7 @@ export default function MachineMakersPage() {
         };
       })
     );
-    alert('業者情報を更新しました！');
-  };
-
-  // 業者の削除
-  const handleDeleteMaker = (id: string) => {
-    if (makers.length <= 1) {
-      alert('これ以上削除できません（最低1件の業者データが必要です）。');
-      return;
-    }
-    if (!confirm('このマシン業者データを削除しますか？')) return;
-
-    const remaining = makers.filter(m => m.id !== id);
-    setMakers(remaining);
-    setSelectedMakerId(remaining[0].id);
-    setIsCreatingNew(false);
+    alert('業者情報を修正・更新しました！');
   };
 
   // 名刺画像のアップロード（取り込み直し）
@@ -404,12 +390,13 @@ export default function MachineMakersPage() {
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    {/* 修正ボタン（ヘッダー部分にも配置：編集タブへ移動して直感的に修正可能） */}
+                    <div>
                       <button
-                        onClick={() => handleDeleteMaker(currentMaker.id)}
-                        className="text-xs text-rose-500 hover:text-white hover:bg-rose-500 border border-rose-200 px-3 py-1.5 rounded-lg transition font-bold"
+                        onClick={() => setActiveTab('edit')}
+                        className="bg-[#5e9bc4] hover:bg-sky-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1"
                       >
-                        🗑️ この業者を削除
+                        <span>✏️</span> 情報を修正する
                       </button>
                     </div>
                   </div>
@@ -423,7 +410,7 @@ export default function MachineMakersPage() {
                       💳 名刺画像 (表・裏)
                     </button>
                     <button onClick={() => setActiveTab('edit')} className={`pb-3 border-b-2 transition ${activeTab === 'edit' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                      ✏️ 基本情報・メモの編集
+                      ✏️ 基本情報・メモの修正
                     </button>
                   </div>
                 </div>
@@ -432,14 +419,30 @@ export default function MachineMakersPage() {
                 {activeTab === 'details' && (
                   <div className="space-y-6">
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📝</span> 総合メモ</h3>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📝</span> 総合メモ</h3>
+                        <button
+                          onClick={() => setActiveTab('edit')}
+                          className="text-[11px] text-[#5e9bc4] font-bold hover:underline"
+                        >
+                          ✏️ メモを修正
+                        </button>
+                      </div>
                       <p className="text-xs text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-200">
                         {currentMaker.memo || 'メモはありません'}
                       </p>
                     </div>
 
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📌</span> 独立した3つのメモ欄</h3>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📌</span> 独立した3つのメモ欄</h3>
+                        <button
+                          onClick={() => setActiveTab('edit')}
+                          className="text-[11px] text-[#5e9bc4] font-bold hover:underline"
+                        >
+                          ✏️ メモ欄を修正
+                        </button>
+                      </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                         <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 space-y-1.5">
                           <span className="font-bold text-[#5e9bc4] block">メモ欄 ①</span>
@@ -560,12 +563,12 @@ export default function MachineMakersPage() {
                   </div>
                 )}
 
-                {/* TAB 3: 基本情報・3つのメモの編集 */}
+                {/* TAB 3: 基本情報・3つのメモの編集（修正画面） */}
                 {activeTab === 'edit' && (
                   <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
                     <div className="border-b pb-3">
-                      <h3 className="font-bold text-slate-800 text-sm">✏️ 基本情報・3つのメモ欄の編集</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">業者情報および3つの独立したメモ欄を自由に変更できます。</p>
+                      <h3 className="font-bold text-slate-800 text-sm">✏️ 基本情報・3つのメモ欄の修正</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">業者情報および3つの独立したメモ欄を自由に変更・修正できます。</p>
                     </div>
 
                     <div className="space-y-4 text-xs">
@@ -631,8 +634,9 @@ export default function MachineMakersPage() {
                         </div>
                       </div>
 
-                      <button onClick={handleSaveEdit} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg transition shadow-sm">
-                        変更を保存する
+                      {/* 修正内容の保存ボタン */}
+                      <button onClick={handleSaveEdit} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-3 rounded-lg transition shadow-sm text-sm">
+                        ✏️ 修正内容を保存する
                       </button>
                     </div>
                   </div>
