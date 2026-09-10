@@ -1,10 +1,8 @@
-// app/clients/page.tsx
 'use client';
 
 import React, { useState } from 'react';
 import Header from '@/components/Header';
 
-// 顧客データの型定義
 type Client = {
   id: number;
   name: string;
@@ -18,7 +16,6 @@ type Client = {
 };
 
 export default function ClientsPage() {
-  // サンプル初期データ（必要に応じて既存のデータやAPI連携に差し替えてください）
   const [clients, setClients] = useState<Client[]>([
     {
       id: 1,
@@ -42,23 +39,16 @@ export default function ClientsPage() {
       lastVisit: '2026-09-07',
       memo: '姿勢改善・ピラティス希望。肩こり軽減傾向あり。',
     },
-    {
-      id: 3,
-      name: '鈴木 一郎',
-      kana: 'スズキ イチロウ',
-      phone: '070-1111-2222',
-      email: 'suzuki@example.com',
-      status: 'pending',
-      plan: '体験レッスン',
-      lastVisit: '2026-08-20',
-      memo: '体験後、入会検討中。',
-    },
   ]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // 編集用のステート（編集中のクライアントID、およびフォームデータ）
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   // 新規登録フォーム用のステート
   const [newClient, setNewClient] = useState({
@@ -70,7 +60,6 @@ export default function ClientsPage() {
     memo: '',
   });
 
-  // 検索・フィルタリング処理
   const filteredClients = clients.filter((client) => {
     const matchesSearch =
       client.name.includes(searchTerm) ||
@@ -80,7 +69,7 @@ export default function ClientsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  // 顧客の新規追加ハンドラー
+  // 新規顧客追加
   const handleAddClient = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClient.name) return;
@@ -102,9 +91,37 @@ export default function ClientsPage() {
     setIsModalOpen(false);
   };
 
+  // 顧客情報の更新（編集保存）
+  const handleUpdateClient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient) return;
+
+    setClients(
+      clients.map((c) => (c.id === editingClient.id ? editingClient : c))
+    );
+    setEditingClient(null);
+  };
+
+  // 顧客の削除
+  const handleDeleteClient = (id: number) => {
+    if (confirm('本当にこの顧客データを削除しますか？')) {
+      setClients(clients.filter((c) => c.id !== id));
+      if (selectedClient?.id === id) setSelectedClient(null);
+    }
+  };
+
+  // Square手動同期のシミュレーションハンドラー
+  const handleSquareSync = async () => {
+    setIsSyncing(true);
+    // 実際のAPI連携処理（例: fetch('/api/square/sync') など）をここに記述できます
+    setTimeout(() => {
+      setIsSyncing(false);
+      alert('Squareの最新決済・顧客データの同期が完了しました！');
+    }, 1200);
+  };
+
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* 共通ヘッダーのインクルード */}
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
@@ -118,12 +135,22 @@ export default function ClientsPage() {
               ジムの会員情報やカルテ、連絡先を一覧で管理します。
             </p>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center gap-2"
-          >
-            <span>＋</span> 新規顧客追加
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleSquareSync}
+              disabled={isSyncing}
+              className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <span>{isSyncing ? '⏳' : '🔄'}</span>
+              {isSyncing ? '同期中...' : 'Square手動同期'}
+            </button>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex-1 sm:flex-none bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2"
+            >
+              <span>＋</span> 新規顧客追加
+            </button>
+          </div>
         </div>
 
         {/* 検索・フィルターツールバー */}
@@ -207,12 +234,26 @@ export default function ClientsPage() {
                       </td>
                       <td className="p-4 text-slate-600 text-xs">{client.lastVisit}</td>
                       <td className="p-4 text-right">
-                        <button
-                          onClick={() => setSelectedClient(client)}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-[#5e9bc4] hover:text-white rounded-lg text-xs font-semibold transition text-slate-700"
-                        >
-                          詳細カルテ
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedClient(client)}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-[#5e9bc4] hover:text-white rounded-lg text-xs font-semibold transition text-slate-700"
+                          >
+                            カルテ
+                          </button>
+                          <button
+                            onClick={() => setEditingClient(client)}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-500 hover:text-white rounded-lg text-xs font-semibold transition text-slate-700"
+                          >
+                            編集
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClient(client.id)}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-500 hover:text-white rounded-lg text-xs font-semibold transition text-slate-700"
+                          >
+                            削除
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -232,15 +273,10 @@ export default function ClientsPage() {
       {/* 新規顧客追加モーダル */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="font-bold text-lg text-slate-800">新規顧客の登録</h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-lg"
-              >
-                ✕
-              </button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
             </div>
             <form onSubmit={handleAddClient} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -293,7 +329,7 @@ export default function ClientsPage() {
                 <select
                   value={newClient.plan}
                   onChange={(e) => setNewClient({ ...newClient, plan: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50 bg-white"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
                 >
                   <option value="月4回コース">月4回コース</option>
                   <option value="月8回コース">月8回コース</option>
@@ -309,21 +345,127 @@ export default function ClientsPage() {
                   value={newClient.memo}
                   onChange={(e) => setNewClient({ ...newClient, memo: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
-                ></textarea>
+                />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold transition"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold transition shadow-sm"
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
                 >
                   登録する
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 顧客情報編集モーダル */}
+      {editingClient && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">顧客情報の編集</h3>
+              <button onClick={() => setEditingClient(null)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <form onSubmit={handleUpdateClient} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">お名前 *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingClient.name}
+                    onChange={(e) => setEditingClient({ ...editingClient, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">フリガナ</label>
+                  <input
+                    type="text"
+                    value={editingClient.kana}
+                    onChange={(e) => setEditingClient({ ...editingClient, kana: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">電話番号</label>
+                  <input
+                    type="text"
+                    value={editingClient.phone}
+                    onChange={(e) => setEditingClient({ ...editingClient, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">メールアドレス</label>
+                  <input
+                    type="email"
+                    value={editingClient.email}
+                    onChange={(e) => setEditingClient({ ...editingClient, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ステータス</label>
+                  <select
+                    value={editingClient.status}
+                    onChange={(e) => setEditingClient({ ...editingClient, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  >
+                    <option value="active">アクティブ</option>
+                    <option value="pending">体験・検討</option>
+                    <option value="archived">アーカイブ</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">契約プラン</label>
+                  <select
+                    value={editingClient.plan}
+                    onChange={(e) => setEditingClient({ ...editingClient, plan: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  >
+                    <option value="月4回コース">月4回コース</option>
+                    <option value="月8回コース">月8回コース</option>
+                    <option value="通い放題コース">通い放題コース</option>
+                    <option value="体験レッスン">体験レッスン</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">トレーニングカルテ・メモ</label>
+                <textarea
+                  rows={3}
+                  value={editingClient.memo}
+                  onChange={(e) => setEditingClient({ ...editingClient, memo: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingClient(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold shadow-sm"
+                >
+                  更新する
                 </button>
               </div>
             </form>
@@ -334,25 +476,20 @@ export default function ClientsPage() {
       {/* 詳細カルテモーダル */}
       {selectedClient && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-lg text-slate-800">{selectedClient.name}</h3>
                 <p className="text-xs text-slate-400">{selectedClient.kana}</p>
               </div>
-              <button
-                onClick={() => setSelectedClient(null)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-lg"
-              >
-                ✕
-              </button>
+              <button onClick={() => setSelectedClient(null)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
             </div>
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl">
                 <div>
                   <span className="text-xs text-slate-400 block">ステータス</span>
                   <span className="font-semibold text-emerald-600">
-                    {selectedClient.status === 'active' ? 'アクティブ会員' : 'その他'}
+                    {selectedClient.status === 'active' ? 'アクティブ会員' : selectedClient.status === 'pending' ? '体験・検討中' : 'アーカイブ'}
                   </span>
                 </div>
                 <div>
@@ -377,7 +514,7 @@ export default function ClientsPage() {
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setSelectedClient(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold transition"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold"
               >
                 閉じる
               </button>
