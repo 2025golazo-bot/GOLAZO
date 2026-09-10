@@ -96,7 +96,7 @@ export default function ClientsPage() {
       age: 11,
       birthdate: '2015-05-12',
       firstLessonDate: '2026-03-01',
-      lastReservationDate: '2026-08-20', // 1ヶ月以上前（1ヶ月未予約アラート対象）
+      lastReservationDate: '2026-08-20', // 1ヶ月以上前
       concern: 'サッカーでの体幹ブレ・走力向上',
       target: 'トレセン選出・ブレない軸作り',
       memo: '右足首捻挫の既往歴あり。兄。',
@@ -134,7 +134,7 @@ export default function ClientsPage() {
       age: 8,
       birthdate: '2018-09-20',
       firstLessonDate: '2026-04-10',
-      lastReservationDate: '2026-09-01', // 2週間以上前（2週間未予約アラート対象）
+      lastReservationDate: '2026-09-01', // 2週間以上前
       concern: '運動神経向上・ボール感覚',
       target: 'アジリティUP',
       memo: '弟。リズムトレーニングを好む。',
@@ -182,7 +182,7 @@ export default function ClientsPage() {
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
-  const [useTicket, setUseTicket] = useState<boolean>(true); // 回数券を使うかどうか
+  const [useTicket, setUseTicket] = useState<boolean>(true);
 
   // 編集用ステート
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -207,7 +207,6 @@ export default function ClientsPage() {
     const alerts: { text: string; type: 'warning' | 'danger' }[] = [];
     const today = new Date();
 
-    // 1. 予約状況アラート（最終予約日からの経過日数）
     if (student.lastReservationDate) {
       const lastRes = new Date(student.lastReservationDate);
       const diffDays = Math.floor((today.getTime() - lastRes.getTime()) / (1000 * 60 * 60 * 24));
@@ -218,7 +217,6 @@ export default function ClientsPage() {
       }
     }
 
-    // 2. 3ヶ月測定アラート（初回レッスン日基準）
     if (student.firstLessonDate) {
       const firstDate = new Date(student.firstLessonDate);
       const diffMonths = (today.getFullYear() - firstDate.getFullYear()) * 12 + (today.getMonth() - firstDate.getMonth());
@@ -227,7 +225,6 @@ export default function ClientsPage() {
       }
     }
 
-    // 3. 回数券残数アラート（残り1回以下）
     if (parent.ticketRemaining <= 1) {
       alerts.push({ text: `🎫 回数券残り ${parent.ticketRemaining} 回`, type: 'danger' });
     }
@@ -259,7 +256,6 @@ export default function ClientsPage() {
     }
   };
 
-  // セッション追加（回数券利用を選択していれば自動減算）
   const handleAddSession = () => {
     if (!newSessionContent) return;
     const newSession: Session = {
@@ -286,7 +282,6 @@ export default function ClientsPage() {
     alert('セッションを登録しました！');
   };
 
-  // セッション更新
   const handleSaveEditSession = (sessionId: string) => {
     setStudents(prev =>
       prev.map(s => {
@@ -301,7 +296,6 @@ export default function ClientsPage() {
     alert('セッション記録を更新しました');
   };
 
-  // セッション削除
   const handleDeleteSession = (sessionId: string) => {
     if (!confirm('このセッション記録を削除しますか？')) return;
     setStudents(prev =>
@@ -315,7 +309,6 @@ export default function ClientsPage() {
     );
   };
 
-  // 新規計測日追加
   const handleAddNewMeasureDate = () => {
     if (!newMeasureDate) return;
     if (currentStudent.physicalHistory.some(m => m.date === newMeasureDate)) {
@@ -345,7 +338,6 @@ export default function ClientsPage() {
     alert(`計測日 (${newMeasureDate}) を追加しました！`);
   };
 
-  // 計測データ削除
   const handleDeleteMeasureDate = (targetDate: string) => {
     if (currentStudent.physicalHistory.length <= 1) {
       alert('これ以上削除できません（最低1件の計測データが必要です）。');
@@ -367,7 +359,6 @@ export default function ClientsPage() {
     }
   };
 
-  // 写真アップロード・差し替え
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -404,7 +395,6 @@ export default function ClientsPage() {
     e.target.value = '';
   };
 
-  // 写真削除
   const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
     if (!confirm('この姿勢写真を削除しますか？')) return;
     setStudents(prev =>
@@ -460,7 +450,6 @@ export default function ClientsPage() {
     alert('基本情報を更新しました');
   };
 
-  // フィルター
   const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
   const availableMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
@@ -494,16 +483,21 @@ export default function ClientsPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* ヘッダー */}
+      {/* 完全な共通ヘッダーナビゲーション */}
       <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">GOLAZO</span>
-          <h1 className="text-lg font-bold tracking-wider">パーソナルジム GOLAZO 管理システム</h1>
+          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">G</span>
+          <div>
+            <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
+            <p className="text-[10px] opacity-80">マネジメントシステム</p>
+          </div>
         </div>
-        <nav className="flex gap-2 text-xs font-semibold">
-          <button className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">売上管理</button>
-          <button className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition">顧客カルテ</button>
-          <button className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">タスク・議事録</button>
+        <nav className="flex gap-1.5 text-xs font-semibold">
+          <a href="/sales" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">売上管理</a>
+          <a href="/clients" className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition">顧客リスト</a>
+          <a href="/task-manager" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">タスク・議事録</a>
+          <a href="/neighborhood" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">近隣情報</a>
+          <a href="/machines" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">マシン・薬剤一覧</a>
         </nav>
       </header>
 
@@ -545,7 +539,6 @@ export default function ClientsPage() {
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">保護者: {parent?.name}</p>
                     
-                    {/* リスト側の警告バッジ表示 */}
                     {badges.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {badges.map((b, i) => (
@@ -582,7 +575,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* アラートバッジ群（メイン画面上部） */}
+                {/* アラートバッジ群 */}
                 {currentAlerts.length > 0 && (
                   <div className="flex flex-col gap-1.5">
                     {currentAlerts.map((alt, idx) => (
@@ -630,7 +623,7 @@ export default function ClientsPage() {
             {activeTab === 'carte' && (
               <div className="space-y-6">
 
-                {/* 新規セッション記録の追加（回数券利用選択機能付き） */}
+                {/* 新規セッション記録の追加 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✍️</span> 新規セッション記録の追加</h3>
@@ -673,7 +666,7 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                {/* 時系列セッション履歴（編集・削除ボタン付き） */}
+                {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📅</span> 時系列セッション履歴</h3>
@@ -724,7 +717,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 3ヶ月定期計測・写真比較・差し替え・削除セクション */}
+                {/* 3ヶ月定期計測・写真比較 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
                   <div className="border-b pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
@@ -740,7 +733,6 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 比較セレクター ＆ 削除ボタン */}
                   <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                       <div className="flex items-center gap-1 flex-1">
@@ -763,7 +755,6 @@ export default function ClientsPage() {
                     </button>
                   </div>
 
-                  {/* 数値変化 */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     {beforePhysical && (
                       <div className="bg-slate-50 p-3.5 rounded-xl border space-y-2">
@@ -794,7 +785,7 @@ export default function ClientsPage() {
                     )}
                   </div>
 
-                  {/* 姿勢写真（差し替え＆削除ボタン完備） */}
+                  {/* 姿勢写真 */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700">📸 姿勢写真 比較 & 差し替え・削除</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -807,7 +798,6 @@ export default function ClientsPage() {
                           <div key={key} className="bg-slate-50 border rounded-xl p-3.5 space-y-2">
                             <span className="font-bold text-xs text-slate-700 text-center block">{labelMap[key]}</span>
                             <div className="grid grid-cols-2 gap-2 text-xs">
-                              {/* Before側 */}
                               <div className="space-y-1">
                                 <span className="text-[10px] text-slate-500 font-bold block text-center">Before</span>
                                 <div className="h-28 bg-white border rounded-lg flex items-center justify-center overflow-hidden relative group">
@@ -824,7 +814,6 @@ export default function ClientsPage() {
                                 </div>
                               </div>
 
-                              {/* After側 */}
                               <div className="space-y-1">
                                 <span className="text-[10px] text-[#5e9bc4] font-bold block text-center">After</span>
                                 <div className="h-28 bg-white border rounded-lg flex items-center justify-center overflow-hidden relative group">
@@ -851,7 +840,6 @@ export default function ClientsPage() {
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700">📋 ケガゼロ・フィジカルチェック 測定シート写真</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Before テスト写真 */}
                       <div className="bg-slate-50 border rounded-xl p-3.5 space-y-2">
                         <div className="flex justify-between items-center"><span className="font-bold text-slate-600">Before ({beforeDate})</span>
                           <label className="bg-[#5e9bc4] text-white text-[10px] font-bold px-2 py-1 rounded cursor-pointer">+ 写真追加<input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, beforeDate, 'test')} /></label>
@@ -866,7 +854,6 @@ export default function ClientsPage() {
                         </div>
                       </div>
 
-                      {/* After テスト写真 */}
                       <div className="bg-sky-50/40 border border-sky-200 rounded-xl p-3.5 space-y-2">
                         <div className="flex justify-between items-center"><span className="font-bold text-[#5e9bc4]">After ({afterDate})</span>
                           <label className="bg-[#5e9bc4] text-white text-[10px] font-bold px-2 py-1 rounded cursor-pointer">+ 写真追加<input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, afterDate, 'test')} /></label>
