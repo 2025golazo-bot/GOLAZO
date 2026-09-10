@@ -354,7 +354,7 @@ export default function TransactionsPage() {
 
   const handleDeleteMeasureDate = (targetDate: string) => {
     if (currentStudent.physicalHistory.length <= 1) {
-      alert('これ以上削除できません（最低1件の計測データが必要です）。');
+      alert('これ以上できません（最低1件の計測データが必要です）。');
       return;
     }
     if (!confirm(`${targetDate} の計測データを削除しますか？`)) return;
@@ -706,51 +706,106 @@ export default function TransactionsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-500 mb-1 font-semibold">氏名</label>
-                      <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded p-2" />
+                      <input 
+                        type="text" 
+                        value={editForm.name} 
+                        onChange={e => setEditForm({...editForm, name: e.target.value})} 
+                        className="w-full border border-slate-300 rounded-lg p-2 outline-none" 
+                      />
                     </div>
                     <div>
                       <label className="block text-slate-500 mb-1 font-semibold">フリガナ</label>
-                      <input type="text" value={editForm.kana} onChange={e => setEditForm({ ...editForm, kana: e.target.value })} className="w-full border rounded p-2" />
+                      <input 
+                        type="text" 
+                        value={editForm.kana} 
+                        onChange={e => setEditForm({...editForm, kana: e.target.value})} 
+                        className="w-full border border-slate-300 rounded-lg p-2 outline-none" 
+                      />
                     </div>
                     <div>
-                      <label className="block text-slate-500 mb-1 font-semibold">保護者連絡先</label>
-                      <input type="text" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full border rounded p-2" />
+                      <label className="block text-slate-500 mb-1 font-semibold">保護者連絡先 (電話番号)</label>
+                      <input 
+                        type="text" 
+                        value={editForm.phone} 
+                        onChange={e => setEditForm({...editForm, phone: e.target.value})} 
+                        className="w-full border border-slate-300 rounded-lg p-2 outline-none" 
+                      />
                     </div>
                     <div>
                       <label className="block text-slate-500 mb-1 font-semibold">お悩み・課題</label>
-                      <input type="text" value={editForm.concern} onChange={e => setEditForm({ ...editForm, concern: e.target.value })} className="w-full border rounded p-2" />
+                      <input 
+                        type="text" 
+                        value={editForm.concern} 
+                        onChange={e => setEditForm({...editForm, concern: e.target.value})} 
+                        className="w-full border border-slate-300 rounded-lg p-2 outline-none" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 mb-1 font-semibold">目標</label>
+                      <input 
+                        type="text" 
+                        value={editForm.target} 
+                        onChange={e => setEditForm({...editForm, target: e.target.value})} 
+                        className="w-full border border-slate-300 rounded-lg p-2 outline-none" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 mb-1 font-semibold">全体メモ・既往歴</label>
+                      <input 
+                        type="text" 
+                        value={editForm.memo} 
+                        onChange={e => setEditForm({...editForm, memo: e.target.value})} 
+                        className="w-full border border-slate-300 rounded-lg p-2 outline-none" 
+                      />
                     </div>
                   </div>
-                  <button onClick={handleSaveInfo} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded shadow-sm transition">
+                  <button 
+                    onClick={handleSaveInfo} 
+                    className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-lg transition shadow-sm"
+                  >
                     基本情報を保存する
                   </button>
                 </div>
 
-                <hr />
+                <hr className="border-slate-200" />
 
-                {/* 3つのメモ欄 */}
+                {/* 独立した3つのメモ欄編集 */}
                 <div className="space-y-4 text-xs">
-                  <h4 className="font-bold text-emerald-700">■ 独立した3つのメモ欄（指導方針・特記事項など）</h4>
-                  
+                  <h4 className="font-bold text-[#5e9bc4]">■ 独立した3つのメモ欄 (特記事項・食事・自主練など)</h4>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ①（例: トレーニング特記事項・既往歴）</label>
-                      <textarea rows={3} value={editCustomMemo1} onChange={e => setEditCustomMemo1(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <label className="block text-slate-500 mb-1 font-semibold">カスタムメモ1 (例: 特記事項)</label>
+                      <textarea 
+                        rows={2} 
+                        value={editCustomMemo1} 
+                        onChange={e => setEditCustomMemo1(e.target.value)} 
+                        className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]" 
+                      />
                     </div>
-
                     <div>
-                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ②（例: 食事・栄養・生活習慣アドバイス）</label>
-                      <textarea rows={3} value={editCustomMemo2} onChange={e => setEditCustomMemo2(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <label className="block text-slate-500 mb-1 font-semibold">カスタムメモ2 (例: 食事面)</label>
+                      <textarea 
+                        rows={2} 
+                        value={editCustomMemo2} 
+                        onChange={e => setEditCustomMemo2(e.target.value)} 
+                        className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]" 
+                      />
                     </div>
-
                     <div>
-                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ③（例: 自主トレ・保護者との共有事項）</label>
-                      <textarea rows={3} value={editCustomMemo3} onChange={e => setEditCustomMemo3(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <label className="block text-slate-500 mb-1 font-semibold">カスタムメモ3 (例: 自主練・宿題進捗)</label>
+                      <textarea 
+                        rows={2} 
+                        value={editCustomMemo3} 
+                        onChange={e => setEditCustomMemo3(e.target.value)} 
+                        className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#5e9bc4]" 
+                      />
                     </div>
                   </div>
-
-                  <button onClick={handleSaveCustomMemos} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded shadow-sm transition">
-                    3つのメモを保存する
+                  <button 
+                    onClick={handleSaveCustomMemos} 
+                    className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-lg transition shadow-sm"
+                  >
+                    3つのメモ欄を保存する
                   </button>
                 </div>
               </div>
