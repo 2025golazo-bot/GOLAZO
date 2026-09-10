@@ -39,6 +39,14 @@ export default function LocalInfoPage() {
   const [newNearbyDesc, setNewNearbyDesc] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
 
+  // 編集用の状態管理
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState<'大会・イベント' | '近隣施設' | 'その他'>('大会・イベント');
+  const [editDate, setEditDate] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+
   const handleAddNearby = () => {
     if (!newNearbyTitle || !newNearbyLocation) {
       alert('タイトルと場所を入力してください。');
@@ -62,6 +70,39 @@ export default function LocalInfoPage() {
   const handleDeleteNearby = (id: string) => {
     if (!confirm('この近隣情報を削除しますか？')) return;
     setNearbyInfos(prev => prev.filter(item => item.id !== id));
+    if (editingId === id) setEditingId(null);
+  };
+
+  const handleStartEdit = (item: NearbyInfo) => {
+    setEditingId(item.id);
+    setEditTitle(item.title);
+    setEditCategory(item.category);
+    setEditDate(item.date);
+    setEditLocation(item.location);
+    setEditDesc(item.description);
+  };
+
+  const handleSaveEdit = (id: string) => {
+    if (!editTitle || !editLocation) {
+      alert('タイトルと場所を入力してください。');
+      return;
+    }
+    setNearbyInfos(prev =>
+      prev.map(item =>
+        item.id === id
+          ? {
+              ...item,
+              title: editTitle,
+              category: editCategory,
+              date: editDate,
+              location: editLocation,
+              description: editDesc
+            }
+          : item
+      )
+    );
+    setEditingId(null);
+    alert('近隣情報を更新しました！');
   };
 
   const filteredInfos = nearbyInfos.filter(
@@ -163,24 +204,105 @@ export default function LocalInfoPage() {
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">登録済み一覧 ({filteredInfos.length}件)</h2>
           {filteredInfos.length > 0 ? (
             filteredInfos.map(item => (
-              <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-xs">
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-sky-100 text-[#5e9bc4] font-bold px-2.5 py-0.5 rounded-full">{item.category}</span>
-                    <span className="text-slate-500 font-semibold">📅 {item.date}</span>
+              <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
+                {editingId === item.id ? (
+                  /* 編集モード時のフォーム */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">タイトル</label>
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={e => setEditTitle(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">カテゴリ</label>
+                        <select
+                          value={editCategory}
+                          onChange={e => setEditCategory(e.target.value as any)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none font-bold text-[#5e9bc4]"
+                        >
+                          <option value="大会・イベント">大会・イベント</option>
+                          <option value="近隣施設">近隣施設</option>
+                          <option value="その他">その他</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">日付</label>
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={e => setEditDate(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">場所</label>
+                        <input
+                          type="text"
+                          value={editLocation}
+                          onChange={e => setEditLocation(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">詳細メモ・説明</label>
+                        <input
+                          type="text"
+                          value={editDesc}
+                          onChange={e => setEditDesc(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        onClick={() => handleSaveEdit(item.id)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded-lg transition"
+                      >
+                        保存
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold px-4 py-1.5 rounded-lg transition"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
                   </div>
-                  <h3 className="text-base font-bold text-slate-800">{item.title}</h3>
-                  <p className="text-slate-600 flex items-center gap-1 font-medium"><span>📍</span> {item.location}</p>
-                  {item.description && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">{item.description}</p>}
-                </div>
-                <div>
-                  <button
-                    onClick={() => handleDeleteNearby(item.id)}
-                    className="text-rose-500 hover:text-rose-700 font-bold px-3 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 transition"
-                  >
-                    削除
-                  </button>
-                </div>
+                ) : (
+                  /* 通常表示モード */
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-sky-100 text-[#5e9bc4] font-bold px-2.5 py-0.5 rounded-full">{item.category}</span>
+                        <span className="text-slate-500 font-semibold">📅 {item.date}</span>
+                      </div>
+                      <h3 className="text-base font-bold text-slate-800">{item.title}</h3>
+                      <p className="text-slate-600 flex items-center gap-1 font-medium"><span>📍</span> {item.location}</p>
+                      {item.description && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">{item.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleStartEdit(item)}
+                        className="px-3.5 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-lg font-bold transition"
+                      >
+                        修正
+                      </button>
+                      <button
+                        onClick={() => handleDeleteNearby(item.id)}
+                        className="px-3.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-lg font-bold transition"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           ) : (
