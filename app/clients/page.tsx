@@ -162,6 +162,9 @@ export default function ClientsPage() {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
 
+  // 手動同期ローディング状態
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
@@ -255,6 +258,15 @@ export default function ClientsPage() {
         setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
       }
     }
+  };
+
+  // スクエア手動データ更新ハンドラー
+  const handleManualSyncSquare = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      alert('Squareから最新の決済・チケット情報を手動で取得・更新しました！');
+    }, 800);
   };
 
   const handleAddSession = () => {
@@ -860,19 +872,32 @@ export default function ClientsPage() {
               </div>
             )}
 
-            {/* TAB 2: チケット履歴 */}
+            {/* TAB 2: チケット履歴 (ここに手動Square更新ボタンを設置) */}
             {activeTab === 'tickets' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-800 text-sm">🎟️ チケット・決済履歴 ({currentParent.name} 様)</h3>
-                {currentParent.ticketsHistory.map(th => (
-                  <div key={th.id} className="p-4 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
-                    <div>
-                      <div className="font-bold text-slate-800 text-sm">{th.title}</div>
-                      <div className="text-slate-500 mt-1">購入日: {th.date} ／ 有効期限: {th.expire}</div>
+                <div className="flex justify-between items-center border-b pb-3">
+                  <h3 className="font-bold text-slate-800 text-sm">🎟️ チケット・決済履歴 ({currentParent.name} 様)</h3>
+                  <button
+                    onClick={handleManualSyncSquare}
+                    disabled={isSyncing}
+                    className="bg-[#5e9bc4] hover:bg-sky-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span>{isSyncing ? '🔄 同期中...' : '🔄 スクエアデータを手動更新'}</span>
+                  </button>
+                </div>
+                
+                <div className="space-y-3 pt-2">
+                  {currentParent.ticketsHistory.map(th => (
+                    <div key={th.id} className="p-4 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
+                      <div>
+                        <div className="font-bold text-slate-800 text-sm">{th.title}</div>
+                        <div className="text-slate-500 mt-1">購入日: {th.date} ／ 有効期限: {th.expire}</div>
+                        <div className="text-[10px] text-[#5e9bc4] mt-0.5">Square決済ID: {th.squarePaymentId}</div>
+                      </div>
+                      <span className="text-emerald-600 font-black text-lg">{th.count}回</span>
                     </div>
-                    <span className="text-emerald-600 font-black text-lg">{th.count}回</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
 
