@@ -55,7 +55,6 @@ interface Student {
   concern: string;
   target: string;
   memo: string;
-  alert: string | null;
   physicalHistory: PhysicalData[];
   sessions: Session[];
 }
@@ -68,7 +67,7 @@ export default function ClientsPage() {
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
       isTicketSystem: true,
-      ticketRemaining: 1,
+      ticketRemaining: 1, // 💡 回数券残1回 (アラート対象)
       ticketsHistory: [
         { id: 'th-1', date: '2026-06-01', title: '10回券 (家族共有)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
       ]
@@ -79,7 +78,7 @@ export default function ClientsPage() {
       kana: 'ヤマダ タロウ',
       phone: '090-1234-5678',
       isTicketSystem: false,
-      ticketRemaining: 0,
+      ticketRemaining: 3,
       ticketsHistory: [
         { id: 'th-2', date: '2026-08-01', title: '通常都度レッスン', count: 1, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200' }
       ]
@@ -95,11 +94,10 @@ export default function ClientsPage() {
       age: 11,
       birthdate: '2015-05-12',
       firstLessonDate: '2026-03-01',
-      lastReservationDate: '2026-10-05',
+      lastReservationDate: '2026-08-10', // 💡 1ヶ月以上前 (🚨 1ヶ月未予約)
       concern: 'サッカーでの体幹ブレ・走力向上',
       target: 'トレセン選出・ブレない軸作り',
       memo: '右足首捻挫の既往歴あり。兄。',
-      alert: '⚠️ 3ヶ月測定の時期です',
       physicalHistory: [
         {
           id: 'm-1',
@@ -125,7 +123,7 @@ export default function ClientsPage() {
         }
       ],
       sessions: [
-        { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null }
+        { id: 'ses-101', date: '2026-08-10', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null }
       ]
     },
     {
@@ -136,11 +134,10 @@ export default function ClientsPage() {
       age: 8,
       birthdate: '2018-09-20',
       firstLessonDate: '2026-06-15',
-      lastReservationDate: '2026-10-02',
+      lastReservationDate: '2026-08-27', // 💡 約2週間前 (⚠️ 2週間未予約)
       concern: '姿勢改善・リズム感向上',
       target: '楽しく身体を動かす・柔軟性UP',
       memo: '藤田陸の妹。家族共有チケット適用対象。',
-      alert: null,
       physicalHistory: [
         {
           id: 'm-rin-1',
@@ -155,7 +152,7 @@ export default function ClientsPage() {
         }
       ],
       sessions: [
-        { id: 'ses-301', date: '2026-10-02', staff: 'NANA', content: 'リズム体操＆コアバランス', homework: '片足立ち 30秒', photo: null }
+        { id: 'ses-301', date: '2026-08-27', staff: 'NANA', content: 'リズム体操＆コアバランス', homework: '片足立ち 30秒', photo: null }
       ]
     },
     {
@@ -166,11 +163,10 @@ export default function ClientsPage() {
       age: 9,
       birthdate: '2017-04-10',
       firstLessonDate: '2026-05-10',
-      lastReservationDate: '2026-10-01',
+      lastReservationDate: '2026-09-08', // 💡 最近
       concern: '姿勢改善・柔軟性向上',
       target: 'バランス感覚UP',
       memo: '通常都度レッスン利用。',
-      alert: null,
       physicalHistory: [
         {
           id: 'm-3',
@@ -185,7 +181,7 @@ export default function ClientsPage() {
         }
       ],
       sessions: [
-        { id: 'ses-201', date: '2026-10-01', staff: 'NANA', content: 'ピラティス＆ストレッチ', homework: '長座体前屈ストレッチ', photo: null }
+        { id: 'ses-201', date: '2026-09-08', staff: 'NANA', content: 'ピラティス＆ストレッチ', homework: '長座体前屈ストレッチ', photo: null }
       ]
     }
   ]);
@@ -195,15 +191,35 @@ export default function ClientsPage() {
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
-  // 💡 同じ保護者IDを持つご兄弟を抽出
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
+  // 💡 最終予約からの経過日数・アラート判定ロジック
+  const getAlertBadges = (student: Student, parent: Parent) => {
+    const badges = [];
+    const lastDate = new Date(student.lastReservationDate);
+    const today = new Date('2026-09-10'); // 現在日時を基準
+    const diffTime = today.getTime() - lastDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 30) {
+      badges.push({ text: '🚨 1ヶ月未予約', type: 'danger' });
+    } else if (diffDays >= 14) {
+      badges.push({ text: '⚠️ 最終予約から2週間未予約', type: 'warning' });
+    }
+
+    if (parent.ticketRemaining === 1) {
+      badges.push({ text: '🎟️ 回数券残り1回', type: 'info' });
+    } else if (parent.ticketRemaining === 0) {
+      badges.push({ text: '⚠️ チケット切れ', type: 'danger' });
+    }
+
+    return badges;
+  };
+
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
-  
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
   const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -302,7 +318,7 @@ export default function ClientsPage() {
     };
 
     setStudents(prev =>
-      prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions] } : s))
+      prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions], lastReservationDate: newSessionDate } : s))
     );
 
     setParents(prev =>
@@ -312,21 +328,6 @@ export default function ClientsPage() {
     setNewSessionContent('');
     setNewSessionHomework('');
     alert('セッションを登録し、回数券を1回消化しました！');
-  };
-
-  const handleUpdateSession = () => {
-    if (!editingSession) return;
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        return {
-          ...s,
-          sessions: s.sessions.map(ses => (ses.id === editingSession.id ? editingSession : ses))
-        };
-      })
-    );
-    setEditingSession(null);
-    alert('セッション記録を更新しました！');
   };
 
   const handleDeleteSession = (sessionId: string) => {
@@ -355,35 +356,6 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  const handleFileUpload = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    targetDate: string,
-    type: 'posture',
-    keyName?: 'front' | 'side' | 'back'
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-          if (type === 'posture' && keyName) {
-            return {
-              ...m,
-              posturePhotos: { ...(m.posturePhotos || { front: null, side: null, back: null }), [keyName]: url }
-            };
-          }
-          return m;
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-    e.target.value = '';
-  };
-
   const handleSaveEditStudent = () => {
     setStudents(prev =>
       prev.map(s => {
@@ -397,6 +369,13 @@ export default function ClientsPage() {
     setActiveTab('carte');
     alert('生徒情報を正常に更新しました！');
   };
+
+  // 💡 数値変化の自動算出差分
+  const diffWeight = +(afterPhysical.weight - beforePhysical.weight).toFixed(1);
+  const diffFat = +(afterPhysical.fat - beforePhysical.fat).toFixed(1);
+  const diffMuscle = +(afterPhysical.muscle - beforePhysical.muscle).toFixed(1);
+
+  const currentStudentBadges = getAlertBadges(currentStudent, currentParent);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col">
@@ -428,8 +407,10 @@ export default function ClientsPage() {
 
           <div className="flex-1 overflow-y-auto space-y-2 max-h-[calc(100vh-280px)]">
             {filteredStudents.map(student => {
-              const p = parents.find(parent => parent.id === student.parentId);
+              const p = parents.find(parent => parent.id === student.parentId) || parents[0];
               const isSelected = student.id === selectedStudentId;
+              const studentBadges = getAlertBadges(student, p);
+
               return (
                 <div
                   key={student.id}
@@ -443,13 +424,29 @@ export default function ClientsPage() {
                       <span className="font-bold text-sm text-slate-900">{student.name}</span>
                       <span className="text-xs text-slate-500 ml-2">({student.age}歳)</span>
                     </div>
-                    {student.alert && (
-                      <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300 font-medium">
-                        要確認
-                      </span>
-                    )}
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">保護者: {p?.name || '未設定'}</div>
+
+                  {/* 💡 リスト内のアラートバッジ表示 */}
+                  {studentBadges.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {studentBadges.map((b, idx) => (
+                        <span
+                          key={idx}
+                          className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${
+                            b.type === 'danger'
+                              ? 'bg-rose-100 text-rose-800 border-rose-300'
+                              : b.type === 'warning'
+                              ? 'bg-amber-100 text-amber-800 border-amber-300'
+                              : 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                          }`}
+                        >
+                          {b.text}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="text-xs text-slate-500 mt-1.5">保護者: {p?.name || '未設定'}</div>
                   <div className="text-xs text-indigo-600 mt-1 truncate font-medium">🎯 {student.concern}</div>
                 </div>
               );
@@ -469,13 +466,34 @@ export default function ClientsPage() {
                   {currentStudent.age}歳 ({currentStudent.birthdate}生)
                 </span>
               </div>
+
+              {/* 💡 選択中受講生のアラートバッジ表示 */}
+              {currentStudentBadges.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {currentStudentBadges.map((b, idx) => (
+                    <span
+                      key={idx}
+                      className={`text-xs px-2 py-0.5 rounded-md border font-bold ${
+                        b.type === 'danger'
+                          ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse'
+                          : b.type === 'warning'
+                          ? 'bg-amber-100 text-amber-800 border-amber-300'
+                          : 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                      }`}
+                    >
+                      {b.text}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 mt-2">
                 <span>👤 保護者: <strong className="text-slate-900">{currentParent.name}</strong> ({currentParent.phone})</span>
                 <span>🎟️ チケット残: <strong className="text-indigo-600 font-bold">{currentParent.ticketRemaining}回</strong></span>
-                <span>📅 初回レッスン: {currentStudent.firstLessonDate}</span>
+                <span>📅 最終予約: {currentStudent.lastReservationDate}</span>
               </div>
 
-              {/* 💡 兄弟・家族共有グループ切り替えボタンを復活 */}
+              {/* 兄弟・家族共有グループ切り替えタブ */}
               {siblingStudents.length > 1 && (
                 <div className="flex items-center gap-2 mt-2.5 text-xs bg-indigo-50/60 p-2 rounded-lg border border-indigo-100">
                   <span className="text-slate-500 font-bold">family 家族共有グループ:</span>
@@ -541,12 +559,6 @@ export default function ClientsPage() {
           {/* カルテタブ */}
           {activeTab === 'carte' && (
             <div className="flex flex-col gap-6">
-              {currentStudent.alert && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs font-medium">
-                  {currentStudent.alert}
-                </div>
-              )}
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div>
                   <span className="text-[11px] text-slate-500 block font-bold mb-1">🎯 お悩み・課題</span>
@@ -555,6 +567,104 @@ export default function ClientsPage() {
                 <div>
                   <span className="text-[11px] text-slate-500 block font-bold mb-1">⭐ 目標</span>
                   <p className="text-xs text-slate-800 font-medium">{currentStudent.target}</p>
+                </div>
+              </div>
+
+              {/* 💡 フィジカル測定・数値変化の自動算出セクション */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 shadow-sm">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                  <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                    <span>📊</span> フィジカル測定・数値変化の自動算出
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={newMeasureDate}
+                      onChange={e => setNewMeasureDate(e.target.value)}
+                      className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-800"
+                    />
+                    <button
+                      onClick={handleAddNewMeasureDate}
+                      className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-1 rounded transition"
+                    >
+                      + 新規測定日を追加
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 font-bold">比較元 (Before):</span>
+                    <select
+                      value={beforeDate}
+                      onChange={e => setBeforeDate(e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-1 font-medium text-slate-800"
+                    >
+                      {physicalDates.map(d => (
+                        <option key={`b-${d}`} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 font-bold">比較先 (After):</span>
+                    <select
+                      value={afterDate}
+                      onChange={e => setAfterDate(e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-1 font-medium text-slate-800"
+                    >
+                      {physicalDates.map(d => (
+                        <option key={`a-${d}`} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 自動算出カード表示＆色分け */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* 体重 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col items-center">
+                    <span className="text-xs text-slate-500 font-bold">体重 (kg)</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-sm text-slate-400">{beforePhysical.weight}kg</span>
+                      <span className="text-xs text-slate-400">➔</span>
+                      <span className="text-lg font-bold text-slate-900">{afterPhysical.weight}kg</span>
+                    </div>
+                    <span className={`text-xs font-bold mt-1 px-2 py-0.5 rounded ${
+                      diffWeight > 0 ? 'bg-emerald-100 text-emerald-800' : diffWeight < 0 ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {diffWeight > 0 ? `+${diffWeight}kg` : `${diffWeight}kg`}
+                    </span>
+                  </div>
+
+                  {/* 体脂肪率 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col items-center">
+                    <span className="text-xs text-slate-500 font-bold">体脂肪率 (%)</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-sm text-slate-400">{beforePhysical.fat}%</span>
+                      <span className="text-xs text-slate-400">➔</span>
+                      <span className="text-lg font-bold text-slate-900">{afterPhysical.fat}%</span>
+                    </div>
+                    <span className={`text-xs font-bold mt-1 px-2 py-0.5 rounded ${
+                      diffFat < 0 ? 'bg-emerald-100 text-emerald-800' : diffFat > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {diffFat > 0 ? `+${diffFat}%` : `${diffFat}%`}
+                    </span>
+                  </div>
+
+                  {/* 筋肉量 */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col items-center">
+                    <span className="text-xs text-slate-500 font-bold">筋肉量 (kg)</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-sm text-slate-400">{beforePhysical.muscle}kg</span>
+                      <span className="text-xs text-slate-400">➔</span>
+                      <span className="text-lg font-bold text-slate-900">{afterPhysical.muscle}kg</span>
+                    </div>
+                    <span className={`text-xs font-bold mt-1 px-2 py-0.5 rounded ${
+                      diffMuscle > 0 ? 'bg-indigo-100 text-indigo-800' : diffMuscle < 0 ? 'bg-rose-100 text-rose-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {diffMuscle > 0 ? `+${diffMuscle}kg` : `${diffMuscle}kg`}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -625,10 +735,7 @@ export default function ClientsPage() {
                             <span className="font-bold text-indigo-600">{ses.date}</span>
                             <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">担当: {ses.staff}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setEditingSession(ses)} className="text-slate-400 hover:text-slate-700 text-xs">✏️ 編集</button>
-                            <button onClick={() => handleDeleteSession(ses.id)} className="text-rose-500 hover:text-rose-600 text-xs">🗑️ 削除</button>
-                          </div>
+                          <button onClick={() => handleDeleteSession(ses.id)} className="text-rose-500 hover:text-rose-600 text-xs">🗑️ 削除</button>
                         </div>
                         <p className="text-xs text-slate-800 whitespace-pre-wrap">{ses.content}</p>
                         {ses.homework && (
