@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 
-// GETリクエスト（またはPOST）を受け取ってSquareと通信するエンドポイント
+// 1. GETリクエスト（手動でのデータ同期や確認用）
 export async function GET() {
   const accessToken = process.env.SQUARE_ACCESS_TOKEN;
-  // 本番環境かサンドボックス（テスト）か
   const isSandbox = process.env.SQUARE_ENVIRONMENT === 'sandbox';
   const baseUrl = isSandbox
     ? 'https://connect.squareupsandbox.com'
@@ -17,13 +16,12 @@ export async function GET() {
   }
 
   try {
-    // 例: Squareのペイメント（決済）一覧を取得するAPIを呼び出し
     const response = await fetch(`${baseUrl}/v2/payments`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'Square-Version': '2024-01-18', // 使用するSquareのAPIバージョンの目安
+        'Square-Version': '2024-01-18',
       },
     });
 
@@ -37,7 +35,6 @@ export async function GET() {
 
     const data = await response.json();
 
-    // 取得した決済データ（または必要な売上集計結果）をフロントに返す
     return NextResponse.json({
       success: true,
       message: 'Squareから正常にデータを同期しました',
@@ -49,6 +46,31 @@ export async function GET() {
     console.error('Square sync error:', error);
     return NextResponse.json(
       { error: 'サーバー内部でエラーが発生しました。' },
+      { status: 500 }
+    );
+  }
+}
+
+// 2. POSTリクエスト（SquareからのWebhook通知を受け取る用）
+export async function POST(request: Request) {
+  try {
+    // Squareから送信されたWebhookのペイボディ（JSONデータ）を取得
+    const body = await request.json();
+
+    // イベントの種類（例: payment.updated, booking.created など）
+    const eventType = body?.type;
+    console.log(`Received Square Webhook event: ${eventType}`, body);
+
+    // TODO: ここに受け取ったイベントに応じたデータベースの更新処理などを記述します
+    // 例: 決済が完了したら売上データを同期する、など
+
+    // Squareに対して「正常に受け取りました」という200 OKを返す
+    return NextResponse.json({ received: true });
+
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    return NextResponse.json(
+      { error: 'Webhookの処理中にエラーが発生しました。' },
       { status: 500 }
     );
   }
