@@ -6,8 +6,8 @@ import Header from '@/components/Header';
 // --- 型定義 ---
 interface Session {
   id: string;
-  date: string;
-  staff: string;
+  date: string; // YYYY-MM-DD
+  staff: string; // TAKA or NANA
   content: string;
   homework: string;
   photo: string | null;
@@ -15,7 +15,7 @@ interface Session {
 
 interface PhysicalData {
   id: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   weight: number;
   fat: number;
   muscle: number;
@@ -25,7 +25,7 @@ interface PhysicalData {
     side?: string | null;
     back?: string | null;
   };
-  testPhotos?: string[];
+  testPhotos?: string[]; // ケガゼロ/フィジカルチェック等
 }
 
 interface TicketHistory {
@@ -46,20 +46,19 @@ interface Parent {
   name: string;
   kana: string;
   phone: string;
-  email?: string;
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
 }
 
 interface Student {
   id: string;
-  parentId: string;
+  parentId: string; // 1:N 構造（保護者ID）
   name: string;
   kana: string;
   age: number;
   birthdate: string;
   firstLessonDate: string;
-  lastReservationDate: string;
+  lastReservationDate: string; // 最終予約日（アラート判定用）
   concern: string;
   target: string;
   memo: string;
@@ -72,24 +71,24 @@ export default function ClientsPage() {
   const [parents, setParents] = useState<Parent[]>([
     {
       id: 'p-101',
-      squareCustomerId: 'CUS_TEST_001',
+      squareCustomerId: 'CUS_TEST_001', // Square連携用ID
       name: '藤田 奈々',
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
-      ticketRemaining: 1,
+      ticketRemaining: 1, // 残り1回でチケットアラート動作確認用
       ticketsHistory: [
-        { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811', amount: 33000 }
+        { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
       ]
     },
     {
       id: 'p-102',
-      squareCustomerId: 'CUS_TEST_002',
+      squareCustomerId: 'CUS_TEST_002', // Square連携用ID
       name: '山田 太郎',
       kana: 'ヤマダ タロウ',
       phone: '090-1234-5678',
       ticketRemaining: 5,
       ticketsHistory: [
-        { id: 'th-2', date: '2026-08-01', title: '5回券', count: 5, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200', amount: 16500 }
+        { id: 'th-2', date: '2026-08-01', title: '5回券', count: 5, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200' }
       ]
     }
   ]);
@@ -104,7 +103,7 @@ export default function ClientsPage() {
       age: 11,
       birthdate: '2015-05-12',
       firstLessonDate: '2026-03-01',
-      lastReservationDate: '2026-08-20',
+      lastReservationDate: '2026-08-20', // 1ヶ月以上前
       concern: 'サッカーでの体幹ブレ・走力向上',
       target: 'トレセン選出・ブレない軸作り',
       memo: '右足首捻挫の既往歴あり。兄。',
@@ -142,7 +141,7 @@ export default function ClientsPage() {
       age: 8,
       birthdate: '2018-09-20',
       firstLessonDate: '2026-04-10',
-      lastReservationDate: '2026-09-01',
+      lastReservationDate: '2026-09-01', // 2週間以上前
       concern: '運動神経向上・ボール感覚',
       target: 'アジリティUP',
       memo: '弟。リズムトレーニングを好む。',
@@ -168,7 +167,7 @@ export default function ClientsPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('s-001');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false); // Square同期中のローディング状態
 
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
@@ -178,6 +177,9 @@ export default function ClientsPage() {
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
+
+  const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
+  const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
 
   const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
@@ -203,6 +205,8 @@ export default function ClientsPage() {
     target: currentStudent.target,
     memo: currentStudent.memo
   });
+
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // Squareデータ同期ハンドラー
@@ -240,7 +244,7 @@ export default function ClientsPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // アラート・ハンドラー類
+  // 自動アラート判定ロジック
   // ---------------------------------------------------------------------------
   const getAlertBadges = (student: Student, parent: Parent) => {
     const alerts: { text: string; type: 'warning' | 'danger' }[] = [];
@@ -256,6 +260,14 @@ export default function ClientsPage() {
       }
     }
 
+    if (student.firstLessonDate) {
+      const firstDate = new Date(student.firstLessonDate);
+      const diffMonths = (today.getFullYear() - firstDate.getFullYear()) * 12 + (today.getMonth() - firstDate.getMonth());
+      if (diffMonths >= 0 && diffMonths % 3 === 0) {
+        alerts.push({ text: `⚠️ 3ヶ月測定の時期です`, type: 'warning' });
+      }
+    }
+
     if (parent.ticketRemaining <= 1) {
       alerts.push({ text: `🎫 回数券残り ${parent.ticketRemaining} 回`, type: 'danger' });
     }
@@ -265,15 +277,17 @@ export default function ClientsPage() {
 
   const currentAlerts = getAlertBadges(currentStudent, currentParent);
 
+  // ---------------------------------------------------------------------------
+  // ハンドラー類
+  // ---------------------------------------------------------------------------
   const handleSelectStudent = (id: string) => {
     setSelectedStudentId(id);
     const target = students.find(s => s.id === id);
     if (target) {
-      const targetParent = parents.find(p => p.id === target.parentId);
       setEditForm({
         name: target.name,
         kana: target.kana,
-        phone: targetParent?.phone || '',
+        phone: parents.find(p => p.id === target.parentId)?.phone || '',
         concern: target.concern,
         target: target.target,
         memo: target.memo
@@ -367,6 +381,118 @@ export default function ClientsPage() {
     alert(`計測日 (${newMeasureDate}) を追加しました！`);
   };
 
+  const handleDeleteMeasureDate = (targetDate: string) => {
+    if (currentStudent.physicalHistory.length <= 1) {
+      alert('これ以上削除できません（最低1件の計測データが必要です）。');
+      return;
+    }
+    if (!confirm(`${targetDate} の計測データを削除しますか？`)) return;
+
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updated = s.physicalHistory.filter(m => m.date !== targetDate);
+        return { ...s, physicalHistory: updated };
+      })
+    );
+    const remaining = currentStudent.physicalHistory.filter(m => m.date !== targetDate);
+    if (remaining.length > 0) {
+      setBeforeDate(remaining[0].date);
+      setAfterDate(remaining[remaining.length - 1].date);
+    }
+  };
+
+  const handleFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    targetDate: string,
+    type: 'posture' | 'test',
+    keyName?: 'front' | 'side' | 'back'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updatedHistory = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
+
+          if (type === 'posture' && keyName) {
+            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
+            return {
+              ...m,
+              posturePhotos: { ...currentPhotos, [keyName]: url }
+            };
+          } else if (type === 'test') {
+            return {
+              ...m,
+              testPhotos: [...(m.testPhotos || []), url]
+            };
+          }
+          return m;
+        });
+        return { ...s, physicalHistory: updatedHistory };
+      })
+    );
+    e.target.value = '';
+  };
+
+  const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
+    if (!confirm('この姿勢写真を削除しますか？')) return;
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updatedHistory = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
+          const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
+          return {
+            ...m,
+            posturePhotos: { ...currentPhotos, [keyName]: null }
+          };
+        });
+        return { ...s, physicalHistory: updatedHistory };
+      })
+    );
+  };
+
+  const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
+    if (!confirm('このテストシート写真を削除しますか？')) return;
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updatedHistory = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
+          return {
+            ...m,
+            testPhotos: (m.testPhotos || []).filter((_, idx) => idx !== indexToDelete)
+          };
+        });
+        return { ...s, physicalHistory: updatedHistory };
+      })
+    );
+  };
+
+  const handleUpdatePhysicalValue = (targetDate: string, field: keyof PhysicalData, val: any) => {
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updated = s.physicalHistory.map(m => (m.date === targetDate ? { ...m, [field]: val } : m));
+        return { ...s, physicalHistory: updated };
+      })
+    );
+  };
+
+  const handleSaveInfo = () => {
+    setStudents(prev =>
+      prev.map(s => (s.id === currentStudent.id ? { ...s, name: editForm.name, kana: editForm.kana, concern: editForm.concern, target: editForm.target, memo: editForm.memo } : s))
+    );
+    setParents(prev =>
+      prev.map(p => (p.id === currentParent.id ? { ...p, phone: editForm.phone } : p))
+    );
+    alert('基本情報を更新しました');
+  };
+
   const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
   const availableMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
@@ -389,8 +515,18 @@ export default function ClientsPage() {
     );
   });
 
+  const calcDiff = (afterVal: number, beforeVal: number, unit: string, isImprovementWhenIncrease: boolean = true) => {
+    if (afterVal === undefined || beforeVal === undefined) return null;
+    const diff = Number((afterVal - beforeVal).toFixed(1));
+    if (diff === 0) return <span className="text-slate-400 font-normal">±0{unit}</span>;
+    const formattedStr = diff > 0 ? `+${diff}${unit}` : `${diff}${unit}`;
+    let colorClass = isImprovementWhenIncrease ? (diff > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800') : (diff < 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800');
+    return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${colorClass}`}>{formattedStr}</span>;
+  };
+
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
+      {/* 共通の Header コンポーネントを使用 */}
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
@@ -448,6 +584,7 @@ export default function ClientsPage() {
 
           {/* 右カラム：メインコンテンツ */}
           <div className="md:col-span-3 space-y-5">
+            {/* 顧客基本情報ヘッダー */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -466,6 +603,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
+                {/* アラートバッジ群 */}
                 {currentAlerts.length > 0 && (
                   <div className="flex flex-col gap-1.5">
                     {currentAlerts.map((alt, idx) => (
@@ -477,13 +615,31 @@ export default function ClientsPage() {
                 )}
               </div>
 
-              {/* タブ切り替え */}
+              {/* 兄弟リンク */}
+              {siblingStudents.length > 1 && (
+                <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
+                  <span className="text-xs text-amber-900 font-bold">👨‍👩‍👧‍👦 ご兄弟アカウント</span>
+                  <div className="flex gap-1.5">
+                    {siblingStudents.map(sib => (
+                      <button
+                        key={sib.id}
+                        onClick={() => handleSelectStudent(sib.id)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${sib.id === currentStudent.id ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'}`}
+                      >
+                        {sib.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* タブ */}
               <div className="flex border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
                 <button onClick={() => setActiveTab('carte')} className={`pb-3 border-b-2 transition ${activeTab === 'carte' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  📋 カルテ (セッション & 計測)
+                  📋 カルテ (セッション & 計測・写真比較)
                 </button>
                 <button onClick={() => setActiveTab('tickets')} className={`pb-3 border-b-2 transition ${activeTab === 'tickets' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  🎟️ チケット購入履歴 & Square連携
+                  🎟️ チケット購入履歴 & Square
                 </button>
                 <button onClick={() => setActiveTab('edit_info')} className={`pb-3 border-b-2 transition ${activeTab === 'edit_info' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
                   ✏️ 基本情報編集・削除
@@ -494,14 +650,24 @@ export default function ClientsPage() {
             {/* TAB 1: カルテ */}
             {activeTab === 'carte' && (
               <div className="space-y-6">
+
+                {/* 新規セッション記録の追加 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✍️</span> 新規セッション記録の追加</h3>
-                    <label className="flex items-center gap-1 font-semibold text-slate-600 cursor-pointer text-xs">
-                      <input type="checkbox" checked={useTicket} onChange={e => setUseTicket(e.target.checked)} className="rounded text-[#5e9bc4]" />
-                      回数券を1回消化する
-                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <label className="flex items-center gap-1 font-semibold text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useTicket}
+                          onChange={e => setUseTicket(e.target.checked)}
+                          className="rounded text-[#5e9bc4]"
+                        />
+                        回数券を1回消化する
+                      </label>
+                    </div>
                   </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
                     <div>
                       <label className="block text-slate-500 mb-1 font-semibold">日時</label>
@@ -524,13 +690,13 @@ export default function ClientsPage() {
                     <input type="text" placeholder="例: 片足ドローイン 1分×2" value={newSessionHomework} onChange={e => setNewSessionHomework(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2 outline-none" />
                   </div>
                   <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
-                    セッションを登録する {useTicket ? '(回数券1回消化)' : ''}
+                    セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
                   </button>
                 </div>
 
                 {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b pb-3">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📅</span> 時系列セッション履歴</h3>
                     <div className="flex items-center gap-2 text-xs bg-slate-50 p-1.5 rounded-lg border border-slate-200">
                       <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="border rounded p-1 font-bold text-[#5e9bc4]">
@@ -551,11 +717,26 @@ export default function ClientsPage() {
                           <div className="flex justify-between items-center font-bold text-slate-700">
                             <span>{session.date} <span className="text-[#5e9bc4] ml-2 bg-sky-100 px-2 py-0.5 rounded">担当: {session.staff}</span></span>
                             <div className="flex gap-2">
+                              <button onClick={() => { setEditingSessionId(session.id); setEditSessionContent(session.content); setEditSessionHomework(session.homework); }} className="text-xs text-sky-600 hover:underline">編集</button>
                               <button onClick={() => handleDeleteSession(session.id)} className="text-xs text-rose-500 hover:underline">削除</button>
                             </div>
                           </div>
-                          <p className="text-slate-800 font-medium">{session.content}</p>
-                          {session.homework && <p className="text-amber-800 bg-amber-50 p-2 rounded border border-amber-100"><strong>宿題:</strong> {session.homework}</p>}
+
+                          {editingSessionId === session.id ? (
+                            <div className="space-y-2 pt-2 border-t">
+                              <input type="text" value={editSessionContent} onChange={e => setEditSessionContent(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="内容" />
+                              <input type="text" value={editSessionHomework} onChange={e => setEditSessionHomework(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="宿題" />
+                              <div className="flex gap-2 justify-end">
+                                <button onClick={() => handleSaveEditSession(session.id)} className="bg-emerald-600 text-white px-3 py-1 rounded font-bold">保存</button>
+                                <button onClick={() => setEditingSessionId(null)} className="bg-slate-300 px-3 py-1 rounded">キャンセル</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-slate-800 font-medium">{session.content}</p>
+                              {session.homework && <p className="text-amber-800 bg-amber-50 p-2 rounded border border-amber-100"><strong>宿題:</strong> {session.homework}</p>}
+                            </>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -563,6 +744,130 @@ export default function ClientsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* 3ヶ月定期計測・写真比較 */}
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
+                  <div className="border-b pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📊</span> 3ヶ月定期計測・姿勢 & 測定シート比較</h3>
+                      <p className="text-[11px] text-slate-400">計測データの追加・数値編集・写真の差し替えおよび削除が可能</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={newMeasureDate} onChange={e => setNewMeasureDate(e.target.value)} className="border rounded px-2.5 py-1 text-xs" />
+                      <button onClick={handleAddNewMeasureDate} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition whitespace-nowrap">
+                        ＋ 新規計測日を追加
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <div className="flex items-center gap-1 flex-1">
+                        <span className="font-bold text-slate-600 bg-slate-200 px-2 py-1 rounded">Before</span>
+                        <select value={beforeDate} onChange={e => setBeforeDate(e.target.value)} className="border rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1">
+                          {physicalDates.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <span className="font-bold text-slate-400">vs</span>
+                      <div className="flex items-center gap-1 flex-1">
+                        <span className="font-bold text-white bg-[#5e9bc4] px-2 py-1 rounded">After</span>
+                        <select value={afterDate} onChange={e => setAfterDate(e.target.value)} className="border rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1">
+                          {physicalDates.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 比較テーブル・計測データ */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 border-b">
+                          <th className="p-2.5 font-semibold">測定項目</th>
+                          <th className="p-2.5 font-semibold">Before ({beforeDate})</th>
+                          <th className="p-2.5 font-semibold">After ({afterDate})</th>
+                          <th className="p-2.5 font-semibold">増減・変化</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr>
+                          <td className="p-2.5 font-bold text-slate-700">体重 (kg)</td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={beforePhysical?.weight || 0}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))}
+                              className="w-20 border rounded p-1"
+                            />
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={afterPhysical?.weight || 0}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value))}
+                              className="w-20 border rounded p-1"
+                            />
+                          </td>
+                          <td className="p-2.5">{calcDiff(afterPhysical?.weight, beforePhysical?.weight, 'kg', false)}</td>
+                        </tr>
+                        <tr>
+                          <td className="p-2.5 font-bold text-slate-700">体脂肪率 (%)</td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={beforePhysical?.fat || 0}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))}
+                              className="w-20 border rounded p-1"
+                            />
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={afterPhysical?.fat || 0}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value))}
+                              className="w-20 border rounded p-1"
+                            />
+                          </td>
+                          <td className="p-2.5">{calcDiff(afterPhysical?.fat, beforePhysical?.fat, '%', false)}</td>
+                        </tr>
+                        <tr>
+                          <td className="p-2.5 font-bold text-slate-700">筋肉量 (kg)</td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={beforePhysical?.muscle || 0}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))}
+                              className="w-20 border rounded p-1"
+                            />
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={afterPhysical?.muscle || 0}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value))}
+                              className="w-20 border rounded p-1"
+                            />
+                          </td>
+                          <td className="p-2.5">{calcDiff(afterPhysical?.muscle, beforePhysical?.muscle, 'kg', true)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button onClick={() => handleDeleteMeasureDate(afterDate)} className="text-xs text-rose-500 hover:underline">
+                      🗑️ 選択中のAfter計測日 ({afterDate}) のデータを削除する
+                    </button>
+                  </div>
+                </div>
+
               </div>
             )}
 
@@ -576,13 +881,14 @@ export default function ClientsPage() {
                         <span>🎟️</span> Square 決済・回数券購入履歴
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        Square 顧客ID: {currentParent.squareCustomerId || '未連携'}
+                        Squareアカウント（顧客ID: {currentParent.squareCustomerId || '未連携'}）と紐づく購入履歴です
                       </p>
                     </div>
+                    {/* Square同期ボタン */}
                     <button
                       onClick={handleSquareSync}
                       disabled={isSyncing}
-                      className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 disabled:opacity-50"
+                      className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 disabled:opacity-50 shadow-sm"
                     >
                       <span>🔄</span> {isSyncing ? '同期中...' : 'Squareデータ同期'}
                     </button>
@@ -592,41 +898,123 @@ export default function ClientsPage() {
                     {currentParent.ticketsHistory.length > 0 ? (
                       currentParent.ticketsHistory.map(ticket => (
                         <div key={ticket.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-slate-800 text-sm">{ticket.title}</span>
-                            <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">
-                              付与回数: {ticket.count}回
-                            </span>
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div>
+                              <span className="font-bold text-slate-800 text-sm">{ticket.title}</span>
+                              <span className="ml-2 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                                付与回数: {ticket.count}回
+                              </span>
+                            </div>
+                            <div className="text-slate-500 font-medium">
+                              購入日: {ticket.date} （有効期限: {ticket.expire}）
+                            </div>
                           </div>
-                          <div className="flex justify-between items-center text-slate-500 pt-2 border-t">
-                            <span>購入日: {ticket.date} （有効期限: {ticket.expire}）</span>
-                            {ticket.amount && <strong className="text-slate-700">¥{ticket.amount.toLocaleString()}</strong>}
+
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 border-t border-slate-200 gap-2">
+                            <div className="text-slate-500 font-mono text-[11px]">
+                              Square決済ID: <span className="text-slate-700">{ticket.squarePaymentId}</span>
+                              {ticket.amount && <span className="ml-3 font-bold text-slate-700">¥{ticket.amount.toLocaleString()}</span>}
+                            </div>
+                            {ticket.receiptUrl ? (
+                              <a
+                                href={ticket.receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#5e9bc4] hover:underline font-bold flex items-center gap-1"
+                              >
+                                <span>📄</span> Square領収書を見る
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">レシートURLなし</span>
+                            )}
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-xs text-slate-400 text-center py-6">購入履歴はありません。「Squareデータ同期」を押して最新データを取得してください。</p>
+                      <p className="text-xs text-slate-400 text-center py-6">チケット購入履歴はありません。「Squareデータ同期」ボタンを押してデータを取得してください。</p>
                     )}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* TAB 3: 基本情報編集 */}
+            {/* TAB 3: 基本情報編集・削除 */}
             {activeTab === 'edit_info' && (
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
                 <h3 className="font-bold text-slate-800 text-sm border-b pb-3">✏️ 基本情報の編集</h3>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">受講生のお名前</label>
-                    <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full border rounded p-2" />
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">フリガナ</label>
+                    <input
+                      type="text"
+                      value={editForm.kana}
+                      onChange={e => setEditForm({ ...editForm, kana: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
+                    />
                   </div>
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">保護者電話番号</label>
-                    <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full border rounded p-2" />
+                    <input
+                      type="text"
+                      value={editForm.phone}
+                      onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Square 顧客ID</label>
+                    <input
+                      type="text"
+                      value={currentParent.squareCustomerId || ''}
+                      onChange={e => {
+                        const newId = e.target.value;
+                        setParents(prev => prev.map(p => p.id === currentParent.id ? { ...p, squareCustomerId: newId } : p));
+                      }}
+                      placeholder="cus_xxxxxx"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none font-mono text-slate-700 bg-slate-50"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-slate-500 font-semibold mb-1">お悩み・課題</label>
+                    <input
+                      type="text"
+                      value={editForm.concern}
+                      onChange={e => setEditForm({ ...editForm, concern: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-slate-500 font-semibold mb-1">目標</label>
+                    <input
+                      type="text"
+                      value={editForm.target}
+                      onChange={e => setEditForm({ ...editForm, target: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-slate-500 font-semibold mb-1">メモ</label>
+                    <textarea
+                      value={editForm.memo}
+                      onChange={e => setEditForm({ ...editForm, memo: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none h-20"
+                    />
                   </div>
                 </div>
-                <button onClick={() => alert('基本情報を更新しました！')} className="bg-[#5e9bc4] text-white font-bold px-4 py-2 rounded-lg">保存する</button>
+                <div className="flex justify-end pt-2">
+                  <button onClick={handleSaveInfo} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-5 py-2.5 rounded-lg transition shadow-sm">
+                    基本情報を保存する
+                  </button>
+                </div>
               </div>
             )}
 
