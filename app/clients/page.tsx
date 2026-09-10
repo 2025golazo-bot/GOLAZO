@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Header from '@/components/Header';
 
 // --- 型定義 ---
@@ -42,7 +42,7 @@ interface Parent {
   name: string;
   kana: string;
   phone: string;
-  isTicketSystem: boolean; // 回数券システムを使用するかどうか
+  isTicketSystem: boolean;
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
 }
@@ -170,9 +170,19 @@ export default function ClientsPage() {
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-
-  // カルテ（セッション）編集用モーダルステート
   const [editingSession, setEditingSession] = useState<Session | null>(null);
+
+  // 写真トリミング・拡大プレビュー用ステート
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [cropModalOpen, setCropModalOpen] = useState<boolean>(false);
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
+  const [cropTargetInfo, setCropTargetInfo] = useState<{ targetDate: string; type: 'posture' | 'test'; keyName?: 'front' | 'side' | 'back' } | null>(null);
+  
+  // トリミング位置調整用（スライダー）
+  const [cropZoom, setCropZoom] = useState<number>(1);
+  const [cropOffsetX, setCropOffsetX] = useState<number>(0);
+  const [cropOffsetY, setCropOffsetY] = useState<number>(0);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // 選択中の生徒と保護者
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
@@ -196,9 +206,6 @@ export default function ClientsPage() {
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
-
-  // 写真サイズ調整用プレビュー拡大ステート
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // 基本情報手動編集フォーム
   const [editForm, setEditForm] = useState({
@@ -269,7 +276,6 @@ export default function ClientsPage() {
     alert('セッションを登録しました！');
   };
 
-  // セッションの編集保存
   const handleUpdateSession = () => {
     if (!editingSession) return;
     setStudents(prev =>
@@ -285,7 +291,6 @@ export default function ClientsPage() {
     alert('セッション記録を更新しました！');
   };
 
-  // セッションの削除
   const handleDeleteSession = (sessionId: string) => {
     if (!confirm('このセッション記録を削除しますか？')) return;
     setStudents(prev =>
@@ -299,7 +304,6 @@ export default function ClientsPage() {
     );
   };
 
-  // 削除ハンドラー
   const handleDeleteStudent = (id: string) => {
     if (confirm('本当にこの受講生データを削除しますか？')) {
       setStudents(prev => prev.filter(s => s.id !== id));
@@ -312,7 +316,6 @@ export default function ClientsPage() {
     }
   };
 
-  // Square手動同期
   const handleSquareSync = () => {
     setIsSyncing(true);
     setTimeout(() => {
@@ -321,8 +324,8 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  // 写真アップロード・取り込み直しハンドラー
-  const handleFileUpload = (
+  // 写真ファイル選択時にトリミングモーダルを開く
+  const handleFileSelect = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
     type: 'posture' | 'test',
@@ -331,38 +334,85 @@ export default function ClientsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-
-        const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-
-          if (type === 'posture' && keyName) {
-            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-            return {
-              ...m,
-              posturePhotos: {
-                ...currentPhotos,
-                [keyName]: url
-              }
-            };
-          } else if (type === 'test') {
-            return {
-              ...m,
-              testPhotos: [...(m.testPhotos || []), url]
-            };
-          }
-          return m;
-        });
-
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
+    setRawImageSrc(url);
+    setCropTargetInfo({ targetDate, type, keyName });
+    setCropZoom(1);
+    setCropOffsetX(0);
+    setCropOffsetY(0);
+    setCropModalOpen(true);
+    e.target.value = ''; // inputリセット
   };
 
-  // 姿勢写真 削除ハンドラー
+  // トリミング実行して保存
+  const handleCropAndSave = () => {
+    if (!rawImageSrc || !cropTargetInfo) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = rawImageSrc;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 600; // 出力サイズ
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.save();
+      ctx.translate(size / 2 + cropOffsetX, size / 2 + cropOffsetY);
+      ctx.scale(cropZoom, cropZoom);
+      const minDim = Math.min(img.width, img.height);
+      ctx.drawImage(
+        img,
+        -minDim / 2,
+        -minDim / 2,
+        minDim,
+        minDim,
+        -size / 2,
+        -size / 2,
+        size,
+        size
+      );
+      ctx.restore();
+
+      const croppedUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+      // 状態に反映
+      setStudents(prev =>
+        prev.map(s => {
+          if (s.id !== currentStudent.id) return s;
+          const updatedHistory: PhysicalData[] = s.physicalHistory.map(m => {
+            if (m.date !== cropTargetInfo.targetDate) return m;
+
+            if (cropTargetInfo.type === 'posture' && cropTargetInfo.keyName) {
+              const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
+              return {
+                ...m,
+                posturePhotos: {
+                  ...currentPhotos,
+                  [cropTargetInfo.keyName]: croppedUrl
+                }
+              };
+            } else if (cropTargetInfo.type === 'test') {
+              return {
+                ...m,
+                testPhotos: [...(m.testPhotos || []), croppedUrl]
+              };
+            }
+            return m;
+          });
+          return { ...s, physicalHistory: updatedHistory };
+        })
+      );
+
+      setCropModalOpen(false);
+      setRawImageSrc(null);
+      alert('写真をトリミングして取り込みました！');
+    };
+  };
+
   const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
     if (!confirm('この写真を削除しますか？')) return;
     setStudents(prev =>
@@ -384,7 +434,6 @@ export default function ClientsPage() {
     );
   };
 
-  // テスト結果写真 削除ハンドラー
   const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
     if (!confirm('この測定シート写真を削除しますか？')) return;
     setStudents(prev =>
@@ -402,7 +451,6 @@ export default function ClientsPage() {
     );
   };
 
-  // 身体データ数値更新
   const handleUpdatePhysicalValue = (targetDate: string, field: keyof PhysicalData, val: any) => {
     setStudents(prev =>
       prev.map(s => {
@@ -474,7 +522,7 @@ export default function ClientsPage() {
               <span>📋</span> 受講生・カルテ管理システム
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              会員情報、セッション記録、カルテの修正・削除、3ヶ月定期計測、Square連携を一元管理します。
+              会員情報、セッション記録、カルテ修正・削除、3ヶ月定期計測、写真トリミング取込、Square連携を一元管理します。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -712,7 +760,7 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                {/* 2. 時系列セッション履歴（修正・削除ボタン付き） */}
+                {/* 2. 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                     <div>
@@ -762,7 +810,6 @@ export default function ClientsPage() {
                               <span>{session.date}</span>
                               <span className="text-[#5e9bc4] bg-sky-100/50 px-2 py-0.5 rounded">担当: {session.staff}</span>
                             </div>
-                            {/* 修正・削除ボタン */}
                             <div className="flex gap-1.5">
                               <button
                                 onClick={() => setEditingSession(session)}
@@ -799,7 +846,7 @@ export default function ClientsPage() {
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                         <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート写真管理
                       </h3>
-                      <p className="text-[11px] text-slate-400">数値の増減確認、写真の取り込み直し・削除・サイズ調整が可能です</p>
+                      <p className="text-[11px] text-slate-400">数値の増減確認、写真のトリミング取込・差し替え・削除が可能です</p>
                     </div>
                     <button
                       onClick={handleSavePhysicalData}
@@ -925,10 +972,10 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 姿勢チェック写真管理 */}
+                  {/* 姿勢チェック写真管理（トリミング対応） */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center justify-between">
-                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (Before / After)</span>
+                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (トリミング取込対応)</span>
                       <span className="text-[10px] text-slate-400">クリックで拡大プレビュー</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -952,13 +999,13 @@ export default function ClientsPage() {
                                         onClick={() => setPreviewImage(photoUrl)}
                                       />
                                       <div className="absolute top-1 right-1 flex gap-1">
-                                        <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="画像を取り込み直す">
-                                          🔄
+                                        <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="トリミングして取り込み直す">
+                                          ✂️
                                           <input
                                             type="file"
                                             accept="image/*"
                                             className="hidden"
-                                            onChange={e => handleFileUpload(e, beforeDate, 'posture', key)}
+                                            onChange={e => handleFileSelect(e, beforeDate, 'posture', key)}
                                           />
                                         </label>
                                         <button
@@ -973,12 +1020,12 @@ export default function ClientsPage() {
                                   ) : (
                                     <label className="cursor-pointer text-[10px] text-slate-500 p-1 hover:text-[#5e9bc4] w-full h-full flex flex-col items-center justify-center bg-white/80">
                                       <span className="text-base font-bold">+</span>
-                                      <span>写真登録</span>
+                                      <span>トリミング取込</span>
                                       <input
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
-                                        onChange={e => handleFileUpload(e, beforeDate, 'posture', key)}
+                                        onChange={e => handleFileSelect(e, beforeDate, 'posture', key)}
                                       />
                                     </label>
                                   )}
@@ -1009,13 +1056,13 @@ export default function ClientsPage() {
                                         onClick={() => setPreviewImage(photoUrl)}
                                       />
                                       <div className="absolute top-1 right-1 flex gap-1">
-                                        <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="画像を取り込み直す">
-                                          🔄
+                                        <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="トリミングして取り込み直す">
+                                          ✂️
                                           <input
                                             type="file"
                                             accept="image/*"
                                             className="hidden"
-                                            onChange={e => handleFileUpload(e, afterDate, 'posture', key)}
+                                            onChange={e => handleFileSelect(e, afterDate, 'posture', key)}
                                           />
                                         </label>
                                         <button
@@ -1030,12 +1077,12 @@ export default function ClientsPage() {
                                   ) : (
                                     <label className="cursor-pointer text-[10px] text-slate-500 p-1 hover:text-[#5e9bc4] w-full h-full flex flex-col items-center justify-center bg-white/80">
                                       <span className="text-base font-bold">+</span>
-                                      <span>写真登録</span>
+                                      <span>トリミング取込</span>
                                       <input
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
-                                        onChange={e => handleFileUpload(e, afterDate, 'posture', key)}
+                                        onChange={e => handleFileSelect(e, afterDate, 'posture', key)}
                                       />
                                     </label>
                                   )}
@@ -1073,13 +1120,13 @@ export default function ClientsPage() {
                           </div>
                         ))}
                         <label className="w-24 h-24 border-2 border-dashed border-slate-300 hover:border-[#5e9bc4] rounded-lg flex flex-col items-center justify-center cursor-pointer text-slate-400 hover:text-[#5e9bc4] transition bg-white shadow-sm">
-                          <span className="text-xl font-bold">+</span>
-                          <span className="text-[10px]">写真追加</span>
+                          <span className="text-xl font-bold">✂️</span>
+                          <span className="text-[10px]">トリミング取込</span>
                           <input
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            onChange={e => handleFileUpload(e, afterDate, 'test')}
+                            onChange={e => handleFileSelect(e, afterDate, 'test')}
                           />
                         </label>
                       </div>
@@ -1195,6 +1242,90 @@ export default function ClientsPage() {
           </div>
         </div>
       </main>
+
+      {/* 写真トリミング調整モーダル */}
+      {cropModalOpen && rawImageSrc && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-base text-slate-800">✂️ 写真のトリミング・範囲調整</h3>
+              <button onClick={() => setCropModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="aspect-square bg-slate-900 rounded-xl overflow-hidden relative flex items-center justify-center border shadow-inner">
+                <img
+                  src={rawImageSrc}
+                  alt="トリミング対象"
+                  style={{
+                    transform: `scale(${cropZoom}) translate(${cropOffsetX}px, ${cropOffsetY}px)`,
+                    transition: 'transform 0.1s ease-out'
+                  }}
+                  className="max-h-full max-w-full object-contain pointer-events-none select-none"
+                />
+                <div className="absolute inset-8 border-2 border-dashed border-white/70 rounded-lg pointer-events-none" />
+              </div>
+
+              <div className="space-y-3 bg-slate-50 p-3.5 rounded-xl border">
+                <div>
+                  <div className="flex justify-between font-bold text-slate-600 mb-1">
+                    <span>拡大 / 縮小 (Zoom)</span>
+                    <span>{cropZoom.toFixed(1)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="3"
+                    step="0.1"
+                    value={cropZoom}
+                    onChange={e => setCropZoom(parseFloat(e.target.value))}
+                    className="w-full accent-[#5e9bc4]"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">左右位置</label>
+                    <input
+                      type="range"
+                      min="-150"
+                      max="150"
+                      value={cropOffsetX}
+                      onChange={e => setCropOffsetX(parseInt(e.target.value))}
+                      className="w-full accent-[#5e9bc4]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">上下位置</label>
+                    <input
+                      type="range"
+                      min="-150"
+                      max="150"
+                      value={cropOffsetY}
+                      onChange={e => setCropOffsetY(parseInt(e.target.value))}
+                      className="w-full accent-[#5e9bc4]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setCropModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleCropAndSave}
+                className="px-4 py-2 bg-[#5e9bc4] hover:bg-sky-600 text-white rounded-xl font-semibold shadow-sm"
+              >
+                この範囲で切り抜いて取り込む
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 写真拡大プレビューモーダル */}
       {previewImage && (
