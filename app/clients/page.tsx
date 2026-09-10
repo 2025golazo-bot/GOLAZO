@@ -182,7 +182,7 @@ export default function ClientsPage() {
 
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
   
-  // 比較用の Before / After 選択状態（デフォルトは最初と最後）
+  // 比較用の Before / After 選択状態
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
 
@@ -240,7 +240,7 @@ export default function ClientsPage() {
     }
   };
 
-  // 新しい計測日（データ枠）を新規追加する関数
+  // 🔴 ここで新しい計測日（データ枠）をどんどん追加・蓄積します
   const handleAddNewMeasureDate = () => {
     if (!newMeasureDate) return;
     const exists = currentStudent.physicalHistory.some(m => m.date === newMeasureDate);
@@ -267,7 +267,7 @@ export default function ClientsPage() {
         return { ...s, physicalHistory: updated };
       })
     );
-    setAfterDate(newMeasureDate); // 追加した日付を最新として選択
+    setAfterDate(newMeasureDate); // 追加した日付を自動で最新として選択
     alert(`新しい計測日 (${newMeasureDate}) のデータを追加しました！`);
   };
 
@@ -345,7 +345,6 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  // 写真のアップロード処理
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -844,7 +843,7 @@ export default function ClientsPage() {
                         <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート写真管理
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        過去のデータを消さずに、新しい日付の計測データ・写真をどんどん追加して蓄積できます。
+                        過去のデータを消さずに、新しい日付の計測データをどんどん追加して蓄積できます。
                       </p>
                     </div>
                     <button
@@ -855,7 +854,7 @@ export default function ClientsPage() {
                     </button>
                   </div>
 
-                  {/* 新規計測日の追加エリア */}
+                  {/* 🟢 ここに「新しい計測日を追加」する緑色のエリアを確実に配置しています */}
                   <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                     <div>
                       <span className="font-bold text-emerald-900 block">➕ 新しい計測日（3ヶ月定期計測等）の追加</span>
