@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Client, Environment } from 'square';
 
-// 環境に応じてSandbox / Productionを自動切替
 const environment = process.env.NODE_ENV === 'production' 
   ? Environment.Production 
   : Environment.Sandbox;
@@ -22,7 +21,7 @@ export async function POST(request: Request) {
 
     const locationId = process.env.SQUARE_LOCATION_ID || '';
 
-    // 1. Square Orders APIで、この顧客IDに紐づく過去の注文履歴を検索
+    // Squareから該当顧客の注文履歴を検索
     const ordersResponse = await squareClient.ordersApi.searchOrders({
       locationIds: [locationId],
       query: {
@@ -43,13 +42,11 @@ export async function POST(request: Request) {
 
     const orders = ordersResponse.result.orders || [];
 
-    // 2. 取得したSquareの注文データを、アプリ側のチケット履歴の形に変換
+    // アプリ側のチケット・購入履歴の形式に変換
     const ticketsHistory = orders.map((order) => {
       const paymentId = order.tenders?.[0]?.paymentId || 'N/A';
       const totalPrice = order.totalMoney?.amount ? Number(order.totalMoney.amount) : 0;
       const createdAt = order.createdAt ? order.createdAt.split('T')[0] : '';
-      
-      // 商品名（チケット名など）
       const title = order.lineItems?.[0]?.name || 'Square購入チケット';
       const quantity = order.lineItems?.[0]?.quantity ? Number(order.lineItems?.[0]?.quantity) : 1;
 
@@ -57,7 +54,7 @@ export async function POST(request: Request) {
         id: order.id || Math.random().toString(),
         date: createdAt,
         title: title,
-        count: quantity * 5, // 必要に応じて付与回数ルールに変更してください
+        count: quantity * 5,
         expire: '購入日から6ヶ月',
         squarePaymentId: paymentId,
         squareOrderId: order.id,
