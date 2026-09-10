@@ -1,6 +1,15 @@
-// app/api/square/sync/route.ts
 import { NextResponse } from 'next/server';
-import { squareClient } from '@/lib/square';
+import { Client, Environment } from 'square';
+
+// 環境に応じてSandbox / Productionを自動切替
+const environment = process.env.NODE_ENV === 'production' 
+  ? Environment.Production 
+  : Environment.Sandbox;
+
+const squareClient = new Client({
+  accessToken: process.env.SQUARE_ACCESS_TOKEN || '',
+  environment: environment,
+});
 
 export async function POST(request: Request) {
   try {
@@ -8,12 +17,14 @@ export async function POST(request: Request) {
     const { squareCustomerId } = body;
 
     if (!squareCustomerId) {
-      return NextResponse.json({ error: 'Square Customer ID is required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Square Customer ID is required' }, { status: 400 });
     }
 
-    // 1. Square Orders APIで該当顧客の注文履歴を検索
+    const locationId = process.env.SQUARE_LOCATION_ID || '';
+
+    // 1. Square Orders APIで、この顧客IDに紐づく過去の注文履歴を検索
     const ordersResponse = await squareClient.ordersApi.searchOrders({
-      locationIds: [process.env.SQUARE_LOCATION_ID || ''],
+      locationIds: [locationId],
       query: {
         filter: {
           customerFilter: {
@@ -32,22 +43,22 @@ export async function POST(request: Request) {
 
     const orders = ordersResponse.result.orders || [];
 
-    // 2. 取得した注文情報をアプリ側の「チケット購入履歴」型にマッピング
+    // 2. 取得したSquareの注文データを、アプリ側のチケット履歴の形に変換
     const ticketsHistory = orders.map((order) => {
       const paymentId = order.tenders?.[0]?.paymentId || 'N/A';
       const totalPrice = order.totalMoney?.amount ? Number(order.totalMoney.amount) : 0;
       const createdAt = order.createdAt ? order.createdAt.split('T')[0] : '';
       
-      // 商品名（ラインアイテム名）を抽出
-      const title = order.lineItems?.[0]?.name || '回数券・チケット購入';
+      // 商品名（チケット名など）
+      const title = order.lineItems?.[0]?.name || 'Square購入チケット';
       const quantity = order.lineItems?.[0]?.quantity ? Number(order.lineItems?.[0]?.quantity) : 1;
 
       return {
         id: order.id || Math.random().toString(),
         date: createdAt,
         title: title,
-        count: quantity * 4, // 例: 1セット購入で4回分付与などのロジックに合わせて調整
-        expire: '購入日から6ヶ月', // 必要に応じて計算式に変更
+        count: quantity * 5, // 必要に応じて付与回数ルールに変更してください
+        expire: '購入日から6ヶ月',
         squarePaymentId: paymentId,
         squareOrderId: order.id,
         receiptUrl: order.tenders?.[0]?.receiptUrl || undefined,
@@ -58,7 +69,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, ticketsHistory });
 
   } catch (error: any) {
-    console.error('Square Sync Error:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Failed to sync with Square' }, { status: 500 });
+    console.error('Square Sync API Error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Failed to communicate with Square API' 
+    }, { status: 500 });
   }
 }
