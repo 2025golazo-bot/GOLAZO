@@ -181,26 +181,16 @@ export default function ClientsPage() {
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
+  
+  // 比較用の Before / After 選択状態（デフォルトは最初と最後）
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
 
-  // 指定された日付のデータがなければ自動生成して返す（新規日付対応）
-  const getOrCreatePhysicalData = (targetDate: string): PhysicalData => {
-    let found = currentStudent.physicalHistory.find(m => m.date === targetDate);
-    if (found) return found;
-    return {
-      id: `m-new-${Date.now()}`,
-      date: targetDate,
-      weight: 0,
-      fat: 0,
-      muscle: 0,
-      posturePhotos: { front: null, side: null, back: null },
-      testPhotos: []
-    };
-  };
+  // 新規計測日追加用の入力ステート
+  const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  const beforePhysical = getOrCreatePhysicalData(beforeDate);
-  const afterPhysical = getOrCreatePhysicalData(afterDate);
+  const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
+  const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
 
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
@@ -248,6 +238,37 @@ export default function ClientsPage() {
         setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
       }
     }
+  };
+
+  // 新しい計測日（データ枠）を新規追加する関数
+  const handleAddNewMeasureDate = () => {
+    if (!newMeasureDate) return;
+    const exists = currentStudent.physicalHistory.some(m => m.date === newMeasureDate);
+    if (exists) {
+      alert('すでに登録されている計測日です。');
+      return;
+    }
+
+    const newPh: PhysicalData = {
+      id: `m-${Date.now()}`,
+      date: newMeasureDate,
+      weight: 0,
+      fat: 0,
+      muscle: 0,
+      note: '定期計測',
+      posturePhotos: { front: null, side: null, back: null },
+      testPhotos: []
+    };
+
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updated = [...s.physicalHistory, newPh].sort((a, b) => a.date.localeCompare(b.date));
+        return { ...s, physicalHistory: updated };
+      })
+    );
+    setAfterDate(newMeasureDate); // 追加した日付を最新として選択
+    alert(`新しい計測日 (${newMeasureDate}) のデータを追加しました！`);
   };
 
   const handleAddSession = () => {
@@ -324,7 +345,7 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  // 写真新規登録およびアップロード処理
+  // 写真のアップロード処理
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -339,53 +360,31 @@ export default function ClientsPage() {
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
         
-        let targetExists = s.physicalHistory.some(m => m.date === targetDate);
-        let updatedHistory: PhysicalData[];
+        let updatedHistory = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
 
-        if (!targetExists) {
-          // 新しい日付のデータが存在しない場合は自動で新規作成して追加
-          const newPh: PhysicalData = {
-            id: `m-${Date.now()}`,
-            date: targetDate,
-            weight: 0,
-            fat: 0,
-            muscle: 0,
-            posturePhotos: { front: null, side: null, back: null },
-            testPhotos: []
-          };
           if (type === 'posture' && keyName) {
-            newPh.posturePhotos = { front: null, side: null, back: null, [keyName]: url };
+            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
+            return {
+              ...m,
+              posturePhotos: {
+                ...currentPhotos,
+                [keyName]: url
+              }
+            };
           } else if (type === 'test') {
-            newPh.testPhotos = [url];
+            return {
+              ...m,
+              testPhotos: [...(m.testPhotos || []), url]
+            };
           }
-          updatedHistory = [...s.physicalHistory, newPh].sort((a, b) => a.date.localeCompare(b.date));
-        } else {
-          updatedHistory = s.physicalHistory.map(m => {
-            if (m.date !== targetDate) return m;
-
-            if (type === 'posture' && keyName) {
-              const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-              return {
-                ...m,
-                posturePhotos: {
-                  ...currentPhotos,
-                  [keyName]: url
-                }
-              };
-            } else if (type === 'test') {
-              return {
-                ...m,
-                testPhotos: [...(m.testPhotos || []), url]
-              };
-            }
-            return m;
-          });
-        }
+          return m;
+        });
         return { ...s, physicalHistory: updatedHistory };
       })
     );
     e.target.value = '';
-    alert('新しい日付で写真を取り込み・登録しました！');
+    alert('写真を取り込みました！');
   };
 
   const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
@@ -430,36 +429,19 @@ export default function ClientsPage() {
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
-        let targetExists = s.physicalHistory.some(m => m.date === targetDate);
-        let updated: PhysicalData[];
-
-        if (!targetExists) {
-          const newPh: PhysicalData = {
-            id: `m-${Date.now()}`,
-            date: targetDate,
-            weight: 0,
-            fat: 0,
-            muscle: 0,
-            posturePhotos: { front: null, side: null, back: null },
-            testPhotos: [],
-            [field]: val
-          };
-          updated = [...s.physicalHistory, newPh].sort((a, b) => a.date.localeCompare(b.date));
-        } else {
-          updated = s.physicalHistory.map(m => {
-            if (m.date === targetDate) {
-              return { ...m, [field]: val };
-            }
-            return m;
-          });
-        }
+        let updated = s.physicalHistory.map(m => {
+          if (m.date === targetDate) {
+            return { ...m, [field]: val };
+          }
+          return m;
+        });
         return { ...s, physicalHistory: updated };
       })
     );
   };
 
   const handleSavePhysicalData = () => {
-    alert('新しく入力した日付の身体データおよび数値を保存・登録しました！');
+    alert('身体データおよび測定数値を保存しました！');
   };
 
   const handleSaveInfo = () => {
@@ -862,7 +844,7 @@ export default function ClientsPage() {
                         <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート写真管理
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        💡 <strong>ここを新しい日付（例: 2026-12-01 等）に変更・入力すると、その日付の新規計測・写真データとして登録・管理できます</strong>
+                        過去のデータを消さずに、新しい日付の計測データ・写真をどんどん追加して蓄積できます。
                       </p>
                     </div>
                     <button
@@ -873,26 +855,54 @@ export default function ClientsPage() {
                     </button>
                   </div>
 
-                  {/* ここを日付入力インプットに変更しました */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-md">過去 (Before) 日付</span>
+                  {/* 新規計測日の追加エリア */}
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                    <div>
+                      <span className="font-bold text-emerald-900 block">➕ 新しい計測日（3ヶ月定期計測等）の追加</span>
+                      <span className="text-[11px] text-emerald-700">日付を選んで追加すると、新しいデータ枠が蓄積されます。</span>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       <input
                         type="date"
+                        value={newMeasureDate}
+                        onChange={e => setNewMeasureDate(e.target.value)}
+                        className="border border-emerald-300 rounded-lg p-2 font-bold text-emerald-900 bg-white outline-none flex-1"
+                      />
+                      <button
+                        onClick={handleAddNewMeasureDate}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg transition shadow-sm whitespace-nowrap"
+                      >
+                        新しい計測日を追加
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 比較用 日付選択バー */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-md">比較: 過去 (Before)</span>
+                      <select
                         value={beforeDate}
                         onChange={e => setBeforeDate(e.target.value)}
-                        className="border border-slate-300 rounded-lg p-2 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm focus:ring-2 focus:ring-[#5e9bc4]"
-                      />
+                        className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm"
+                      >
+                        {currentStudent.physicalHistory.map(m => (
+                          <option key={m.date} value={m.date}>{m.date} 計測</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-white bg-[#5e9bc4] px-2.5 py-1 rounded-md">最新 (After) 日付</span>
-                      <input
-                        type="date"
+                      <span className="font-bold text-white bg-[#5e9bc4] px-2.5 py-1 rounded-md">比較: 最新 (After)</span>
+                      <select
                         value={afterDate}
                         onChange={e => setAfterDate(e.target.value)}
-                        className="border border-slate-300 rounded-lg p-2 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm focus:ring-2 focus:ring-[#5e9bc4]"
-                      />
+                        className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm"
+                      >
+                        {currentStudent.physicalHistory.map(m => (
+                          <option key={m.date} value={m.date}>{m.date} 計測</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -903,7 +913,7 @@ export default function ClientsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                       {beforePhysical && (
                         <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-                          <span className="font-bold text-slate-600 block border-b pb-1"> Before: {beforeDate}</span>
+                          <span className="font-bold text-slate-600 block border-b pb-1"> Before: {beforePhysical.date}</span>
                           <div className="grid grid-cols-3 gap-2">
                             <div>
                               <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
@@ -911,7 +921,7 @@ export default function ClientsPage() {
                                 type="number"
                                 step="0.1"
                                 value={beforePhysical.weight}
-                                onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleUpdatePhysicalValue(beforePhysical.date, 'weight', parseFloat(e.target.value) || 0)}
                                 className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
@@ -921,7 +931,7 @@ export default function ClientsPage() {
                                 type="number"
                                 step="0.1"
                                 value={beforePhysical.fat}
-                                onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleUpdatePhysicalValue(beforePhysical.date, 'fat', parseFloat(e.target.value) || 0)}
                                 className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
@@ -931,7 +941,7 @@ export default function ClientsPage() {
                                 type="number"
                                 step="0.1"
                                 value={beforePhysical.muscle}
-                                onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleUpdatePhysicalValue(beforePhysical.date, 'muscle', parseFloat(e.target.value) || 0)}
                                 className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                             </div>
@@ -941,7 +951,7 @@ export default function ClientsPage() {
 
                       {afterPhysical && (
                         <div className="bg-sky-50/40 p-3.5 rounded-xl border border-sky-200 space-y-2">
-                          <span className="font-bold text-[#5e9bc4] block border-b pb-1"> After: {afterDate}</span>
+                          <span className="font-bold text-[#5e9bc4] block border-b pb-1"> After: {afterPhysical.date}</span>
                           <div className="grid grid-cols-3 gap-2">
                             <div>
                               <label className="text-slate-400 block text-[10px]">体重 (kg)</label>
@@ -949,7 +959,7 @@ export default function ClientsPage() {
                                 type="number"
                                 step="0.1"
                                 value={afterPhysical.weight}
-                                onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleUpdatePhysicalValue(afterPhysical.date, 'weight', parseFloat(e.target.value) || 0)}
                                 className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                               <div className="mt-1">{calcDiff(afterPhysical.weight, beforePhysical?.weight || 0, 'kg', false)}</div>
@@ -960,7 +970,7 @@ export default function ClientsPage() {
                                 type="number"
                                 step="0.1"
                                 value={afterPhysical.fat}
-                                onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleUpdatePhysicalValue(afterPhysical.date, 'fat', parseFloat(e.target.value) || 0)}
                                 className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                               <div className="mt-1">{calcDiff(afterPhysical.fat, beforePhysical?.fat || 0, '%', false)}</div>
@@ -971,7 +981,7 @@ export default function ClientsPage() {
                                 type="number"
                                 step="0.1"
                                 value={afterPhysical.muscle}
-                                onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value) || 0)}
+                                onChange={e => handleUpdatePhysicalValue(afterPhysical.date, 'muscle', parseFloat(e.target.value) || 0)}
                                 className="w-full border rounded-md p-1 font-bold bg-white"
                               />
                               <div className="mt-1">{calcDiff(afterPhysical.muscle, beforePhysical?.muscle || 0, 'kg', true)}</div>
