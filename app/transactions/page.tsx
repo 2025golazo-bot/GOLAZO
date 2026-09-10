@@ -2,88 +2,93 @@ import { createClient } from "@/lib/supabase/server";
 import RealtimeWatcher from "@/components/RealtimeWatcher";
 import NewTransactionForm from "@/components/NewTransactionForm";
 import { formatDate } from "@/lib/utils";
+import type { TransactionRow } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
 export default async function TransactionsPage() {
   const supabase = createClient();
-  const { data: transactions } = await supabase
+  const { data } = await supabase
     .from("transactions")
     .select("*")
     .order("created_at", { ascending: false });
 
-  // 強制的にanyキャストを行い、TypeScriptの型チェックを完全にスキップします
-  const list = (transactions || []) as Array<any>;
-
-  // 簡易集計
-  const totalAmount = list.reduce((acc, cur) => acc + (Number(cur.amount) || 0), 0);
+  const items: TransactionRow[] = data || [];
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-      <RealtimeWatcher table="transactions" />
+    <div className="space-y-6">
+      <RealtimeWatcher tables={["transactions"]} />
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">売上・決済トランザクション</h1>
-          <p className="text-sm text-slate-500 mt-1">Square決済および手動登録されたトランザクションの一覧です。</p>
-        </div>
-        <div className="bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs text-slate-400 block font-semibold">総売上金額</span>
-          <span className="text-xl font-bold text-emerald-600">¥{totalAmount.toLocaleString()}</span>
-        </div>
-      </div>
-
-      {/* 新規トランザクション登録フォーム */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-        <h2 className="text-sm font-bold text-slate-700 mb-3">＋ 手動トランザクション追加</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-ink">取引一覧</h1>
         <NewTransactionForm />
       </div>
 
-      {/* トランザクション一覧テーブル */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 font-bold text-sm text-slate-700">
-          履歴一覧 ({list.length}件)
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-slate-400 border-b border-slate-200">
-                <th className="p-3 font-semibold">日時</th>
-                <th className="p-3 font-semibold">クライアント名</th>
-                <th className="p-3 font-semibold">項目</th>
-                <th className="p-3 font-semibold">種別</th>
-                <th className="p-3 font-semibold">担当</th>
-                <th className="p-3 font-semibold text-right">金額</th>
+      <div className="overflow-x-auto rounded-2xl bg-white shadow-card">
+        <table className="min-w-full divide-y divide-gray-100 text-sm">
+          <thead className="bg-primary-50 text-left text-xs font-semibold uppercase tracking-wide text-primary-dark">
+            <tr>
+              <th className="px-4 py-3">名前[cite: 1]</th>
+              <th className="px-4 py-3">詳細URL[cite: 1]</th>
+              <th className="px-4 py-3">担当者[cite: 1]</th>
+              <th className="px-4 py-3">メモ[cite: 1]</th>
+              <th className="px-4 py-3">登録元[cite: 1]</th>
+              <th className="px-4 py-3">登録日[cite: 1]</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {items.length === 0 && (
+              <tr>
+                <td className="px-4 py-6 text-center text-ink/40" colSpan={6}>
+                  取引データがありません[cite: 1]
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {list.length > 0 ? (
-                list.map((tx: any) => (
-                  <tr key={tx.id} className="hover:bg-slate-50/80 transition">
-                    <td className="p-3 text-slate-500">{formatDate(tx.date)}</td>
-                    <td className="p-3 font-bold text-slate-800">{tx.client}</td>
-                    <td className="p-3">{tx.item}</td>
-                    <td className="p-3">
-                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold">
-                        {tx.type}
-                      </span>
-                    </td>
-                    <td className="p-3 font-semibold text-[#5e9bc4]">{tx.staff}</td>
-                    <td className="p-3 text-right font-bold text-slate-800">
-                      ¥{(Number(tx.amount) || 0).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
-                    トランザクションデータがありません
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            )}
+            {items.map((item) => (
+              <tr key={item.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-ink">{item.name}[cite: 1]</td>
+                <td className="px-4 py-3">
+                  {item.url ? ([cite: 1]
+                    <a
+                      href={item.url}[cite: 1]
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary-dark hover:underline"
+                    >
+                      詳細を見る[cite: 1]
+                    </a>
+                  ) : (
+                    "―"[cite: 1]
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {item.staff_name ? ([cite: 1]
+                    <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-dark">
+                      {item.staff_name}[cite: 1]
+                    </span>
+                  ) : (
+                    "―"[cite: 1]
+                  )}
+                </td>
+                <td className="px-4 py-3 text-ink/60">{item.memo || "―"}[cite: 1]</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      item.source === "square"[cite: 1]
+                        ? "bg-green-100 text-green-700"[cite: 1]
+                        : "bg-gray-100 text-ink/50"[cite: 1]
+                    }`}
+                  >
+                    {item.source === "square" ? "Square自動連携" : "手動登録"}[cite: 1]
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-ink/40">
+                  {formatDate(item.created_at)}[cite: 1]
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
