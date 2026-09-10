@@ -4,38 +4,30 @@
 import React, { useState, useMemo } from 'react';
 import Header from '@/components/Header';
 
-// 担当者の型定義
 type Assignee = 'TAKA' | 'NANA';
 
-// タスクの型定義
 type TaskItem = {
   id: number;
   title: string;
   assignee: Assignee;
   dueDate: string; // YYYY-MM-DD
   category: string; // SNS / 顧客フォロー / 事務 / その他
-  otherCategory?: string; // その他選択時の手入力値
   priority: boolean; // 重要フラグ（赤強調・重要ボタン）
   completed: boolean;
-  repeat: 'none' | 'weekly' | 'monthly'; // 繰り返し設定
-  linkedMinutesId?: number; // 連動元議事録ID
+  repeat: 'none' | 'weekly' | 'monthly';
+  linkedMinutesId?: number;
 };
 
-// 議事録の型定義
 type MinutesItem = {
   id: number;
   date: string; // YYYY-MM-DD
   title: string;
   category: string; // キャンペーン / 週MT / 月MT / その他
-  otherCategory?: string; // その他選択時の手入力値
-  // キャンペーン用項目
   targetAmount?: number;
   targetCount?: number;
-  // MT詳細項目
   salesProgress?: string;
   targetAchievementRate?: string;
   campaignProgress?: string;
-  // 議事録内で登録するタスクのリスト
   tasks: {
     title: string;
     assignee: Assignee;
@@ -45,7 +37,6 @@ type MinutesItem = {
   notes: string;
 };
 
-// キャンペーン用プリセット定義
 const CAMPAIGN_PRESETS = [
   'レジ設定',
   'SNS告知準備',
@@ -56,15 +47,12 @@ const CAMPAIGN_PRESETS = [
 ];
 
 export default function TaskManagerPage() {
-  // タブ切り替え: 'task' | 'minutes' | 'calendar'
   const [activeTab, setActiveTab] = useState<'task' | 'minutes' | 'calendar'>('task');
-
-  // 年月選択用フィルター (例: '2026-09')
   const [selectedYearMonth, setSelectedYearMonth] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
 
-  // --- タスク管理の状態 ---
+  // --- タスクの状態 ---
   const [tasks, setTasks] = useState<TaskItem[]>([
     {
       id: 1,
@@ -88,12 +76,11 @@ export default function TaskManagerPage() {
     },
   ]);
 
-  // タスクフィルター・検索
   const [taskSearch, setTaskSearch] = useState('');
   const [taskCategoryFilter, setTaskCategoryFilter] = useState('all');
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('all');
 
-  // --- 議事録管理の状態 ---
+  // --- 議事録の状態 ---
   const [minutesList, setMinutesList] = useState<MinutesItem[]>([
     {
       id: 1,
@@ -113,14 +100,23 @@ export default function TaskManagerPage() {
 
   const [minutesSearch, setMinutesSearch] = useState('');
 
-  // --- モーダル管理 ---
+  // --- モーダル制御 ---
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
 
   const [isMinutesModalOpen, setIsMinutesModalOpen] = useState(false);
   const [editingMinutes, setEditingMinutes] = useState<MinutesItem | null>(null);
 
-  // 議事録モーダル用入力ステート
+  // タスク用フォームステート
+  const [tFormTitle, setTFormTitle] = useState('');
+  const [tFormAssignee, setTFormAssignee] = useState<Assignee>('TAKA');
+  const [tFormDueDate, setTFormDueDate] = useState(new Date().toISOString().split('T')[0]);
+  const [tFormCategory, setTFormCategory] = useState('SNS');
+  const [tFormOtherCategory, setTFormOtherCategory] = useState('');
+  const [tFormPriority, setTFormPriority] = useState(false);
+  const [tFormRepeat, setTFormRepeat] = useState<'none' | 'weekly' | 'monthly'>('none');
+
+  // 議事録用フォームステート
   const [mFormDate, setMFormDate] = useState(new Date().toISOString().split('T')[0]);
   const [mFormTitle, setMFormTitle] = useState('');
   const [mFormCategory, setMFormCategory] = useState('週MT');
@@ -138,17 +134,8 @@ export default function TaskManagerPage() {
     priority: boolean;
   }[]>([]);
 
-  // タスクモーダル用入力ステート
-  const [tFormTitle, setTFormTitle] = useState('');
-  const [tFormAssignee, setTFormAssignee] = useState<Assignee>('TAKA');
-  const [tFormDueDate, setTFormDueDate] = useState(new Date().toISOString().split('T')[0]);
-  const [tFormCategory, setTFormCategory] = useState('SNS');
-  const [tFormOtherCategory, setTFormOtherCategory] = useState('');
-  const [tFormPriority, setTFormPriority] = useState(false);
-  const [tFormRepeat, setTFormRepeat] = useState<'none' | 'weekly' | 'monthly'>('none');
-
   // ---------------------------------------------------------------------------
-  // タスク関連ハンドラー
+  // タスクハンドラー
   // ---------------------------------------------------------------------------
   const handleOpenAddTask = () => {
     setEditingTask(null);
@@ -183,12 +170,13 @@ export default function TaskManagerPage() {
     e.preventDefault();
     if (!tFormTitle.trim()) return;
 
-    const finalCategory = tFormCategory === 'その他' ? (tFormOtherCategory || 'その他') : tFormCategory;
+    const finalCategory = tFormCategory === 'その他' ? (tFormOtherCategory.trim() || 'その他') : tFormCategory;
 
     if (editingTask) {
+      // 既存タスクの更新
       setTasks(tasks.map(t => t.id === editingTask.id ? {
         ...t,
-        title: tFormTitle,
+        title: tFormTitle.trim(),
         assignee: tFormAssignee,
         dueDate: tFormDueDate,
         category: finalCategory,
@@ -196,9 +184,10 @@ export default function TaskManagerPage() {
         repeat: tFormRepeat
       } : t));
     } else {
+      // 新規タスクの追加
       const newTaskItem: TaskItem = {
         id: Date.now(),
-        title: tFormTitle,
+        title: tFormTitle.trim(),
         assignee: tFormAssignee,
         dueDate: tFormDueDate,
         category: finalCategory,
@@ -222,7 +211,7 @@ export default function TaskManagerPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // 議事録関連ハンドラー
+  // 議事録ハンドラー
   // ---------------------------------------------------------------------------
   const handleOpenAddMinutes = () => {
     setEditingMinutes(null);
@@ -257,13 +246,12 @@ export default function TaskManagerPage() {
     setMFormTargetAchievementRate(m.targetAchievementRate ?? '');
     setMFormCampaignProgress(m.campaignProgress ?? '');
     setMFormNotes(m.notes);
-    setMFormTasks([...m.tasks]);
+    setMFormTasks(m.tasks ? [...m.tasks] : []);
     setIsMinutesModalOpen(true);
   };
 
   const handleCategoryChangeForMinutes = (cat: string) => {
     setMFormCategory(cat);
-    // キャンペーン選択時に自動でプリセットタスクを挿入（未登録の場合など）
     if (cat === 'キャンペーン' && mFormTasks.length === 0) {
       const presetTasks = CAMPAIGN_PRESETS.map(title => ({
         title,
@@ -297,42 +285,43 @@ export default function TaskManagerPage() {
     e.preventDefault();
     if (!mFormTitle.trim()) return;
 
-    const finalCategory = mFormCategory === 'その他' ? (mFormOtherCategory || 'その他') : mFormCategory;
+    const finalCategory = mFormCategory === 'その他' ? (mFormOtherCategory.trim() || 'その他') : mFormCategory;
 
     const minutesData: MinutesItem = {
       id: editingMinutes ? editingMinutes.id : Date.now(),
       date: mFormDate,
-      title: mFormTitle,
+      title: mFormTitle.trim(),
       category: finalCategory,
       targetAmount: mFormTargetAmount === '' ? undefined : Number(mFormTargetAmount),
       targetCount: mFormTargetCount === '' ? undefined : Number(mFormTargetCount),
-      salesProgress: mFormSalesProgress,
-      targetAchievementRate: mFormTargetAchievementRate,
-      campaignProgress: mFormCampaignProgress,
+      salesProgress: mFormSalesProgress.trim(),
+      targetAchievementRate: mFormTargetAchievementRate.trim(),
+      campaignProgress: mFormCampaignProgress.trim(),
       tasks: mFormTasks,
-      notes: mFormNotes,
+      notes: mFormNotes.trim(),
     };
 
     if (editingMinutes) {
+      // 既存の議事録更新
       setMinutesList(minutesList.map(m => m.id === editingMinutes.id ? minutesData : m));
     } else {
+      // 新規議事録追加
       setMinutesList([minutesData, ...minutesList]);
+      // 連動タスクをタスク管理へ追加
+      const newlyCreatedTasks: TaskItem[] = mFormTasks.map((mt, idx) => ({
+        id: Date.now() + idx + 1,
+        title: mt.title,
+        assignee: mt.assignee,
+        dueDate: mt.dueDate,
+        category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
+        priority: mt.priority,
+        completed: false,
+        repeat: 'none',
+        linkedMinutesId: minutesData.id
+      }));
+      setTasks(prev => [...newlyCreatedTasks, ...prev]);
     }
 
-    // 議事録内タスクをタスク管理本体へ直接登録・連携
-    const newlyCreatedTasks: TaskItem[] = mFormTasks.map((mt, idx) => ({
-      id: Date.now() + idx + 1,
-      title: mt.title,
-      assignee: mt.assignee,
-      dueDate: mt.dueDate,
-      category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
-      priority: mt.priority,
-      completed: false,
-      repeat: 'none',
-      linkedMinutesId: minutesData.id
-    }));
-
-    setTasks(prev => [...newlyCreatedTasks, ...prev]);
     setIsMinutesModalOpen(false);
   };
 
@@ -343,19 +332,14 @@ export default function TaskManagerPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // フィルタリング（年月・検索など）
+  // フィルター・表示用メモ化
   // ---------------------------------------------------------------------------
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
-      // 年月フィルター (YYYY-MM)
       const matchesYearMonth = t.dueDate.startsWith(selectedYearMonth);
-      // 検索ワード
       const matchesSearch = t.title.includes(taskSearch) || t.category.includes(taskSearch);
-      // カテゴリーフィルター
       const matchesCategory = taskCategoryFilter === 'all' || t.category === taskCategoryFilter;
-      // 担当者フィルター
       const matchesAssignee = taskAssigneeFilter === 'all' || t.assignee === taskAssigneeFilter;
-
       return matchesYearMonth && matchesSearch && matchesCategory && matchesAssignee;
     });
   }, [tasks, selectedYearMonth, taskSearch, taskCategoryFilter, taskAssigneeFilter]);
@@ -368,7 +352,6 @@ export default function TaskManagerPage() {
     });
   }, [minutesList, selectedYearMonth, minutesSearch]);
 
-  // カレンダー用：選択された年月のカレンダー情報構築
   const calendarDays = useMemo(() => {
     const [yearStr, monthStr] = selectedYearMonth.split('-');
     const year = parseInt(yearStr, 10);
@@ -378,11 +361,9 @@ export default function TaskManagerPage() {
     const firstDayIndex = new Date(year, month - 1, 1).getDay();
 
     const days = [];
-    // 前月の空白埋め
     for (let i = 0; i < firstDayIndex; i++) {
       days.push({ day: null, dateStr: '' });
     }
-    // 当月の日付
     for (let d = 1; d <= daysInMonth; d++) {
       const dStr = String(d).padStart(2, '0');
       const dateStr = `${selectedYearMonth}-${dStr}`;
@@ -391,16 +372,13 @@ export default function TaskManagerPage() {
     return days;
   }, [selectedYearMonth]);
 
-  // 年月選択肢の生成（過去2年〜未来1年程度）
   const yearMonthOptions = useMemo(() => {
     const options = [];
     const currentDate = new Date();
     for (let i = -12; i <= 12; i++) {
       const d = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
-      const val = d.toISOString().slice(0, 7);
-      options.push(val);
+      options.push(d.toISOString().slice(0, 7));
     }
-    // 重複除去＆ソート降順
     return Array.from(new Set(options)).sort().reverse();
   }, []);
 
@@ -409,7 +387,6 @@ export default function TaskManagerPage() {
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* トップタイトル & 年月セレクターバー */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div>
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -421,7 +398,6 @@ export default function TaskManagerPage() {
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end flex-wrap">
-            {/* 年月セレクト */}
             <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <span className="text-xs font-semibold text-slate-500">表示年月:</span>
               <select
@@ -452,7 +428,6 @@ export default function TaskManagerPage() {
           </div>
         </div>
 
-        {/* メインタブ切り替え */}
         <div className="flex border-b border-slate-200 gap-4">
           <button
             onClick={() => setActiveTab('task')}
@@ -486,12 +461,9 @@ export default function TaskManagerPage() {
           </button>
         </div>
 
-        {/* =================================================================== */}
         {/* タブ1: タスク管理 */}
-        {/* =================================================================== */}
         {activeTab === 'task' && (
           <div className="space-y-4">
-            {/* フィルター・検索バー */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3 justify-between items-center">
               <div className="w-full md:w-80">
                 <input
@@ -504,7 +476,6 @@ export default function TaskManagerPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                {/* 担当者フィルター */}
                 <select
                   value={taskAssigneeFilter}
                   onChange={(e) => setTaskAssigneeFilter(e.target.value)}
@@ -515,7 +486,6 @@ export default function TaskManagerPage() {
                   <option value="NANA">NANA</option>
                 </select>
 
-                {/* カテゴリーフィルター */}
                 <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
                   {['all', 'SNS', '顧客フォロー', '事務', 'キャンペーン'].map((cat) => (
                     <button
@@ -534,7 +504,6 @@ export default function TaskManagerPage() {
               </div>
             </div>
 
-            {/* タスク一覧 */}
             <div className="space-y-3">
               {filteredTasks.length > 0 ? (
                 filteredTasks.map((item) => (
@@ -553,7 +522,6 @@ export default function TaskManagerPage() {
                       />
                       <div className="space-y-1.5 w-full">
                         <div className="flex items-center gap-2 flex-wrap">
-                          {/* 担当者色分け表示 */}
                           <span
                             className={`px-2 py-0.5 rounded text-xs font-bold text-white ${
                               item.assignee === 'TAKA' ? 'bg-[#5e9bc4]' : 'bg-emerald-600'
@@ -566,9 +534,8 @@ export default function TaskManagerPage() {
                             {item.category}
                           </span>
 
-                          {/* 重要フラグ（赤強調・重要ボタン） */}
                           {item.priority && (
-                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
                               🔥 重要
                             </span>
                           )}
@@ -588,7 +555,6 @@ export default function TaskManagerPage() {
                       </div>
                     </div>
 
-                    {/* 操作ボタン（修正・削除） */}
                     <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                       <button
                         onClick={() => handleOpenEditTask(item)}
@@ -614,12 +580,9 @@ export default function TaskManagerPage() {
           </div>
         )}
 
-        {/* =================================================================== */}
         {/* タブ2: ミーティング議事録 */}
-        {/* =================================================================== */}
         {activeTab === 'minutes' && (
           <div className="space-y-4">
-            {/* 検索バー */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
               <div className="w-full md:w-96">
                 <input
@@ -635,7 +598,6 @@ export default function TaskManagerPage() {
               </div>
             </div>
 
-            {/* 議事録カード一覧 */}
             <div className="space-y-4">
               {filteredMinutes.length > 0 ? (
                 filteredMinutes.map((m) => (
@@ -667,7 +629,6 @@ export default function TaskManagerPage() {
                       </div>
                     </div>
 
-                    {/* キャンペーンまたはMTの詳細情報 */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
                       {m.targetAmount !== undefined && (
                         <div>
@@ -701,8 +662,7 @@ export default function TaskManagerPage() {
                       )}
                     </div>
 
-                    {/* 連動タスク一覧表示 */}
-                    {m.tasks.length > 0 && (
+                    {m.tasks && m.tasks.length > 0 && (
                       <div className="space-y-2">
                         <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">連動定型タスク</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -721,7 +681,6 @@ export default function TaskManagerPage() {
                       </div>
                     )}
 
-                    {/* 議事録詳細テキスト */}
                     <div className="text-xs text-slate-600 whitespace-pre-wrap bg-white p-3 rounded-xl border border-slate-100">
                       {m.notes || 'MT詳細メモなし'}
                     </div>
@@ -736,9 +695,7 @@ export default function TaskManagerPage() {
           </div>
         )}
 
-        {/* =================================================================== */}
         {/* タブ3: カレンダー表示 */}
-        {/* =================================================================== */}
         {activeTab === 'calendar' && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex justify-between items-center">
@@ -748,7 +705,6 @@ export default function TaskManagerPage() {
               <p className="text-xs text-slate-500">日付ごとのタスク予定がひと目で分かります</p>
             </div>
 
-            {/* 曜日ヘッダー */}
             <div className="grid grid-cols-7 gap-1 text-center font-bold text-xs text-slate-500 border-b border-slate-200 pb-2">
               <span className="text-rose-500">日</span>
               <span>月</span>
@@ -759,7 +715,6 @@ export default function TaskManagerPage() {
               <span className="text-[#5e9bc4]">土</span>
             </div>
 
-            {/* カレンダーグリッド */}
             <div className="grid grid-cols-7 gap-1.5">
               {calendarDays.map((item, index) => {
                 const dayTasks = item.dateStr ? tasks.filter(t => t.dueDate === item.dateStr) : [];
@@ -809,9 +764,7 @@ export default function TaskManagerPage() {
         )}
       </main>
 
-      {/* =================================================================== */}
       {/* タスク登録・修正モーダル */}
-      {/* =================================================================== */}
       {isTaskModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -899,7 +852,6 @@ export default function TaskManagerPage() {
                 </div>
               )}
 
-              {/* 重要フラグ設定（赤強調・重要ボタン） */}
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
@@ -933,9 +885,7 @@ export default function TaskManagerPage() {
         </div>
       )}
 
-      {/* =================================================================== */}
       {/* 議事録作成・修正モーダル */}
-      {/* =================================================================== */}
       {isMinutesModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -998,7 +948,6 @@ export default function TaskManagerPage() {
                 />
               </div>
 
-              {/* キャンペーン選択時の目標金額・件数入力 */}
               {mFormCategory === 'キャンペーン' && (
                 <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <div>
@@ -1024,7 +973,6 @@ export default function TaskManagerPage() {
                 </div>
               )}
 
-              {/* MTの詳細登録（売上進捗・目標達成率・キャンペーン進捗） */}
               <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">売上進捗</label>
@@ -1058,7 +1006,6 @@ export default function TaskManagerPage() {
                 </div>
               </div>
 
-              {/* 定型タスク登録・タスク連動セクション */}
               <div className="space-y-2 border-t border-slate-100 pt-3">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-bold text-slate-700">定型タスク登録・タスク管理への直接連動</label>
@@ -1140,7 +1087,7 @@ export default function TaskManagerPage() {
                     </div>
                   ))}
                   {mFormTasks.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-2">タスクが追加されていません。プリセットまたは空白タスクを追加してください。</p>
+                    <p className="text-xs text-slate-400 text-center py-2">タスクが追加されていません。</p>
                   )}
                 </div>
               </div>
@@ -1168,7 +1115,7 @@ export default function TaskManagerPage() {
                   type="submit"
                   className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
                 >
-                  保存してタスクに連携
+                  更新・保存する
                 </button>
               </div>
             </form>
