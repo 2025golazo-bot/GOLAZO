@@ -178,18 +178,15 @@ export default function ClientsPage() {
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [cropTargetInfo, setCropTargetInfo] = useState<{ targetDate: string; type: 'posture' | 'test'; keyName?: 'front' | 'side' | 'back' } | null>(null);
   
-  // トリミング位置調整用（スライダー）
   const [cropZoom, setCropZoom] = useState<number>(1);
   const [cropOffsetX, setCropOffsetX] = useState<number>(0);
   const [cropOffsetY, setCropOffsetY] = useState<number>(0);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // 選択中の生徒と保護者
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
-  // 姿勢写真 & 測定シート 比較用
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
@@ -197,17 +194,14 @@ export default function ClientsPage() {
   const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
   const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
 
-  // セッション表示 フィルター
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
 
-  // 新規セッションフォーム
   const [newSessionDate, setNewSessionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
 
-  // 基本情報手動編集フォーム
   const [editForm, setEditForm] = useState({
     name: currentStudent.name,
     kana: currentStudent.kana,
@@ -217,7 +211,6 @@ export default function ClientsPage() {
     memo: currentStudent.memo
   });
 
-  // 検索処理
   const filteredStudents = students.filter(s => {
     const parent = parents.find(p => p.id === s.parentId);
     const query = searchKeyword.toLowerCase();
@@ -249,7 +242,6 @@ export default function ClientsPage() {
     }
   };
 
-  // セッション追加
   const handleAddSession = () => {
     if (!newSessionContent) return;
     const newSession: Session = {
@@ -324,7 +316,6 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  // 写真ファイル選択時にトリミングモーダルを開く
   const handleFileSelect = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -340,10 +331,9 @@ export default function ClientsPage() {
     setCropOffsetX(0);
     setCropOffsetY(0);
     setCropModalOpen(true);
-    e.target.value = ''; // inputリセット
+    e.target.value = '';
   };
 
-  // トリミング実行して保存
   const handleCropAndSave = () => {
     if (!rawImageSrc || !cropTargetInfo) return;
     const img = new Image();
@@ -351,7 +341,7 @@ export default function ClientsPage() {
     img.src = rawImageSrc;
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const size = 600; // 出力サイズ
+      const size = 600;
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext('2d');
@@ -379,7 +369,6 @@ export default function ClientsPage() {
 
       const croppedUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-      // 状態に反映
       setStudents(prev =>
         prev.map(s => {
           if (s.id !== currentStudent.id) return s;
@@ -515,7 +504,6 @@ export default function ClientsPage() {
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* 上部アクションバー */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div>
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -539,7 +527,7 @@ export default function ClientsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
-          {/* 左カラム：受講生選択・検索 */}
+          {/* 左カラム */}
           <div className="md:col-span-1 space-y-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
               <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
@@ -610,9 +598,8 @@ export default function ClientsPage() {
             </div>
           </div>
 
-          {/* 右カラム：メインコンテンツ */}
+          {/* 右カラム */}
           <div className="md:col-span-3 space-y-5">
-            {/* 顧客基本ヘッダーカード */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -658,7 +645,6 @@ export default function ClientsPage() {
                 )}
               </div>
 
-              {/* サブタブナビゲーション */}
               <div className="flex border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
                 <button
                   onClick={() => setActiveTab('carte')}
@@ -697,7 +683,7 @@ export default function ClientsPage() {
             {activeTab === 'carte' && (
               <div className="space-y-6">
 
-                {/* 1. 新規セッション記録の追加 */}
+                {/* 新規セッション追加 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
@@ -760,7 +746,7 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                {/* 2. 時系列セッション履歴 */}
+                {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                     <div>
@@ -839,7 +825,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 3. 3ヶ月定期計測・身体データ & 写真管理 */}
+                {/* 3ヶ月定期計測・身体データ & 写真管理 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
                   <div className="flex justify-between items-center border-b pb-3">
                     <div>
@@ -856,7 +842,6 @@ export default function ClientsPage() {
                     </button>
                   </div>
 
-                  {/* 比較年月セレクター */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-md">過去 (Before)</span>
@@ -885,7 +870,6 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 数値データ比較 */}
                   <div className="space-y-3">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
                       <span>📈</span> 身体データ数値変化（自動算出）
@@ -972,10 +956,10 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 姿勢チェック写真管理（トリミング対応） */}
+                  {/* 姿勢チェック写真管理（object-containに変更して見切れを防止） */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center justify-between">
-                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (トリミング取込対応)</span>
+                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (全体表示・見切れない仕様)</span>
                       <span className="text-[10px] text-slate-400">クリックで拡大プレビュー</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -989,16 +973,17 @@ export default function ClientsPage() {
                             return (
                               <div key={key} className="space-y-1 text-center">
                                 <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-                                <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
+                                <div className="aspect-[3/4] bg-slate-900/5 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
                                   {photoUrl ? (
                                     <>
+                                      {/* 見切れ防止のため object-contain に変更 */}
                                       <img
                                         src={photoUrl}
                                         alt={label}
-                                        className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
+                                        className="w-full h-full object-contain cursor-pointer hover:scale-105 transition"
                                         onClick={() => setPreviewImage(photoUrl)}
                                       />
-                                      <div className="absolute top-1 right-1 flex gap-1">
+                                      <div className="absolute top-1 right-1 flex gap-1 z-10">
                                         <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="トリミングして取り込み直す">
                                           ✂️
                                           <input
@@ -1046,16 +1031,16 @@ export default function ClientsPage() {
                             return (
                               <div key={key} className="space-y-1 text-center">
                                 <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-                                <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
+                                <div className="aspect-[3/4] bg-slate-900/5 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
                                   {photoUrl ? (
                                     <>
                                       <img
                                         src={photoUrl}
                                         alt={label}
-                                        className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
+                                        className="w-full h-full object-contain cursor-pointer hover:scale-105 transition"
                                         onClick={() => setPreviewImage(photoUrl)}
                                       />
-                                      <div className="absolute top-1 right-1 flex gap-1">
+                                      <div className="absolute top-1 right-1 flex gap-1 z-10">
                                         <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="トリミングして取り込み直す">
                                           ✂️
                                           <input
@@ -1095,7 +1080,7 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 測定結果シート写真 */}
+                  {/* 測定結果シート写真（object-containに変更） */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
                       <span>📄</span> ケガゼロ・フィジカルチェック測定シート写真 ({afterDate})
@@ -1103,16 +1088,16 @@ export default function ClientsPage() {
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
                       <div className="flex flex-wrap gap-3 items-center">
                         {(afterPhysical?.testPhotos || []).map((url, idx) => (
-                          <div key={idx} className="w-24 h-24 bg-slate-200 rounded-lg overflow-hidden relative group border shadow-sm">
+                          <div key={idx} className="w-24 h-24 bg-slate-900/5 rounded-lg overflow-hidden relative group border shadow-sm flex items-center justify-center">
                             <img
                               src={url}
                               alt={`測定シート ${idx + 1}`}
-                              className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
+                              className="w-full h-full object-contain cursor-pointer hover:scale-105 transition"
                               onClick={() => setPreviewImage(url)}
                             />
                             <button
                               onClick={() => handleDeleteTestPhoto(afterDate, idx)}
-                              className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-rose-700"
+                              className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-rose-700 z-10"
                               title="削除"
                             >
                               ✕
@@ -1342,7 +1327,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* セッション記録（カルテ）修正モーダル */}
+      {/* セッション記録修正モーダル */}
       {editingSession && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
@@ -1408,7 +1393,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* 受講生情報 編集モーダル */}
+      {/* 受講生情報編集モーダル */}
       {editingStudent && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
