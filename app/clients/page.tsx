@@ -73,21 +73,21 @@ export default function ClientsPage() {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
 
-  // Supabaseからのデータ読み込み ＆ Square決済情報の反映
+  // Supabase & Square連携データ読み込み
   useEffect(() => {
-    async function fetchSupabaseData() {
+    async function fetchData() {
       try {
         setLoading(true);
         const { data: customerData } = await supabase.from('customers').select('*');
         const { data: paymentData } = await supabase.from('payments').select('*');
         const { data: salesData } = await supabase.from('sales').select('*');
 
-        // チケット履歴（Square決済情報をマッピング）
+        // Square決済情報をチケット履歴にマッピング
         const tickets: TicketHistory[] = [];
         if (paymentData) {
           paymentData.forEach((pay: any, idx: number) => {
             tickets.push({
-              id: pay.id || `th-pay-${idx}`,
+              id: pay.id || `th-${idx}`,
               date: pay.created_at ? pay.created_at.split('T')[0] : '2026-09-01',
               title: pay.item_name || 'Square通常決済',
               count: 10,
@@ -99,7 +99,7 @@ export default function ClientsPage() {
         if (salesData) {
           salesData.forEach((sale: any, idx: number) => {
             tickets.push({
-              id: sale.id || `th-sale-${idx}`,
+              id: sale.id || `sales-${idx}`,
               date: sale.created_at ? sale.created_at.split('T')[0] : '2026-09-01',
               title: `Square売上連携 (${sale.source || 'KOBA'})`,
               count: 5,
@@ -109,39 +109,24 @@ export default function ClientsPage() {
           });
         }
 
-        // 保護者データの設定（Square履歴を紐付け）
-        const loadedParents: Parent[] = [
+        setParents([
           {
             id: 'p-101',
-            name: '藤田 奈々',
-            kana: 'フジタ ナナ',
-            phone: '090-1111-2222',
-            ticketRemaining: tickets.length > 0 ? tickets.length * 5 : 1,
-            ticketsHistory: tickets.length > 0 ? tickets : [
-              { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
-            ]
-          },
-          {
-            id: 'p-102',
-            name: '山田 太郎',
-            kana: 'ヤマダ タロウ',
-            phone: '090-1234-5678',
-            ticketRemaining: 5,
-            ticketsHistory: [
-              { id: 'th-2', date: '2026-08-01', title: '5回券', count: 5, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200' }
-            ]
+            name: '保護者 (Square連動)',
+            kana: 'ホゴシャ',
+            phone: '090-0000-0000',
+            ticketRemaining: tickets.length > 0 ? tickets.length * 5 : 5,
+            ticketsHistory: tickets
           }
-        ];
-        setParents(loadedParents);
+        ]);
 
-        // 受講生データの設定
         if (customerData && customerData.length > 0) {
           const mappedStudents: Student[] = customerData.map((row: any, index: number) => ({
             id: String(row.id || `s-${index + 1}`),
             parentId: row.parent_id || 'p-101',
             name: row.name || `${row.given_name || ''} ${row.family_name || ''}`.trim() || '未設定',
             kana: row.kana || '',
-            age: row.age || 10,
+            age: row.age || 11,
             birthdate: row.birthdate || '2015-05-12',
             firstLessonDate: row.first_lesson_date || '2026-03-01',
             lastReservationDate: row.last_reservation_date || '2026-08-20',
@@ -174,50 +159,18 @@ export default function ClientsPage() {
               { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null }
             ]
           }));
+
           setStudents(mappedStudents);
           setSelectedStudentId(mappedStudents[0].id);
-        } else {
-          // デフォルトのモック（Supabaseにデータがない場合）
-          setStudents([
-            {
-              id: 's-001',
-              parentId: 'p-101',
-              name: '藤田 陸',
-              kana: 'フジタ リク',
-              age: 11,
-              birthdate: '2015-05-12',
-              firstLessonDate: '2026-03-01',
-              lastReservationDate: '2026-08-20',
-              concern: 'サッカーでの体幹ブレ・走力向上',
-              target: 'トレセン選出・ブレない軸作り',
-              memo: '右足首捻挫の既往歴あり。兄。',
-              physicalHistory: [
-                {
-                  id: 'm-1',
-                  date: '2026-06-01',
-                  weight: 37.5,
-                  fat: 16.0,
-                  muscle: 29.5,
-                  note: '初回3ヶ月測定',
-                  posturePhotos: { front: null, side: null, back: null },
-                  testPhotos: []
-                }
-              ],
-              sessions: [
-                { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null }
-              ]
-            }
-          ]);
-          setSelectedStudentId('s-001');
         }
       } catch (err) {
-        console.error('Supabaseデータ取得エラー:', err);
+        console.error('データ取得エラー:', err);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchSupabaseData();
+    fetchData();
   }, []);
 
   if (loading) {
@@ -228,13 +181,29 @@ export default function ClientsPage() {
     );
   }
 
-  const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
-  const currentParent = parents.find(p => p.id === currentStudent?.parentId) || parents[0];
-  const siblingStudents = students.filter(s => s.parentId === currentParent?.id);
+  const currentStudent = students.find(s => s.id === selectedStudentId) || students[0] || {
+    id: 's-001',
+    parentId: 'p-101',
+    name: '未設定',
+    kana: '',
+    age: 10,
+    birthdate: '2015-01-01',
+    firstLessonDate: '2026-03-01',
+    lastReservationDate: '2026-09-01',
+    concern: '',
+    target: '',
+    memo: '',
+    physicalHistory: [],
+    sessions: []
+  };
 
-  const physicalDates = currentStudent?.physicalHistory?.map(m => m.date) || [];
-  const [beforeDate, setBeforeDate] = useState<string>('2026-06-01');
-  const [afterDate, setAfterDate] = useState<string>('2026-09-01');
+  const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
+  const siblingStudents = students.filter(s => s.parentId === currentParent.id);
+
+  const physicalDates = currentStudent.physicalHistory.map(m => m.date);
+  const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
+  const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
+
   const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // セッションフィルター＆新規フォーム
@@ -252,12 +221,12 @@ export default function ClientsPage() {
   const [editSessionHomework, setEditSessionHomework] = useState<string>('');
 
   const [editForm, setEditForm] = useState({
-    name: currentStudent?.name || '',
-    kana: currentStudent?.kana || '',
-    phone: currentParent?.phone || '',
-    concern: currentStudent?.concern || '',
-    target: currentStudent?.target || '',
-    memo: currentStudent?.memo || ''
+    name: currentStudent.name,
+    kana: currentStudent.kana,
+    phone: currentParent.phone,
+    concern: currentStudent.concern,
+    target: currentStudent.target,
+    memo: currentStudent.memo
   });
 
   // 自動アラート判定ロジック
@@ -265,7 +234,7 @@ export default function ClientsPage() {
     const alerts: { text: string; type: 'warning' | 'danger' }[] = [];
     const today = new Date();
 
-    if (student?.lastReservationDate) {
+    if (student.lastReservationDate) {
       const lastRes = new Date(student.lastReservationDate);
       const diffDays = Math.floor((today.getTime() - lastRes.getTime()) / (1000 * 60 * 60 * 24));
       if (diffDays >= 30) {
@@ -275,7 +244,7 @@ export default function ClientsPage() {
       }
     }
 
-    if (parent?.ticketRemaining <= 1) {
+    if (parent.ticketRemaining <= 1) {
       alerts.push({ text: `🎫 回数券残り ${parent.ticketRemaining} 回`, type: 'danger' });
     }
 
@@ -296,7 +265,7 @@ export default function ClientsPage() {
         target: target.target,
         memo: target.memo
       });
-      if (target.physicalHistory && target.physicalHistory.length > 0) {
+      if (target.physicalHistory.length > 0) {
         setBeforeDate(target.physicalHistory[0].date);
         setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
       }
@@ -392,7 +361,6 @@ export default function ClientsPage() {
     setParents(prev =>
       prev.map(p => (p.id === currentParent.id ? { ...p, phone: editForm.phone } : p))
     );
-    // Supabaseへの保存
     await supabase.from('customers').update({
       name: editForm.name,
       kana: editForm.kana,
@@ -404,15 +372,15 @@ export default function ClientsPage() {
     alert('基本情報を更新しました');
   };
 
-  const availableYears = Array.from(new Set(currentStudent?.sessions?.map(s => s.date.substring(0, 4)) || [])).sort().reverse();
+  const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
   const availableMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
-  const filteredSessions = currentStudent?.sessions?.filter(s => {
+  const filteredSessions = currentStudent.sessions.filter(s => {
     const [y, m] = s.date.split('-');
     const matchYear = selectedYear === 'ALL' || y === selectedYear;
     const matchMonth = selectedMonth === 'ALL' || m === selectedMonth;
     return matchYear && matchMonth;
-  }) || [];
+  });
 
   const filteredStudents = students.filter(s => {
     const parent = parents.find(p => p.id === s.parentId);
@@ -485,76 +453,75 @@ export default function ClientsPage() {
 
           {/* 右カラム：メインコンテンツ */}
           <div className="md:col-span-3 space-y-5">
-            {currentStudent && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div>
-                    <span className="text-xs text-slate-400 font-semibold">{currentStudent.kana}</span>
-                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mt-0.5">
-                      {currentStudent.name}
-                      <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">{currentStudent.age}歳</span>
-                    </h2>
-                    <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
-                      <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-semibold">
-                        保護者: {currentParent?.name} 様 ({currentParent?.phone})
-                      </span>
-                      <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                        <span>🎟️</span> 回数券 残数: <strong className="text-sm">{currentParent?.ticketRemaining}</strong> 回
-                      </span>
-                    </div>
+            {/* 顧客基本情報ヘッダー */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <span className="text-xs text-slate-400 font-semibold">{currentStudent.kana}</span>
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mt-0.5">
+                    {currentStudent.name}
+                    <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">{currentStudent.age}歳</span>
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                    <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-semibold">
+                      保護者: {currentParent.name} 様 ({currentParent.phone})
+                    </span>
+                    <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                      <span>🎟️</span> 回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
+                    </span>
                   </div>
-
-                  {currentAlerts.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      {currentAlerts.map((alt, idx) => (
-                        <div key={idx} className={`text-xs font-bold px-3 py-1 rounded-lg border flex items-center gap-1.5 ${alt.type === 'danger' ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-                          <span>{alt.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* 兄弟リンク */}
-                {siblingStudents.length > 1 && (
-                  <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
-                    <span className="text-xs text-amber-900 font-bold">👨‍👩‍👧‍👦 ご兄弟アカウント</span>
-                    <div className="flex gap-1.5">
-                      {siblingStudents.map(sib => (
-                        <button
-                          key={sib.id}
-                          onClick={() => handleSelectStudent(sib.id)}
-                          className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${sib.id === currentStudent.id ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'}`}
-                        >
-                          {sib.name}
-                        </button>
-                      ))}
-                    </div>
+                {currentAlerts.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {currentAlerts.map((alt, idx) => (
+                      <div key={idx} className={`text-xs font-bold px-3 py-1 rounded-lg border flex items-center gap-1.5 ${alt.type === 'danger' ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                        <span>{alt.text}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
-
-                {/* タブ */}
-                <div className="flex border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
-                  <button onClick={() => setActiveTab('carte')} className={`pb-3 border-b-2 transition ${activeTab === 'carte' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                    📋 カルテ (セッション & 計測・写真比較)
-                  </button>
-                  <button onClick={() => setActiveTab('tickets')} className={`pb-3 border-b-2 transition ${activeTab === 'tickets' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                    🎟️ チケット購入履歴 & Square
-                  </button>
-                  <button onClick={() => setActiveTab('edit_info')} className={`pb-3 border-b-2 transition ${activeTab === 'edit_info' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                    ✏️ 基本情報編集・削除
-                  </button>
-                </div>
               </div>
-            )}
+
+              {/* 兄弟リンク */}
+              {siblingStudents.length > 1 && (
+                <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
+                  <span className="text-xs text-amber-900 font-bold">👨‍👩‍👧‍👦 ご兄弟アカウント</span>
+                  <div className="flex gap-1.5">
+                    {siblingStudents.map(sib => (
+                      <button
+                        key={sib.id}
+                        onClick={() => handleSelectStudent(sib.id)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${sib.id === currentStudent.id ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'}`}
+                      >
+                        {sib.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* タブ */}
+              <div className="flex border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
+                <button onClick={() => setActiveTab('carte')} className={`pb-3 border-b-2 transition ${activeTab === 'carte' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  📋 カルテ (セッション & 計測・写真比較)
+                </button>
+                <button onClick={() => setActiveTab('tickets')} className={`pb-3 border-b-2 transition ${activeTab === 'tickets' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  🎟️ チケット購入履歴 & Square
+                </button>
+                <button onClick={() => setActiveTab('edit_info')} className={`pb-3 border-b-2 transition ${activeTab === 'edit_info' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  ✏️ 基本情報編集・削除
+                </button>
+              </div>
+            </div>
 
             {/* TAB 1: カルテ */}
-            {activeTab === 'carte' && currentStudent && (
+            {activeTab === 'carte' && (
               <div className="space-y-6">
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✍️</span> 新規セッション記録の追加</h3>
-                    <label className="flex items-center gap-1 font-semibold text-slate-600 text-xs cursor-pointer">
+                    <label className="flex items-center gap-1 font-semibold text-slate-600 cursor-pointer text-xs">
                       <input type="checkbox" checked={useTicket} onChange={e => setUseTicket(e.target.checked)} className="rounded text-[#5e9bc4]" />
                       回数券を1回消化する
                     </label>
@@ -582,53 +549,25 @@ export default function ClientsPage() {
                     <input type="text" placeholder="例: 片足ドローイン 1分×2" value={newSessionHomework} onChange={e => setNewSessionHomework(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2 outline-none" />
                   </div>
                   <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
-                    セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
+                    セッションを登録する {useTicket ? '(回数券1回消化)' : ''}
                   </button>
                 </div>
 
                 {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📅</span> 時系列セッション履歴</h3>
-                    <div className="flex items-center gap-2 text-xs bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="border rounded p-1 font-bold text-[#5e9bc4]">
-                        <option value="ALL">全年度</option>
-                        {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
-                      </select>
-                      <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="border rounded p-1 font-bold text-[#5e9bc4]">
-                        <option value="ALL">全月</option>
-                        {availableMonths.map(m => <option key={m} value={m}>{parseInt(m, 10)}月</option>)}
-                      </select>
-                    </div>
+                  <div className="flex justify-between items-center border-b pb-3">
+                    <h3 className="font-bold text-slate-800 text-sm">📅 時系列セッション履歴</h3>
                   </div>
-
                   <div className="space-y-3">
                     {filteredSessions.length > 0 ? (
                       filteredSessions.map(session => (
                         <div key={session.id} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-2">
                           <div className="flex justify-between items-center font-bold text-slate-700">
                             <span>{session.date} <span className="text-[#5e9bc4] ml-2 bg-sky-100 px-2 py-0.5 rounded">担当: {session.staff}</span></span>
-                            <div className="flex gap-2">
-                              <button onClick={() => { setEditingSessionId(session.id); setEditSessionContent(session.content); setEditSessionHomework(session.homework); }} className="text-xs text-sky-600 hover:underline">編集</button>
-                              <button onClick={() => handleDeleteSession(session.id)} className="text-xs text-rose-500 hover:underline">削除</button>
-                            </div>
+                            <button onClick={() => handleDeleteSession(session.id)} className="text-xs text-rose-500 hover:underline">削除</button>
                           </div>
-
-                          {editingSessionId === session.id ? (
-                            <div className="space-y-2 pt-2 border-t">
-                              <input type="text" value={editSessionContent} onChange={e => setEditSessionContent(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="内容" />
-                              <input type="text" value={editSessionHomework} onChange={e => setEditSessionHomework(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="宿題" />
-                              <div className="flex gap-2 justify-end">
-                                <button onClick={() => handleSaveEditSession(session.id)} className="bg-emerald-600 text-white px-3 py-1 rounded font-bold">保存</button>
-                                <button onClick={() => setEditingSessionId(null)} className="bg-slate-300 px-3 py-1 rounded">キャンセル</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <p className="text-slate-800 font-medium">{session.content}</p>
-                              {session.homework && <p className="text-amber-800 bg-amber-50 p-2 rounded border border-amber-100"><strong>宿題:</strong> {session.homework}</p>}
-                            </>
-                          )}
+                          <p className="text-slate-800 font-medium">{session.content}</p>
+                          {session.homework && <p className="text-amber-800 bg-amber-50 p-2 rounded border border-amber-100"><strong>宿題:</strong> {session.homework}</p>}
                         </div>
                       ))
                     ) : (
@@ -640,9 +579,9 @@ export default function ClientsPage() {
             )}
 
             {/* TAB 2: チケット購入履歴 & Square */}
-            {activeTab === 'tickets' && currentParent && (
+            {activeTab === 'tickets' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>🎟️</span> Square 決済・チケット購入履歴</h3>
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">🎟️ Square 決済・チケット購入履歴 (Supabase同期)</h3>
                 <div className="space-y-3">
                   {currentParent.ticketsHistory && currentParent.ticketsHistory.length > 0 ? (
                     currentParent.ticketsHistory.map((t, idx) => (
@@ -667,7 +606,7 @@ export default function ClientsPage() {
             )}
 
             {/* TAB 3: 基本情報編集 */}
-            {activeTab === 'edit_info' && currentStudent && (
+            {activeTab === 'edit_info' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-800 text-sm">✏️ 基本情報の編集・削除 (Supabase同期)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
