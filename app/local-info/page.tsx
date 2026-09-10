@@ -3,83 +3,162 @@
 import React, { useState } from 'react';
 import Header from '@/components/Header';
 
-interface NearbyInfo {
+interface TeamInfo {
   id: string;
   title: string;
-  category: '大会・イベント' | '近隣施設' | 'その他';
+  category: '大会・イベント' | 'チーム・団体' | 'その他';
+  sport: string; // 競技（手動入力）
   date: string;
   location: string;
-  description: string;
+  url: string;
+  contactName: string;
+  contactEmail: string;
+  businessCardFront: string; // 名刺表面（DataURL等）
+  businessCardBack: string;  // 名刺裏面（DataURL等）
+  memo1: string;
+  memo2: string;
+  memo3: string;
 }
 
 export default function LocalInfoPage() {
-  const [nearbyInfos, setNearbyInfos] = useState<NearbyInfo[]>([
+  const [teamInfos, setTeamInfos] = useState<TeamInfo[]>([
     {
-      id: 'nb-1',
+      id: 'team-1',
       title: '練馬区ジュニアサッカー大会 予選リーグ',
       category: '大会・イベント',
+      sport: 'サッカー',
       date: '2026-10-15',
       location: '区立総合運動場グラウンド',
-      description: '初戦突破を目標に、アジリティ系メニューを強化中。'
+      url: 'https://example.com/nerima-soccer',
+      contactName: '山田 太郎',
+      contactEmail: 'yamada@example.com',
+      businessCardFront: '',
+      businessCardBack: '',
+      memo1: '初戦突破を目標に、アジリティ系メニューを強化中。',
+      memo2: '集合時間は試合開始の1時間前。',
+      memo3: '駐車場は関係者のみ利用可能。'
     },
     {
-      id: 'nb-2',
-      title: '光が丘体育館 サブアリーナ開放日',
-      category: '近隣施設',
+      id: 'team-2',
+      title: '光が丘FCスポーツ少年団',
+      category: 'チーム・団体',
+      sport: 'サッカー',
       date: '2026-09-25',
       location: '光が丘体育館',
-      description: '自主トレでのスペース利用に活用可能。'
+      url: 'https://example.com/hikarigaoka-fc',
+      contactName: '鈴木 次郎',
+      contactEmail: 'suzuki@example.com',
+      businessCardFront: '',
+      businessCardBack: '',
+      memo1: '合同練習の sparring パートナーとして交流あり。',
+      memo2: '連絡担当者は鈴木コーチ。',
+      memo3: '春季・秋季の年2回合同合宿を実施。'
     }
   ]);
 
-  const [newNearbyTitle, setNewNearbyTitle] = useState('');
-  const [newNearbyCategory, setNewNearbyCategory] = useState<'大会・イベント' | '近隣施設' | 'その他'>('大会・イベント');
-  const [newNearbyDate, setNewNearbyDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newNearbyLocation, setNewNearbyLocation] = useState('');
-  const [newNearbyDesc, setNewNearbyDesc] = useState('');
+  // 新規登録用ステート
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState<'大会・イベント' | 'チーム・団体' | 'その他'>('大会・イベント');
+  const [newSport, setNewSport] = useState('');
+  const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newLocation, setNewLocation] = useState('');
+  const [newUrl, setNewUrl] = useState('');
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [newCardFront, setNewCardFront] = useState('');
+  const [newCardBack, setNewCardBack] = useState('');
+  const [newMemo1, setNewMemo1] = useState('');
+  const [newMemo2, setNewMemo2] = useState('');
+  const [newMemo3, setNewMemo3] = useState('');
+  
   const [searchKeyword, setSearchKeyword] = useState('');
 
   // 編集用の状態管理
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [editCategory, setEditCategory] = useState<'大会・イベント' | '近隣施設' | 'その他'>('大会・イベント');
+  const [editCategory, setEditCategory] = useState<'大会・イベント' | 'チーム・団体' | 'その他'>('大会・イベント');
+  const [editSport, setEditSport] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editLocation, setEditLocation] = useState('');
-  const [editDesc, setEditDesc] = useState('');
+  const [editUrl, setEditUrl] = useState('');
+  const [editContactName, setEditContactName] = useState('');
+  const [editContactEmail, setEditContactEmail] = useState('');
+  const [editCardFront, setEditCardFront] = useState('');
+  const [editCardBack, setEditCardBack] = useState('');
+  const [editMemo1, setEditMemo1] = useState('');
+  const [editMemo2, setEditMemo2] = useState('');
+  const [editMemo3, setEditMemo3] = useState('');
 
-  const handleAddNearby = () => {
-    if (!newNearbyTitle || !newNearbyLocation) {
+  // 画像をBase64に変換するヘルパー
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setter(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAdd = () => {
+    if (!newTitle || !newLocation) {
       alert('タイトルと場所を入力してください。');
       return;
     }
-    const newItem: NearbyInfo = {
-      id: `nb-${Date.now()}`,
-      title: newNearbyTitle,
-      category: newNearbyCategory,
-      date: newNearbyDate,
-      location: newNearbyLocation,
-      description: newNearbyDesc
+    const newItem: TeamInfo = {
+      id: `team-${Date.now()}`,
+      title: newTitle,
+      category: newCategory,
+      sport: newSport,
+      date: newDate,
+      location: newLocation,
+      url: newUrl,
+      contactName: newContactName,
+      contactEmail: newContactEmail,
+      businessCardFront: newCardFront,
+      businessCardBack: newCardBack,
+      memo1: newMemo1,
+      memo2: newMemo2,
+      memo3: newMemo3
     };
-    setNearbyInfos([newItem, ...nearbyInfos]);
-    setNewNearbyTitle('');
-    setNewNearbyLocation('');
-    setNewNearbyDesc('');
-    alert('近隣情報・イベントを追加しました！');
+    setTeamInfos([newItem, ...teamInfos]);
+    // フォームリセット
+    setNewTitle('');
+    setNewSport('');
+    setNewLocation('');
+    setNewUrl('');
+    setNewContactName('');
+    setNewContactEmail('');
+    setNewCardFront('');
+    setNewCardBack('');
+    setNewMemo1('');
+    setNewMemo2('');
+    setNewMemo3('');
+    alert('チーム・イベント情報を追加しました！');
   };
 
-  const handleDeleteNearby = (id: string) => {
-    if (!confirm('この近隣情報を削除しますか？')) return;
-    setNearbyInfos(prev => prev.filter(item => item.id !== id));
+  const handleDelete = (id: string) => {
+    if (!confirm('この情報を削除しますか？')) return;
+    setTeamInfos(prev => prev.filter(item => item.id !== id));
     if (editingId === id) setEditingId(null);
   };
 
-  const handleStartEdit = (item: NearbyInfo) => {
+  const handleStartEdit = (item: TeamInfo) => {
     setEditingId(item.id);
     setEditTitle(item.title);
     setEditCategory(item.category);
+    setEditSport(item.sport);
     setEditDate(item.date);
     setEditLocation(item.location);
-    setEditDesc(item.description);
+    setEditUrl(item.url);
+    setEditContactName(item.contactName);
+    setEditContactEmail(item.contactEmail);
+    setEditCardFront(item.businessCardFront);
+    setEditCardBack(item.businessCardBack);
+    setEditMemo1(item.memo1);
+    setEditMemo2(item.memo2);
+    setEditMemo3(item.memo3);
   };
 
   const handleSaveEdit = (id: string) => {
@@ -87,29 +166,41 @@ export default function LocalInfoPage() {
       alert('タイトルと場所を入力してください。');
       return;
     }
-    setNearbyInfos(prev =>
+    setTeamInfos(prev =>
       prev.map(item =>
         item.id === id
           ? {
               ...item,
               title: editTitle,
               category: editCategory,
+              sport: editSport,
               date: editDate,
               location: editLocation,
-              description: editDesc
+              url: editUrl,
+              contactName: editContactName,
+              contactEmail: editContactEmail,
+              businessCardFront: editCardFront,
+              businessCardBack: editCardBack,
+              memo1: editMemo1,
+              memo2: editMemo2,
+              memo3: editMemo3
             }
           : item
       )
     );
     setEditingId(null);
-    alert('近隣情報を更新しました！');
+    alert('情報を更新しました！');
   };
 
-  const filteredInfos = nearbyInfos.filter(
+  const filteredInfos = teamInfos.filter(
     item =>
       item.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
       item.location.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchKeyword.toLowerCase())
+      item.sport.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      item.contactName.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      item.memo1.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      item.memo2.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      item.memo3.toLowerCase().includes(searchKeyword.toLowerCase())
   );
 
   return (
@@ -119,8 +210,8 @@ export default function LocalInfoPage() {
       <main className="p-6 max-w-5xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">📍 近隣情報・イベント管理</h1>
-            <p className="text-xs text-slate-500 mt-1">周辺の競技場、大会スケジュール、施設情報を一元管理します。</p>
+            <h1 className="text-2xl font-bold text-slate-800">👥 チーム・イベント情報管理</h1>
+            <p className="text-xs text-slate-500 mt-1">周辺のチーム、競技大会、関連連絡先を一元管理します。</p>
           </div>
           <div className="w-full md:w-auto">
             <input
@@ -135,64 +226,153 @@ export default function LocalInfoPage() {
 
         {/* 新規登録フォーム */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">＋ 新規イベント・情報の追加</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">＋ 新規チーム・情報の追加</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
             <div>
               <label className="block text-slate-500 mb-1 font-semibold">タイトル</label>
               <input
                 type="text"
                 placeholder="例: 区民サッカー大会"
-                value={newNearbyTitle}
-                onChange={e => setNewNearbyTitle(e.target.value)}
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
               />
             </div>
             <div>
               <label className="block text-slate-500 mb-1 font-semibold">カテゴリ</label>
               <select
-                value={newNearbyCategory}
-                onChange={e => setNewNearbyCategory(e.target.value as any)}
+                value={newCategory}
+                onChange={e => setNewCategory(e.target.value as any)}
                 className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none font-bold text-[#5e9bc4]"
               >
                 <option value="大会・イベント">大会・イベント</option>
-                <option value="近隣施設">近隣施設</option>
+                <option value="チーム・団体">チーム・団体</option>
                 <option value="その他">その他</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">競技（手動入力）</label>
+              <input
+                type="text"
+                placeholder="例: サッカー, バスケットボール"
+                value={newSport}
+                onChange={e => setNewSport(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+              />
             </div>
             <div>
               <label className="block text-slate-500 mb-1 font-semibold">日付</label>
               <input
                 type="date"
-                value={newNearbyDate}
-                onChange={e => setNewNearbyDate(e.target.value)}
+                value={newDate}
+                onChange={e => setNewDate(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
             <div>
               <label className="block text-slate-500 mb-1 font-semibold">場所</label>
               <input
                 type="text"
                 placeholder="例: 練馬区総合グラウンド"
-                value={newNearbyLocation}
-                onChange={e => setNewNearbyLocation(e.target.value)}
+                value={newLocation}
+                onChange={e => setNewLocation(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
               />
             </div>
             <div>
-              <label className="block text-slate-500 mb-1 font-semibold">詳細メモ・説明</label>
+              <label className="block text-slate-500 mb-1 font-semibold">URL</label>
+              <input
+                type="url"
+                placeholder="https://example.com"
+                value={newUrl}
+                onChange={e => setNewUrl(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">担当者名</label>
               <input
                 type="text"
-                placeholder="備考など"
-                value={newNearbyDesc}
-                onChange={e => setNewNearbyDesc(e.target.value)}
+                placeholder="例: 山田 太郎"
+                value={newContactName}
+                onChange={e => setNewContactName(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">メールアドレス</label>
+              <input
+                type="email"
+                placeholder="example@email.com"
+                value={newContactEmail}
+                onChange={e => setNewContactEmail(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">名刺（表面）</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={e => handleImageUpload(e, setNewCardFront)}
+                className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
+              />
+              {newCardFront && <span className="text-emerald-600 text-[10px] mt-0.5 block">表面画像セット済み</span>}
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">名刺（裏面）</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={e => handleImageUpload(e, setNewCardBack)}
+                className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
+              />
+              {newCardBack && <span className="text-emerald-600 text-[10px] mt-0.5 block">裏面画像セット済み</span>}
+            </div>
+          </div>
+
+          {/* メモ3つ */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">メモ1</label>
+              <input
+                type="text"
+                placeholder="メモ内容1"
+                value={newMemo1}
+                onChange={e => setNewMemo1(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">メモ2</label>
+              <input
+                type="text"
+                placeholder="メモ内容2"
+                value={newMemo2}
+                onChange={e => setNewMemo2(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">メモ3</label>
+              <input
+                type="text"
+                placeholder="メモ内容3"
+                value={newMemo3}
+                onChange={e => setNewMemo3(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+              />
+            </div>
+          </div>
+
           <button
-            onClick={handleAddNearby}
+            onClick={handleAdd}
             className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition shadow-sm"
           >
             情報を登録する
@@ -208,7 +388,7 @@ export default function LocalInfoPage() {
                 {editingId === item.id ? (
                   /* 編集モード時のフォーム */
                   <div className="space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div>
                         <label className="block text-slate-500 mb-1 font-semibold">タイトル</label>
                         <input
@@ -226,9 +406,18 @@ export default function LocalInfoPage() {
                           className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none font-bold text-[#5e9bc4]"
                         >
                           <option value="大会・イベント">大会・イベント</option>
-                          <option value="近隣施設">近隣施設</option>
+                          <option value="チーム・団体">チーム・団体</option>
                           <option value="その他">その他</option>
                         </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">競技</label>
+                        <input
+                          type="text"
+                          value={editSport}
+                          onChange={e => setEditSport(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
                       </div>
                       <div>
                         <label className="block text-slate-500 mb-1 font-semibold">日付</label>
@@ -240,7 +429,8 @@ export default function LocalInfoPage() {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-slate-500 mb-1 font-semibold">場所</label>
                         <input
@@ -251,15 +441,108 @@ export default function LocalInfoPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-semibold">詳細メモ・説明</label>
+                        <label className="block text-slate-500 mb-1 font-semibold">URL</label>
+                        <input
+                          type="url"
+                          value={editUrl}
+                          onChange={e => setEditUrl(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">担当者名</label>
                         <input
                           type="text"
-                          value={editDesc}
-                          onChange={e => setEditDesc(e.target.value)}
+                          value={editContactName}
+                          onChange={e => setEditContactName(e.target.value)}
                           className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
                         />
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">メールアドレス</label>
+                        <input
+                          type="email"
+                          value={editContactEmail}
+                          onChange={e => setEditContactEmail(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">名刺（表面）修正</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={e => handleImageUpload(e, setEditCardFront)}
+                            className="w-full text-xs text-slate-500"
+                          />
+                          {editCardFront && (
+                            <button
+                              type="button"
+                              onClick={() => setEditCardFront('')}
+                              className="text-rose-600 text-[10px] border border-rose-200 px-2 py-1 rounded"
+                            >
+                              削除
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">名刺（裏面）修正</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={e => handleImageUpload(e, setEditCardBack)}
+                            className="w-full text-xs text-slate-500"
+                          />
+                          {editCardBack && (
+                            <button
+                              type="button"
+                              onClick={() => setEditCardBack('')}
+                              className="text-rose-600 text-[10px] border border-rose-200 px-2 py-1 rounded"
+                            >
+                              削除
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 編集用メモ3つ */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">メモ1</label>
+                        <input
+                          type="text"
+                          value={editMemo1}
+                          onChange={e => setEditMemo1(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">メモ2</label>
+                        <input
+                          type="text"
+                          value={editMemo2}
+                          onChange={e => setEditMemo2(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 mb-1 font-semibold">メモ3</label>
+                        <input
+                          type="text"
+                          value={editMemo3}
+                          onChange={e => setEditMemo3(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 bg-white outline-none"
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex justify-end gap-2 pt-2">
                       <button
                         onClick={() => handleSaveEdit(item.id)}
@@ -278,15 +561,51 @@ export default function LocalInfoPage() {
                 ) : (
                   /* 通常表示モード */
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="bg-sky-100 text-[#5e9bc4] font-bold px-2.5 py-0.5 rounded-full">{item.category}</span>
+                        {item.sport && <span className="bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full">競技: {item.sport}</span>}
                         <span className="text-slate-500 font-semibold">📅 {item.date}</span>
                       </div>
                       <h3 className="text-base font-bold text-slate-800">{item.title}</h3>
-                      <p className="text-slate-600 flex items-center gap-1 font-medium"><span>📍</span> {item.location}</p>
-                      {item.description && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">{item.description}</p>}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-slate-600 font-medium">
+                        <p className="flex items-center gap-1"><span>📍</span> 場所: {item.location}</p>
+                        {item.url && (
+                          <p className="flex items-center gap-1">
+                            <span>🔗</span> URL: <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-sky-600 underline truncate max-w-xs">{item.url}</a>
+                          </p>
+                        )}
+                        {item.contactName && <p className="flex items-center gap-1"><span>👤</span> 担当: {item.contactName}</p>}
+                        {item.contactEmail && <p className="flex items-center gap-1"><span>✉️</span> アドレス: <a href={`mailto:${item.contactEmail}`} className="text-sky-600 underline">{item.contactEmail}</a></p>}
+                      </div>
+
+                      {/* 名刺表示エリア */}
+                      {(item.businessCardFront || item.businessCardBack) && (
+                        <div className="flex gap-4 pt-1">
+                          {item.businessCardFront && (
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5">名刺（表面）</span>
+                              <img src={item.businessCardFront} alt="名刺表面" className="w-24 h-16 object-cover rounded border border-slate-200 shadow-sm" />
+                            </div>
+                          )}
+                          {item.businessCardBack && (
+                            <div>
+                              <span className="text-[10px] text-slate-400 block mb-0.5">名刺（裏面）</span>
+                              <img src={item.businessCardBack} alt="名刺裏面" className="w-24 h-16 object-cover rounded border border-slate-200 shadow-sm" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 3つのメモ */}
+                      <div className="space-y-1 pt-1">
+                        {item.memo1 && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">💡 メモ1: {item.memo1}</p>}
+                        {item.memo2 && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">💡 メモ2: {item.memo2}</p>}
+                        {item.memo3 && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">💡 メモ3: {item.memo3}</p>}
+                      </div>
                     </div>
+
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleStartEdit(item)}
@@ -295,7 +614,7 @@ export default function LocalInfoPage() {
                         修正
                       </button>
                       <button
-                        onClick={() => handleDeleteNearby(item.id)}
+                        onClick={() => handleDelete(item.id)}
                         className="px-3.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-lg font-bold transition"
                       >
                         削除
@@ -307,7 +626,7 @@ export default function LocalInfoPage() {
             ))
           ) : (
             <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-400 text-xs">
-              該当する近隣情報はありません
+              該当するチーム・イベント情報はありません
             </div>
           )}
         </div>
