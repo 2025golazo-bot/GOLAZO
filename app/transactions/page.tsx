@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import RealtimeWatcher from "@/components/RealtimeWatcher";
 import NewTransactionForm from "@/components/NewTransactionForm";
 import { formatDate } from "@/lib/utils";
-import type { TransactionRow } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +12,7 @@ export default async function TransactionsPage() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  const list = (transactions || []) as TransactionRow[];
+  const list = (transactions || []) as any[];
 
   // 簡易集計
   const totalAmount = list.reduce((acc, cur) => acc + (cur.amount || 0), 0);
