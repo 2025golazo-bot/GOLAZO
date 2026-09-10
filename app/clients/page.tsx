@@ -50,7 +50,7 @@ interface Parent {
 
 interface Student {
   id: string;
-  parentId: string;
+  parentId: string; // 家族（保護者）紐付けID
   name: string;
   kana: string;
   age: number;
@@ -66,7 +66,7 @@ interface Student {
 }
 
 export default function ClientsPage() {
-  // 保護者データ
+  // 保護者データ（家族単位でのチケット共有基盤）
   const [parents, setParents] = useState<Parent[]>([
     {
       id: 'p-101',
@@ -74,9 +74,9 @@ export default function ClientsPage() {
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
       isTicketSystem: true,
-      ticketRemaining: 1,
+      ticketRemaining: 8, // 兄弟（陸・凛など）で共有する回数券残高
       ticketsHistory: [
-        { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
+        { id: 'th-1', date: '2026-06-01', title: '10回券 (家族共有)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
       ]
     },
     {
@@ -92,7 +92,7 @@ export default function ClientsPage() {
     }
   ]);
 
-  // 受講生データ一覧
+  // 受講生データ一覧（兄弟の紐付け：p-101に「藤田 陸」「藤田 凛」を紐付け）
   const [students, setStudents] = useState<Student[]>([
     {
       id: 's-001',
@@ -132,8 +132,48 @@ export default function ClientsPage() {
         }
       ],
       sessions: [
-        { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null },
-        { id: 'ses-102', date: '2026-09-15', staff: 'NANA', content: 'KOBA式体幹トレーニング＆アジリティ', homework: '片足バランス 1分×2回', photo: null }
+        { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null }
+      ]
+    },
+    {
+      id: 's-003',
+      parentId: 'p-101',
+      name: '藤田 凛',
+      kana: 'フジタ リン',
+      age: 8,
+      birthdate: '2018-09-20',
+      firstLessonDate: '2026-06-15',
+      lastReservationDate: '2026-10-02',
+      concern: '姿勢改善・リズム感向上',
+      target: '楽しく身体を動かす・柔軟性UP',
+      memo: '藤田陸の妹。家族共有チケット適用対象。',
+      alert: null,
+      physicalHistory: [
+        {
+          id: 'm-rin-1',
+          date: '2026-06-15',
+          weight: 25.0,
+          fat: 17.5,
+          muscle: 18.0,
+          note: '初回計測',
+          posturePhotos: { front: null, side: null, back: null },
+          kegazeroPhotos: [],
+          physicalCheckPhotos: []
+        },
+        {
+          id: 'm-rin-2',
+          date: '2026-09-15',
+          weight: 25.8,
+          fat: 17.0,
+          muscle: 18.8,
+          note: '2回目計測',
+          posturePhotos: { front: null, side: null, back: null },
+          kegazeroPhotos: [],
+          physicalCheckPhotos: []
+        }
+      ],
+      sessions: [
+        { id: 'ses-301', date: '2026-10-02', staff: 'NANA', content: 'リズム体操＆コアバランス', homework: '片足立ち 30秒', photo: null }
       ]
     },
     {
@@ -179,9 +219,11 @@ export default function ClientsPage() {
   // 写真拡大プレビュー用ステート
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // 選択中の生徒と保護者
+  // 選択中の生徒と保護者（家族）
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
+  
+  // ★重要：同じ保護者IDを持つ「きょうだい・家族」の生徒一覧を自動抽出
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
@@ -291,15 +333,14 @@ export default function ClientsPage() {
       prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions] } : s))
     );
 
-    if (currentParent.isTicketSystem) {
-      setParents(prev =>
-        prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
-      );
-    }
+    // ★家族共有回数券の残高から1回消化
+    setParents(prev =>
+      prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
+    );
 
     setNewSessionContent('');
     setNewSessionHomework('');
-    alert('セッションを登録しました！');
+    alert('セッションを登録し、家族共有回数券を1回消化しました！');
   };
 
   const handleUpdateSession = () => {
@@ -353,7 +394,7 @@ export default function ClientsPage() {
     setIsSyncing(true);
     setTimeout(() => {
       setIsSyncing(false);
-      alert('Squareの最新決済・チケットデータの同期が完了しました！');
+      alert('Squareの最新決済・家族共有チケットデータの同期が完了しました！');
     }, 1200);
   };
 
@@ -527,25 +568,25 @@ export default function ClientsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 mt-2">
                 <span>👤 保護者: <strong className="text-slate-900">{currentParent.name}</strong> ({currentParent.phone})</span>
-                <span>🎟️ チケット残: <strong className="text-indigo-600 font-bold">{currentParent.ticketRemaining}回</strong></span>
+                <span>🎟️ 家族共有チケット残高: <strong className="text-indigo-600 font-bold">{currentParent.ticketRemaining}回</strong> (共有)</span>
                 <span>📅 初回レッスン: {currentStudent.firstLessonDate}</span>
               </div>
 
-              {/* 兄弟・家族リンク */}
+              {/* ★重要：兄弟・家族紐付け切り替えリンク */}
               {siblingStudents.length > 1 && (
-                <div className="flex items-center gap-2 mt-2 text-xs">
-                  <span className="text-slate-400">ご家族:</span>
+                <div className="flex items-center gap-2 mt-2.5 text-xs bg-indigo-50/60 p-2 rounded-lg border border-indigo-100">
+                  <span className="text-slate-500 font-bold">family 家族共有グループ:</span>
                   {siblingStudents.map(sib => (
                     <button
                       key={sib.id}
                       onClick={() => handleSelectStudent(sib.id)}
-                      className={`px-2 py-0.5 rounded border transition ${
+                      className={`px-2.5 py-1 rounded-md border transition text-xs font-bold ${
                         sib.id === currentStudent.id
-                          ? 'bg-indigo-600 border-indigo-600 text-white font-bold'
-                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-indigo-100/50'
                       }`}
                     >
-                      {sib.name}
+                      {sib.name} ({sib.age}歳)
                     </button>
                   ))}
                 </div>
@@ -569,7 +610,7 @@ export default function ClientsPage() {
                     activeTab === 'tickets' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  チケット履歴
+                  家族共有チケット履歴
                 </button>
                 <button
                   onClick={() => {
@@ -625,11 +666,119 @@ export default function ClientsPage() {
               </div>
 
               {/* ---------------------------------------------------- */}
+              {/* 【身体データ数値変化の自動算出】 */}
+              {/* ---------------------------------------------------- */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                  <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                    <span>📈</span> 身体データ数値変化 (自動算出)
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-500 font-bold">Before: {beforeDate}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-indigo-600 font-bold">After: {afterDate}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* 体重 */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col gap-1 shadow-sm">
+                    <span className="text-[10px] text-slate-500 font-bold">体重 (kg)</span>
+                    <div className="flex items-baseline justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg font-bold text-slate-800">{afterPhysical?.weight ?? 0}</span>
+                        <span className="text-xs text-slate-400">(前回: {beforePhysical?.weight ?? 0})</span>
+                      </div>
+                      {(() => {
+                        const diff = +(
+                          (afterPhysical?.weight || 0) - (beforePhysical?.weight || 0)
+                        ).toFixed(1);
+                        const isPlus = diff > 0;
+                        return (
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-bold ${
+                              diff === 0
+                                ? 'bg-slate-100 text-slate-600'
+                                : isPlus
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                            }`}
+                          >
+                            {isPlus ? `+${diff}kg` : `${diff}kg`}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 体脂肪率 */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col gap-1 shadow-sm">
+                    <span className="text-[10px] text-slate-500 font-bold">体脂肪率 (%)</span>
+                    <div className="flex items-baseline justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg font-bold text-slate-800">{afterPhysical?.fat ?? 0}</span>
+                        <span className="text-xs text-slate-400">(前回: {beforePhysical?.fat ?? 0})</span>
+                      </div>
+                      {(() => {
+                        const diff = +(
+                          (afterPhysical?.fat || 0) - (beforePhysical?.fat || 0)
+                        ).toFixed(1);
+                        const isPlus = diff > 0;
+                        return (
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-bold ${
+                              diff === 0
+                                ? 'bg-slate-100 text-slate-600'
+                                : isPlus
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}
+                          >
+                            {isPlus ? `+${diff}%` : `${diff}%`}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 筋肉量 */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col gap-1 shadow-sm">
+                    <span className="text-[10px] text-slate-500 font-bold">筋肉量 (kg)</span>
+                    <div className="flex items-baseline justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg font-bold text-slate-800">{afterPhysical?.muscle ?? 0}</span>
+                        <span className="text-xs text-slate-400">(前回: {beforePhysical?.muscle ?? 0})</span>
+                      </div>
+                      {(() => {
+                        const diff = +(
+                          (afterPhysical?.muscle || 0) - (beforePhysical?.muscle || 0)
+                        ).toFixed(1);
+                        const isPlus = diff > 0;
+                        return (
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-bold ${
+                              diff === 0
+                                ? 'bg-slate-100 text-slate-600'
+                                : isPlus
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}
+                          >
+                            {isPlus ? `+${diff}kg` : `${diff}kg`}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ---------------------------------------------------- */}
               {/* 【上部配置】セッション・レッスン記録 ＆ 履歴 */}
               {/* ---------------------------------------------------- */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col gap-4">
                 <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                  <span>📝</span> 新規セッション・レッスン記録の追加
+                  <span>📝</span> 新規セッション・レッスン記録の追加 (家族共有チケットから1回消化)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
@@ -1028,13 +1177,13 @@ export default function ClientsPage() {
             </div>
           )}
 
-          {/* タブ 2: チケット履歴 */}
+          {/* タブ 2: 家族共有チケット履歴 */}
           {activeTab === 'tickets' && (
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center">
-                <h3 className="font-bold text-sm text-slate-900">🎟️ チケット・購入履歴</h3>
+                <h3 className="font-bold text-sm text-slate-900">🎟️ 家族共有回数券・購入履歴</h3>
                 <div className="text-xs text-slate-600">
-                  現在保有残高: <strong className="text-indigo-600 text-sm font-bold">{currentParent.ticketRemaining}回</strong>
+                  保護者 ({currentParent.name}) グループの共有残高: <strong className="text-indigo-600 text-sm font-bold">{currentParent.ticketRemaining}回</strong>
                 </div>
               </div>
 
@@ -1043,7 +1192,7 @@ export default function ClientsPage() {
                   <div key={th.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex justify-between items-center">
                     <div>
                       <div className="font-bold text-xs text-slate-900">{th.title}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">購入日: {th.date} / 有効期限: {th.expire}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">購入日: {th.date} / 有効期限: {th.expire} (兄弟間で共有可能)</div>
                     </div>
                     <div className="text-right">
                       <span className="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 font-bold">
