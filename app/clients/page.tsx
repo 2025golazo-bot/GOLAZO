@@ -956,10 +956,10 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 姿勢チェック写真管理（object-containに変更して見切れを防止） */}
+                  {/* 姿勢チェック写真管理（縦長表示に最適化：aspect-[3/4] から aspect-[2/3] に変更して大きく表示） */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center justify-between">
-                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (全体表示・見切れない仕様)</span>
+                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (全体表示最適化)</span>
                       <span className="text-[10px] text-slate-400">クリックで拡大プレビュー</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -973,10 +973,9 @@ export default function ClientsPage() {
                             return (
                               <div key={key} className="space-y-1 text-center">
                                 <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-                                <div className="aspect-[3/4] bg-slate-900/5 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
+                                <div className="aspect-[2/3] bg-slate-900/5 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
                                   {photoUrl ? (
                                     <>
-                                      {/* 見切れ防止のため object-contain に変更 */}
                                       <img
                                         src={photoUrl}
                                         alt={label}
@@ -1031,7 +1030,7 @@ export default function ClientsPage() {
                             return (
                               <div key={key} className="space-y-1 text-center">
                                 <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-                                <div className="aspect-[3/4] bg-slate-900/5 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
+                                <div className="aspect-[2/3] bg-slate-900/5 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
                                   {photoUrl ? (
                                     <>
                                       <img
@@ -1080,7 +1079,7 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 測定結果シート写真（object-containに変更） */}
+                  {/* 測定結果シート写真 */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
                       <span>📄</span> ケガゼロ・フィジカルチェック測定シート写真 ({afterDate})
