@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Header from '@/components/Header';
 
 // --- 型定義 ---
 interface Session {
@@ -483,23 +484,8 @@ export default function ClientsPage() {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* 完全な共通ヘッダーナビゲーション */}
-      <header className="bg-[#5e9bc4] text-white px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <span className="bg-white text-[#5e9bc4] p-1.5 rounded-lg font-black text-sm">G</span>
-          <div>
-            <h1 className="text-sm font-bold tracking-wider">パーソナルジム GOLAZO</h1>
-            <p className="text-[10px] opacity-80">マネジメントシステム</p>
-          </div>
-        </div>
-        <nav className="flex gap-1.5 text-xs font-semibold">
-          <a href="/sales" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">売上管理</a>
-          <a href="/clients" className="bg-white text-[#5e9bc4] px-3 py-1.5 rounded-md font-bold shadow-sm transition">顧客リスト</a>
-          <a href="/task-manager" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">タスク・議事録</a>
-          <a href="/neighborhood" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">近隣情報</a>
-          <a href="/machines" className="px-3 py-1.5 rounded-md opacity-80 hover:opacity-100 hover:bg-white/10 transition">マシン・薬剤一覧</a>
-        </nav>
-      </header>
+      {/* 共通の Header コンポーネントを使用 */}
+      <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
