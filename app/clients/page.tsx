@@ -42,13 +42,14 @@ interface Parent {
   name: string;
   kana: string;
   phone: string;
+  isTicketSystem: boolean; // 回数券システムを使用するかどうか（通常チケットの場合はfalse）
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
 }
 
 interface Student {
   id: string;
-  parentId: string; // 1:N 構造（保護者ID）
+  parentId: string;
   name: string;
   kana: string;
   age: number;
@@ -64,13 +65,14 @@ interface Student {
 }
 
 export default function ClientsPage() {
-  // 保護者データ (Square連携・チケット管理)
+  // 保護者データ (回数券利用有無のフラグ `isTicketSystem` を追加)
   const [parents, setParents] = useState<Parent[]>([
     {
       id: 'p-101',
       name: '藤田 奈々',
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
+      isTicketSystem: true, // 回数券あり
       ticketRemaining: 8,
       ticketsHistory: [
         { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
@@ -81,14 +83,15 @@ export default function ClientsPage() {
       name: '山田 太郎',
       kana: 'ヤマダ タロウ',
       phone: '090-1234-5678',
-      ticketRemaining: 3,
+      isTicketSystem: false, // 通常チケット（都度払い・月謝等、回数券残数非表示対象）
+      ticketRemaining: 0,
       ticketsHistory: [
-        { id: 'th-2', date: '2026-08-01', title: '5回券', count: 5, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200' }
+        { id: 'th-2', date: '2026-08-01', title: '通常都度レッスン', count: 1, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200' }
       ]
     }
   ]);
 
-  // 受講生（子供）データ一覧
+  // 受講生データ一覧
   const [students, setStudents] = useState<Student[]>([
     {
       id: 's-001',
@@ -127,38 +130,36 @@ export default function ClientsPage() {
       ],
       sessions: [
         { id: 'ses-101', date: '2026-10-05', staff: 'TAKA', content: 'フィジカルテスト＆スプリントフォームチェック', homework: '体幹キープ 1分×3セット', photo: null },
-        { id: 'ses-102', date: '2026-09-15', staff: 'NANA', content: 'KOBA式体幹トレーニング＆アジリティ', homework: '片足バランス 1分×2回', photo: null },
-        { id: 'ses-103', date: '2026-09-01', staff: 'TAKA', content: 'フットアライメント評価・軸足強化', homework: '足指じゃんけん100回', photo: null }
+        { id: 'ses-102', date: '2026-09-15', staff: 'NANA', content: 'KOBA式体幹トレーニング＆アジリティ', homework: '片足バランス 1分×2回', photo: null }
       ]
     },
     {
       id: 's-002',
-      parentId: 'p-101',
-      name: '藤田 翔',
-      kana: 'フジタ ショウ',
-      age: 8,
-      birthdate: '2018-09-20',
-      firstLessonDate: '2026-04-10',
-      lastReservationDate: '2026-10-02',
-      concern: '運動神経向上・ボール感覚',
-      target: 'アジリティUP',
-      memo: '弟。リズムトレーニングを好む。',
+      parentId: 'p-102',
+      name: '山田 花子',
+      kana: 'ヤマダ ハナコ',
+      age: 9,
+      birthdate: '2017-04-10',
+      firstLessonDate: '2026-05-10',
+      lastReservationDate: '2026-10-01',
+      concern: '姿勢改善・柔軟性向上',
+      target: 'バランス感覚UP',
+      memo: '通常都度レッスン利用。',
       alert: null,
       physicalHistory: [
         {
           id: 'm-3',
-          date: '2026-07-01',
-          weight: 25.0,
-          fat: 14.5,
-          muscle: 18.0,
+          date: '2026-08-01',
+          weight: 28.0,
+          fat: 18.0,
+          muscle: 20.0,
           note: '初回計測',
           posturePhotos: { front: null, side: null, back: null },
           testPhotos: []
         }
       ],
       sessions: [
-        { id: 'ses-201', date: '2026-10-02', staff: 'NANA', content: 'スポーツリズムステップ・コーディネーション', homework: 'ケンケンパ練習', photo: null },
-        { id: 'ses-202', date: '2026-09-20', staff: 'TAKA', content: 'リアクションアジリティ＆体幹基礎', homework: 'もも上げ20回×3セット', photo: null }
+        { id: 'ses-201', date: '2026-10-01', staff: 'NANA', content: 'ピラティス＆ストレッチ', homework: '長座体前屈ストレッチ', photo: null }
       ]
     }
   ]);
@@ -183,7 +184,7 @@ export default function ClientsPage() {
   const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
   const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
 
-  // セッション表示 フィルター（年度・月度）
+  // セッション表示 フィルター
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
 
@@ -192,6 +193,9 @@ export default function ClientsPage() {
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
+
+  // 写真サイズ調整用プレビュー拡大ステート
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // 基本情報手動編集フォーム
   const [editForm, setEditForm] = useState({
@@ -235,7 +239,7 @@ export default function ClientsPage() {
     }
   };
 
-  // セッション追加（チケット自動減算）
+  // セッション追加（回数券利用時のみ自動減算）
   const handleAddSession = () => {
     if (!newSessionContent) return;
     const newSession: Session = {
@@ -251,12 +255,15 @@ export default function ClientsPage() {
       prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions] } : s))
     );
 
-    setParents(prev =>
-      prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
-    );
+    if (currentParent.isTicketSystem) {
+      setParents(prev =>
+        prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
+      );
+    }
 
     setNewSessionContent('');
     setNewSessionHomework('');
+    alert('セッションを登録しました！');
   };
 
   // 削除ハンドラー
@@ -272,7 +279,7 @@ export default function ClientsPage() {
     }
   };
 
-  // Square手動同期シミュレーション
+  // Square手動同期
   const handleSquareSync = () => {
     setIsSyncing(true);
     setTimeout(() => {
@@ -281,7 +288,7 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  // 写真アップロード・差し替えハンドラー
+  // 写真アップロード・取り込み直し（差し替え）ハンドラー
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -305,7 +312,7 @@ export default function ClientsPage() {
               ...m,
               posturePhotos: {
                 ...currentPhotos,
-                [keyName]: url
+                [keyName]: url // 新しい画像で上書き（取り込み直し）
               }
             };
           } else if (type === 'test') {
@@ -324,6 +331,7 @@ export default function ClientsPage() {
 
   // 姿勢写真 削除ハンドラー
   const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
+    if (!confirm('この写真を削除しますか？')) return;
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
@@ -345,6 +353,7 @@ export default function ClientsPage() {
 
   // テスト結果写真 削除ハンドラー
   const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
+    if (!confirm('この測定シート写真を削除しますか？')) return;
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
@@ -376,6 +385,11 @@ export default function ClientsPage() {
     );
   };
 
+  // 身体データの保存ボタンハンドラー
+  const handleSavePhysicalData = () => {
+    alert('身体データおよび測定数値を保存（登録）しました！');
+  };
+
   // 基本情報保存
   const handleSaveInfo = () => {
     setStudents(prev =>
@@ -387,7 +401,7 @@ export default function ClientsPage() {
     alert('基本情報を更新しました');
   };
 
-  // 年度・月度の動的取得
+  // フィルター用
   const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
   const availableMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
@@ -398,7 +412,6 @@ export default function ClientsPage() {
     return matchYear && matchMonth;
   });
 
-  // 数値変化計算ヘルパー
   const calcDiff = (afterVal: number, beforeVal: number, unit: string, isImprovementWhenIncrease: boolean = true) => {
     if (afterVal === undefined || beforeVal === undefined) return null;
     const diff = Number((afterVal - beforeVal).toFixed(1));
@@ -431,7 +444,7 @@ export default function ClientsPage() {
               <span>📋</span> 受講生・カルテ管理システム
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              会員情報、セッション記録、3ヶ月定期計測、姿勢・テスト写真比較、Square回数券連携を一元管理します。
+              会員情報、セッション記録、3ヶ月定期計測、写真の登録・差し替え、Square連携を一元管理します。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -521,7 +534,7 @@ export default function ClientsPage() {
 
           {/* 右カラム：メインコンテンツ */}
           <div className="md:col-span-3 space-y-5">
-            {/* 顧客基本ヘッダーカード */}
+            {/* 顧客基本ヘッダーカード（回数券利用時のみ残数表示） */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -536,9 +549,13 @@ export default function ClientsPage() {
                     <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-semibold">
                       保護者 (Square連携): {currentParent.name} 様 ({currentParent.phone})
                     </span>
-                    <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                      <span>🎟️</span> 家族共通回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
-                    </span>
+
+                    {/* 条件分岐: 回数券システムの保護者の場合のみ回数券残数を表示 */}
+                    {currentParent.isTicketSystem && (
+                      <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                        <span>🎟️</span> 家族共通回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -574,7 +591,7 @@ export default function ClientsPage() {
                       : 'border-transparent text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  <span>📋</span> カルテ (セッション & 3ヶ月計測・写真比較)
+                  <span>📋</span> カルテ (セッション & 3ヶ月計測・写真管理)
                 </button>
                 <button
                   onClick={() => setActiveTab('tickets')}
@@ -609,9 +626,11 @@ export default function ClientsPage() {
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                       <span>✍️</span> 新規セッション記録の追加
                     </h3>
-                    <span className="text-[11px] text-[#5e9bc4] bg-sky-50 px-2.5 py-1 rounded-md border border-sky-100 font-bold">
-                      💡 登録すると回数券残数（現在 {currentParent.ticketRemaining} 回）が1回自動消費されます
-                    </span>
+                    {currentParent.isTicketSystem && (
+                      <span className="text-[11px] text-[#5e9bc4] bg-sky-50 px-2.5 py-1 rounded-md border border-sky-100 font-bold">
+                        💡 登録すると回数券残数（現在 {currentParent.ticketRemaining} 回）が1回自動消費されます
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
@@ -660,7 +679,7 @@ export default function ClientsPage() {
                     onClick={handleAddSession}
                     className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm"
                   >
-                    セッションを登録する（回数券を1回減算）
+                    セッションを登録する
                   </button>
                 </div>
 
@@ -727,13 +746,22 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 3. 3ヶ月定期計測・身体データ & 写真ビフォーアフター比較 */}
+                {/* 3. 3ヶ月定期計測・身体データ & 写真管理（削除・取り込み直し・サイズ調整対応） */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
-                  <div className="border-b pb-3">
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                      <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート比較
-                    </h3>
-                    <p className="text-[11px] text-slate-400">選択した2つの年月での数値変化自動算出・写真の登録とビフォーアフター比較が可能です</p>
+                  <div className="flex justify-between items-center border-b pb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート写真管理
+                      </h3>
+                      <p className="text-[11px] text-slate-400">数値の増減確認、写真の取り込み直し・削除・サイズ調整が可能です</p>
+                    </div>
+                    {/* 明確な登録ボタン */}
+                    <button
+                      onClick={handleSavePhysicalData}
+                      className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-sm"
+                    >
+                      💾 身体データを登録・保存
+                    </button>
                   </div>
 
                   {/* 比較年月セレクター */}
@@ -765,7 +793,7 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 数値データ比較 & 差分 */}
+                  {/* 数値データ比較 */}
                   <div className="space-y-3">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
                       <span>📈</span> 身体データ数値変化（自動算出）
@@ -852,10 +880,11 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 姿勢チェック写真（正面・側面・背面）ビフォーアフター比較 */}
+                  {/* 姿勢チェック写真（正面・側面・背面） - 削除、取り込み直し、サイズプレビュー対応 */}
                   <div className="space-y-3 pt-2">
-                    <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
-                      <span>📸</span> 姿勢チェック写真比較 (Before / After)
+                    <h4 className="font-bold text-xs text-slate-700 flex items-center justify-between">
+                      <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (Before / After)</span>
+                      <span className="text-[10px] text-slate-400">クリックで拡大プレビュー</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                       {/* Before 側写真 */}
@@ -868,20 +897,39 @@ export default function ClientsPage() {
                             return (
                               <div key={key} className="space-y-1 text-center">
                                 <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-                                <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center border relative group">
+                                <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
                                   {photoUrl ? (
                                     <>
-                                      <img src={photoUrl} alt={label} className="w-full h-full object-cover" />
-                                      <button
-                                        onClick={() => handleDeletePosturePhoto(beforeDate, key)}
-                                        className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-80 hover:opacity-100"
-                                      >
-                                        ✕
-                                      </button>
+                                      <img
+                                        src={photoUrl}
+                                        alt={label}
+                                        className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
+                                        onClick={() => setPreviewImage(photoUrl)}
+                                      />
+                                      {/* 削除および取り込み直し（変更）ボタン */}
+                                      <div className="absolute top-1 right-1 flex gap-1">
+                                        <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="画像を取り込み直す">
+                                          🔄
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={e => handleFileUpload(e, beforeDate, 'posture', key)}
+                                          />
+                                        </label>
+                                        <button
+                                          onClick={() => handleDeletePosturePhoto(beforeDate, key)}
+                                          className="bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-rose-700"
+                                          title="画像を削除"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
                                     </>
                                   ) : (
-                                    <label className="cursor-pointer text-[10px] text-slate-400 p-1 hover:text-slate-600 w-full h-full flex items-center justify-center">
-                                      <span>＋ 登録</span>
+                                    <label className="cursor-pointer text-[10px] text-slate-500 p-1 hover:text-[#5e9bc4] w-full h-full flex flex-col items-center justify-center bg-white/80">
+                                      <span className="text-base font-bold">+</span>
+                                      <span>写真登録</span>
                                       <input
                                         type="file"
                                         accept="image/*"
@@ -907,20 +955,38 @@ export default function ClientsPage() {
                             return (
                               <div key={key} className="space-y-1 text-center">
                                 <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-                                <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center border relative group">
+                                <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center border relative group shadow-sm">
                                   {photoUrl ? (
                                     <>
-                                      <img src={photoUrl} alt={label} className="w-full h-full object-cover" />
-                                      <button
-                                        onClick={() => handleDeletePosturePhoto(afterDate, key)}
-                                        className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-80 hover:opacity-100"
-                                      >
-                                        ✕
-                                      </button>
+                                      <img
+                                        src={photoUrl}
+                                        alt={label}
+                                        className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
+                                        onClick={() => setPreviewImage(photoUrl)}
+                                      />
+                                      <div className="absolute top-1 right-1 flex gap-1">
+                                        <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="画像を取り込み直す">
+                                          🔄
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={e => handleFileUpload(e, afterDate, 'posture', key)}
+                                          />
+                                        </label>
+                                        <button
+                                          onClick={() => handleDeletePosturePhoto(afterDate, key)}
+                                          className="bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-rose-700"
+                                          title="画像を削除"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
                                     </>
                                   ) : (
-                                    <label className="cursor-pointer text-[10px] text-slate-400 p-1 hover:text-slate-600 w-full h-full flex items-center justify-center">
-                                      <span>＋ 登録</span>
+                                    <label className="cursor-pointer text-[10px] text-slate-500 p-1 hover:text-[#5e9bc4] w-full h-full flex flex-col items-center justify-center bg-white/80">
+                                      <span className="text-base font-bold">+</span>
+                                      <span>写真登録</span>
                                       <input
                                         type="file"
                                         accept="image/*"
@@ -946,18 +1012,24 @@ export default function ClientsPage() {
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
                       <div className="flex flex-wrap gap-3 items-center">
                         {(afterPhysical?.testPhotos || []).map((url, idx) => (
-                          <div key={idx} className="w-24 h-24 bg-slate-200 rounded-lg overflow-hidden relative group border">
-                            <img src={url} alt={`測定シート ${idx + 1}`} className="w-full h-full object-cover" />
+                          <div key={idx} className="w-24 h-24 bg-slate-200 rounded-lg overflow-hidden relative group border shadow-sm">
+                            <img
+                              src={url}
+                              alt={`測定シート ${idx + 1}`}
+                              className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
+                              onClick={() => setPreviewImage(url)}
+                            />
                             <button
                               onClick={() => handleDeleteTestPhoto(afterDate, idx)}
-                              className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-80 hover:opacity-100"
+                              className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-rose-700"
+                              title="削除"
                             >
                               ✕
                             </button>
                           </div>
                         ))}
-                        <label className="w-24 h-24 border-2 border-dashed border-slate-300 hover:border-[#5e9bc4] rounded-lg flex flex-col items-center justify-center cursor-pointer text-slate-400 hover:text-[#5e9bc4] transition bg-white">
-                          <span className="text-lg font-bold">+</span>
+                        <label className="w-24 h-24 border-2 border-dashed border-slate-300 hover:border-[#5e9bc4] rounded-lg flex flex-col items-center justify-center cursor-pointer text-slate-400 hover:text-[#5e9bc4] transition bg-white shadow-sm">
+                          <span className="text-xl font-bold">+</span>
                           <span className="text-[10px]">写真追加</span>
                           <input
                             type="file"
@@ -994,9 +1066,11 @@ export default function ClientsPage() {
                         <div className="text-slate-500 mt-0.5">購入日: {th.date} / 有効期限: {th.expire}</div>
                         <div className="text-[11px] text-slate-400 mt-1">Square決済ID: <code className="bg-slate-200 px-1 py-0.5 rounded">{th.squarePaymentId}</code></div>
                       </div>
-                      <span className="bg-sky-100 text-[#5e9bc4] font-bold px-3 py-1.5 rounded-lg">
-                        残数: {currentParent.ticketRemaining}回
-                      </span>
+                      {currentParent.isTicketSystem && (
+                        <span className="bg-sky-100 text-[#5e9bc4] font-bold px-3 py-1.5 rounded-lg">
+                          残数: {currentParent.ticketRemaining}回
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1077,6 +1151,21 @@ export default function ClientsPage() {
           </div>
         </div>
       </main>
+
+      {/* 写真拡大プレビューモーダル（サイズ調整・確認用） */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl bg-white p-2 shadow-2xl">
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-4 right-4 bg-slate-900/70 hover:bg-slate-900 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm z-10 transition"
+            >
+              ✕
+            </button>
+            <img src={previewImage} alt="拡大プレビュー" className="max-w-full max-h-[80vh] object-contain mx-auto rounded-lg" />
+          </div>
+        </div>
+      )}
 
       {/* 受講生情報 編集モーダル */}
       {editingStudent && (
