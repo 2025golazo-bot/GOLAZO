@@ -784,98 +784,99 @@ export default function TaskManagerPage() {
                   placeholder="例: チラシ掲示とSNS告知準備..."
                   value={tFormTitle}
                   onChange={(e) => setTFormTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">担当者</label>
                   <select
                     value={tFormAssignee}
                     onChange={(e) => setTFormAssignee(e.target.value as Assignee)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white font-bold"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   >
                     <option value="TAKA">TAKA</option>
                     <option value="NANA">NANA</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">期日</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">期日 *</label>
                   <input
                     type="date"
+                    required
                     value={tFormDueDate}
                     onChange={(e) => setTFormDueDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
                   <select
                     value={tFormCategory}
                     onChange={(e) => setTFormCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   >
                     <option value="SNS">SNS</option>
                     <option value="顧客フォロー">顧客フォロー</option>
                     <option value="事務">事務</option>
-                    <option value="その他">その他（手入力）</option>
+                    <option value="キャンペーン">キャンペーン</option>
+                    <option value="その他">その他</option>
                   </select>
                 </div>
+                {tFormCategory === 'その他' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">その他のカテゴリー名</label>
+                    <input
+                      type="text"
+                      placeholder="例: 設備・清掃"
+                      value={tFormOtherCategory}
+                      onChange={(e) => setTFormOtherCategory(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                    />
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">繰り返し登録</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">繰り返し</label>
                   <select
                     value={tFormRepeat}
-                    onChange={(e) => setTFormRepeat(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                    onChange={(e) => setTFormRepeat(e.target.value as 'none' | 'weekly' | 'monthly')}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   >
                     <option value="none">なし</option>
-                    <option value="weekly">週単位で繰り返し</option>
-                    <option value="monthly">月単位で繰り返し</option>
+                    <option value="weekly">毎週</option>
+                    <option value="monthly">毎月</option>
                   </select>
                 </div>
               </div>
 
-              {tFormCategory === 'その他' && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">その他のカテゴリー名 *</label>
-                  <input
-                    type="text"
-                    placeholder="カテゴリー名を入力..."
-                    value={tFormOtherCategory}
-                    onChange={(e) => setTFormOtherCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
-                  id="priorityCheck"
+                  id="tFormPriority"
                   checked={tFormPriority}
                   onChange={(e) => setTFormPriority(e.target.checked)}
                   className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                 />
-                <label htmlFor="priorityCheck" className="text-xs font-bold text-rose-600 cursor-pointer flex items-center gap-1">
-                  <span>🔥</span> 重要フラグを立てる（赤強調表示）
+                <label htmlFor="tFormPriority" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  🔥 重要タスクとして赤強調する
                 </label>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsTaskModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-xs font-semibold transition shadow-sm"
                 >
                   保存する
                 </button>
@@ -885,7 +886,7 @@ export default function TaskManagerPage() {
         </div>
       )}
 
-      {/* 議事録作成・修正モーダル */}
+      {/* 議事録登録・修正モーダル */}
       {isMinutesModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -897,137 +898,135 @@ export default function TaskManagerPage() {
             </div>
 
             <form onSubmit={handleSaveMinutes} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">議事録タイトル *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="例: 9月度キックオフ＆キャンペーン方針MT"
+                    value={mFormTitle}
+                    onChange={(e) => setMFormTitle(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                  />
+                </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">日時 *</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">実施日 *</label>
                   <input
                     type="date"
                     required
                     value={mFormDate}
                     onChange={(e) => setMFormDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
                   <select
                     value={mFormCategory}
                     onChange={(e) => handleCategoryChangeForMinutes(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white font-bold"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   >
-                    <option value="キャンペーン">キャンペーン</option>
                     <option value="週MT">週MT</option>
                     <option value="月MT">月MT</option>
-                    <option value="その他">その他（手入力）</option>
+                    <option value="キャンペーン">キャンペーン</option>
+                    <option value="その他">その他</option>
                   </select>
                 </div>
+                {mFormCategory === 'その他' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">その他のカテゴリー名</label>
+                    <input
+                      type="text"
+                      placeholder="例: 臨時MT"
+                      value={mFormOtherCategory}
+                      onChange={(e) => setMFormOtherCategory(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                    />
+                  </div>
+                )}
               </div>
 
-              {mFormCategory === 'その他' && (
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">その他のカテゴリー名 *</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">目標金額 (円)</label>
                   <input
-                    type="text"
-                    placeholder="カテゴリー名を入力..."
-                    value={mFormOtherCategory}
-                    onChange={(e) => setMFormOtherCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                    type="number"
+                    placeholder="例: 500000"
+                    value={mFormTargetAmount}
+                    onChange={(e) => setMFormTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
                   />
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">タイトル *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="例: 9月度第2回ミーティング議事録"
-                  value={mFormTitle}
-                  onChange={(e) => setMFormTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
-                />
-              </div>
-
-              {mFormCategory === 'キャンペーン' && (
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">目標金額 (円)</label>
-                    <input
-                      type="number"
-                      placeholder="例: 500000"
-                      value={mFormTargetAmount}
-                      onChange={(e) => setMFormTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">目標件数</label>
-                    <input
-                      type="number"
-                      placeholder="例: 30"
-                      value={mFormTargetCount}
-                      onChange={(e) => setMFormTargetCount(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">売上進捗</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">目標件数</label>
+                  <input
+                    type="number"
+                    placeholder="例: 10"
+                    value={mFormTargetCount}
+                    onChange={(e) => setMFormTargetCount(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">売上進捗</label>
                   <input
                     type="text"
-                    placeholder="例: 順調 / 予算比90%"
+                    placeholder="例: 順調（前年比110%）"
                     value={mFormSalesProgress}
                     onChange={(e) => setMFormSalesProgress(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">目標達成率</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">目標達成率</label>
                   <input
                     type="text"
                     placeholder="例: 85%"
                     value={mFormTargetAchievementRate}
                     onChange={(e) => setMFormTargetAchievementRate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">キャンペーン進捗</label>
-                  <input
-                    type="text"
-                    placeholder="例: 準備中"
-                    value={mFormCampaignProgress}
-                    onChange={(e) => setMFormCampaignProgress(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2 border-t border-slate-100 pt-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">キャンペーン進捗</label>
+                <input
+                  type="text"
+                  placeholder="例: チラシデザイン確定・印刷発注済み"
+                  value={mFormCampaignProgress}
+                  onChange={(e) => setMFormCampaignProgress(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                />
+              </div>
+
+              {/* 連動タスクセクション */}
+              <div className="space-y-3 border-t border-slate-100 pt-3">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-slate-700">定型タスク登録・タスク管理への直接連動</label>
+                  <label className="block text-xs font-bold text-slate-700">連動定型タスク (ここに入力した項目はタスク管理にも自動追加されます)</label>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleAddPresetToMinutes}
-                      className="px-2.5 py-1 bg-[#5e9bc4]/10 hover:bg-[#5e9bc4]/20 text-[#5e9bc4] rounded-lg text-xs font-bold transition"
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition"
                     >
-                      + キャンペーン定型プリセット追加
+                      + キャンペーン定型プリセット読込
                     </button>
                     <button
                       type="button"
                       onClick={handleAddBlankTaskToMinutes}
-                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold transition"
+                      className="px-2.5 py-1 bg-[#5e9bc4]/10 hover:bg-[#5e9bc4]/20 text-[#5e9bc4] rounded-lg text-[11px] font-bold transition"
                     >
-                      + 空白タスク追加
+                      + タスク行追加
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-2 max-h-44 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {mFormTasks.map((t, idx) => (
                     <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
                       <input
@@ -1039,7 +1038,7 @@ export default function TaskManagerPage() {
                           updated[idx].title = e.target.value;
                           setMFormTasks(updated);
                         }}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                        className="flex-1 px-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-white"
                       />
                       <select
                         value={t.assignee}
@@ -1048,7 +1047,7 @@ export default function TaskManagerPage() {
                           updated[idx].assignee = e.target.value as Assignee;
                           setMFormTasks(updated);
                         }}
-                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-bold"
+                        className="px-2 py-1 rounded-lg border border-slate-200 text-xs bg-white"
                       >
                         <option value="TAKA">TAKA</option>
                         <option value="NANA">NANA</option>
@@ -1061,61 +1060,47 @@ export default function TaskManagerPage() {
                           updated[idx].dueDate = e.target.value;
                           setMFormTasks(updated);
                         }}
-                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                        className="px-2 py-1 rounded-lg border border-slate-200 text-xs bg-white"
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          const updated = [...mFormTasks];
-                          updated[idx].priority = !updated[idx].priority;
-                          setMFormTasks(updated);
-                        }}
-                        className={`px-2 py-1.5 rounded-lg text-xs font-bold transition ${
-                          t.priority ? 'bg-rose-100 text-rose-700 border border-rose-300' : 'bg-slate-200 text-slate-500'
-                        }`}
-                        title="重要フラグ"
-                      >
-                        🔥
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => handleRemoveTaskFromMinutes(idx)}
-                        className="text-slate-400 hover:text-rose-600 font-bold px-1"
+                        className="text-rose-500 hover:text-rose-700 font-bold px-1.5 text-sm"
                       >
                         ✕
                       </button>
                     </div>
                   ))}
                   {mFormTasks.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-2">タスクが追加されていません。</p>
+                    <p className="text-xs text-slate-400 text-center py-2">連動タスクはありません。</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">MT詳細・議事録メモ</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">議事録詳細メモ</label>
                 <textarea
                   rows={3}
-                  placeholder="会議の議事録詳細や決定事項を入力..."
+                  placeholder="MTでの決定事項や詳細メモ..."
                   value={mFormNotes}
                   onChange={(e) => setMFormNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsMinutesModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-xs font-semibold transition shadow-sm"
                 >
-                  更新・保存する
+                  保存する
                 </button>
               </div>
             </form>
