@@ -1,278 +1,922 @@
 // app/task-manager/page.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Header from '@/components/Header';
 
+// 担当者の型定義
+type Assignee = 'TAKA' | 'NANA';
+
+// タスクの型定義
 type TaskItem = {
   id: number;
   title: string;
-  category: 'タスク' | '議事録' | 'アイデア';
-  priority: '高' | '中' | '低';
-  dueDate: string;
+  assignee: Assignee;
+  dueDate: string; // YYYY-MM-DD
+  category: string; // SNS / 顧客フォロー / 事務 / その他
+  otherCategory?: string; // その他選択時の手入力値
+  priority: boolean; // 重要フラグ（赤強調・重要ボタン）
   completed: boolean;
-  content: string;
+  repeat: 'none' | 'weekly' | 'monthly'; // 繰り返し設定
+  linkedMinutesId?: number; // 連動元議事録ID
 };
 
+// 議事録の型定義
+type MinutesItem = {
+  id: number;
+  date: string; // YYYY-MM-DD
+  title: string;
+  category: string; // キャンペーン / 週MT / 月MT / その他
+  otherCategory?: string; // その他選択時の手入力値
+  // キャンペーン用項目
+  targetAmount?: number;
+  targetCount?: number;
+  // MT詳細項目
+  salesProgress?: string;
+  targetAchievementRate?: string;
+  campaignProgress?: string;
+  // 議事録内で登録するタスクのリスト
+  tasks: {
+    title: string;
+    assignee: Assignee;
+    dueDate: string;
+    priority: boolean;
+  }[];
+  notes: string;
+};
+
+// キャンペーン用プリセット定義
+const CAMPAIGN_PRESETS = [
+  'レジ設定',
+  'SNS告知準備',
+  'SNS投稿予約',
+  'チラシ準備',
+  'チラシ掲示',
+  '報告書作成'
+];
+
 export default function TaskManagerPage() {
+  // タブ切り替え: 'task' | 'minutes' | 'calendar'
+  const [activeTab, setActiveTab] = useState<'task' | 'minutes' | 'calendar'>('task');
+
+  // 年月選択用フィルター (例: '2026-09')
+  const [selectedYearMonth, setSelectedYearMonth] = useState<string>(
+    new Date().toISOString().slice(0, 7)
+  );
+
+  // --- タスク管理の状態 ---
   const [tasks, setTasks] = useState<TaskItem[]>([
     {
       id: 1,
-      title: 'ゴラッソトレーニングクリニックの集客企画',
-      category: 'アイデア',
-      priority: '高',
+      title: 'SNS広告のクリエイティブ修正',
+      assignee: 'TAKA',
       dueDate: '2026-09-20',
+      category: 'SNS',
+      priority: true,
       completed: false,
-      content: 'SNS広告のクリエイティブ修正とチラシ配布のスケジュール調整。',
+      repeat: 'weekly',
     },
     {
       id: 2,
-      title: '9月度ミーティング議事録',
-      category: '議事録',
-      priority: '中',
-      dueDate: '2026-09-05',
-      completed: true,
-      content: '新規クライアント獲得目標50名に向けた広告・SNS投稿の自動化について確認。',
+      title: '新規顧客へのフォローアップ連絡',
+      assignee: 'NANA',
+      dueDate: '2026-09-15',
+      category: '顧客フォロー',
+      priority: false,
+      completed: false,
+      repeat: 'none',
     },
   ]);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // タスクフィルター・検索
+  const [taskSearch, setTaskSearch] = useState('');
+  const [taskCategoryFilter, setTaskCategoryFilter] = useState('all');
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('all');
 
-  const [newTask, setNewTask] = useState({
-    title: '',
-    category: 'タスク' as const,
-    priority: '中' as const,
-    dueDate: new Date().toISOString().split('T')[0],
-    content: '',
-  });
+  // --- 議事録管理の状態 ---
+  const [minutesList, setMinutesList] = useState<MinutesItem[]>([
+    {
+      id: 1,
+      date: '2026-09-05',
+      title: '9月度キックオフ＆キャンペーン方針MT',
+      category: '月MT',
+      salesProgress: '順調（前年比110%）',
+      targetAchievementRate: '85%',
+      campaignProgress: '準備着手済み',
+      tasks: [
+        { title: 'レジ設定', assignee: 'TAKA', dueDate: '2026-09-10', priority: true },
+        { title: 'SNS告知準備', assignee: 'NANA', dueDate: '2026-09-12', priority: false }
+      ],
+      notes: '全体目標に向けてSNSとチラシの導線を強化する。'
+    }
+  ]);
 
-  const filteredTasks = tasks.filter((item) => {
-    const matchesSearch = item.title.includes(searchTerm) || item.content.includes(searchTerm);
-    const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const [minutesSearch, setMinutesSearch] = useState('');
+
+  // --- モーダル管理 ---
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+
+  const [isMinutesModalOpen, setIsMinutesModalOpen] = useState(false);
+  const [editingMinutes, setEditingMinutes] = useState<MinutesItem | null>(null);
+
+  // 議事録モーダル用入力ステート
+  const [mFormDate, setMFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [mFormTitle, setMFormTitle] = useState('');
+  const [mFormCategory, setMFormCategory] = useState('週MT');
+  const [mFormOtherCategory, setMFormOtherCategory] = useState('');
+  const [mFormTargetAmount, setMFormTargetAmount] = useState<number | ''>('');
+  const [mFormTargetCount, setMFormTargetCount] = useState<number | ''>('');
+  const [mFormSalesProgress, setMFormSalesProgress] = useState('');
+  const [mFormTargetAchievementRate, setMFormTargetAchievementRate] = useState('');
+  const [mFormCampaignProgress, setMFormCampaignProgress] = useState('');
+  const [mFormNotes, setMFormNotes] = useState('');
+  const [mFormTasks, setMFormTasks] = useState<{
+    title: string;
+    assignee: Assignee;
+    dueDate: string;
+    priority: boolean;
+  }[]>([]);
+
+  // タスクモーダル用入力ステート
+  const [tFormTitle, setTFormTitle] = useState('');
+  const [tFormAssignee, setTFormAssignee] = useState<Assignee>('TAKA');
+  const [tFormDueDate, setTFormDueDate] = useState(new Date().toISOString().split('T')[0]);
+  const [tFormCategory, setTFormCategory] = useState('SNS');
+  const [tFormOtherCategory, setTFormOtherCategory] = useState('');
+  const [tFormPriority, setTFormPriority] = useState(false);
+  const [tFormRepeat, setTFormRepeat] = useState<'none' | 'weekly' | 'monthly'>('none');
+
+  // ---------------------------------------------------------------------------
+  // タスク関連ハンドラー
+  // ---------------------------------------------------------------------------
+  const handleOpenAddTask = () => {
+    setEditingTask(null);
+    setTFormTitle('');
+    setTFormAssignee('TAKA');
+    setTFormDueDate(new Date().toISOString().split('T')[0]);
+    setTFormCategory('SNS');
+    setTFormOtherCategory('');
+    setTFormPriority(false);
+    setTFormRepeat('none');
+    setIsTaskModalOpen(true);
+  };
+
+  const handleOpenEditTask = (task: TaskItem) => {
+    setEditingTask(task);
+    setTFormTitle(task.title);
+    setTFormAssignee(task.assignee);
+    setTFormDueDate(task.dueDate);
+    if (['SNS', '顧客フォロー', '事務'].includes(task.category)) {
+      setTFormCategory(task.category);
+      setTFormOtherCategory('');
+    } else {
+      setTFormCategory('その他');
+      setTFormOtherCategory(task.category);
+    }
+    setTFormPriority(task.priority);
+    setTFormRepeat(task.repeat);
+    setIsTaskModalOpen(true);
+  };
+
+  const handleSaveTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tFormTitle.trim()) return;
+
+    const finalCategory = tFormCategory === 'その他' ? (tFormOtherCategory || 'その他') : tFormCategory;
+
+    if (editingTask) {
+      setTasks(tasks.map(t => t.id === editingTask.id ? {
+        ...t,
+        title: tFormTitle,
+        assignee: tFormAssignee,
+        dueDate: tFormDueDate,
+        category: finalCategory,
+        priority: tFormPriority,
+        repeat: tFormRepeat
+      } : t));
+    } else {
+      const newTaskItem: TaskItem = {
+        id: Date.now(),
+        title: tFormTitle,
+        assignee: tFormAssignee,
+        dueDate: tFormDueDate,
+        category: finalCategory,
+        priority: tFormPriority,
+        completed: false,
+        repeat: tFormRepeat
+      };
+      setTasks([newTaskItem, ...tasks]);
+    }
+    setIsTaskModalOpen(false);
+  };
+
+  const handleDeleteTask = (id: number) => {
+    if (confirm('このタスクを削除してもよろしいですか？')) {
+      setTasks(tasks.filter(t => t.id !== id));
+    }
+  };
 
   const toggleComplete = (id: number) => {
-    setTasks(
-      tasks.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item))
-    );
+    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
   };
 
-  const handleAddTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTask.title) return;
+  // ---------------------------------------------------------------------------
+  // 議事録関連ハンドラー
+  // ---------------------------------------------------------------------------
+  const handleOpenAddMinutes = () => {
+    setEditingMinutes(null);
+    setMFormDate(new Date().toISOString().split('T')[0]);
+    setMFormTitle('');
+    setMFormCategory('週MT');
+    setMFormOtherCategory('');
+    setMFormTargetAmount('');
+    setMFormTargetCount('');
+    setMFormSalesProgress('');
+    setMFormTargetAchievementRate('');
+    setMFormCampaignProgress('');
+    setMFormNotes('');
+    setMFormTasks([]);
+    setIsMinutesModalOpen(true);
+  };
 
-    const taskToAdd: TaskItem = {
-      id: Date.now(),
-      title: newTask.title,
-      category: newTask.category,
-      priority: newTask.priority,
-      dueDate: newTask.dueDate,
-      completed: false,
-      content: newTask.content,
+  const handleOpenEditMinutes = (m: MinutesItem) => {
+    setEditingMinutes(m);
+    setMFormDate(m.date);
+    setMFormTitle(m.title);
+    if (['キャンペーン', '週MT', '月MT'].includes(m.category)) {
+      setMFormCategory(m.category);
+      setMFormOtherCategory('');
+    } else {
+      setMFormCategory('その他');
+      setMFormOtherCategory(m.category);
+    }
+    setMFormTargetAmount(m.targetAmount ?? '');
+    setMFormTargetCount(m.targetCount ?? '');
+    setMFormSalesProgress(m.salesProgress ?? '');
+    setMFormTargetAchievementRate(m.targetAchievementRate ?? '');
+    setMFormCampaignProgress(m.campaignProgress ?? '');
+    setMFormNotes(m.notes);
+    setMFormTasks([...m.tasks]);
+    setIsMinutesModalOpen(true);
+  };
+
+  const handleCategoryChangeForMinutes = (cat: string) => {
+    setMFormCategory(cat);
+    // キャンペーン選択時に自動でプリセットタスクを挿入（未登録の場合など）
+    if (cat === 'キャンペーン' && mFormTasks.length === 0) {
+      const presetTasks = CAMPAIGN_PRESETS.map(title => ({
+        title,
+        assignee: 'TAKA' as Assignee,
+        dueDate: mFormDate,
+        priority: false
+      }));
+      setMFormTasks(presetTasks);
+    }
+  };
+
+  const handleAddPresetToMinutes = () => {
+    const presetTasks = CAMPAIGN_PRESETS.map(title => ({
+      title,
+      assignee: 'TAKA' as Assignee,
+      dueDate: mFormDate,
+      priority: false
+    }));
+    setMFormTasks([...mFormTasks, ...presetTasks]);
+  };
+
+  const handleAddBlankTaskToMinutes = () => {
+    setMFormTasks([...mFormTasks, { title: '', assignee: 'TAKA', dueDate: mFormDate, priority: false }]);
+  };
+
+  const handleRemoveTaskFromMinutes = (index: number) => {
+    setMFormTasks(mFormTasks.filter((_, i) => i !== index));
+  };
+
+  const handleSaveMinutes = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mFormTitle.trim()) return;
+
+    const finalCategory = mFormCategory === 'その他' ? (mFormOtherCategory || 'その他') : mFormCategory;
+
+    const minutesData: MinutesItem = {
+      id: editingMinutes ? editingMinutes.id : Date.now(),
+      date: mFormDate,
+      title: mFormTitle,
+      category: finalCategory,
+      targetAmount: mFormTargetAmount === '' ? undefined : Number(mFormTargetAmount),
+      targetCount: mFormTargetCount === '' ? undefined : Number(mFormTargetCount),
+      salesProgress: mFormSalesProgress,
+      targetAchievementRate: mFormTargetAchievementRate,
+      campaignProgress: mFormCampaignProgress,
+      tasks: mFormTasks,
+      notes: mFormNotes,
     };
 
-    setTasks([taskToAdd, ...tasks]);
-    setNewTask({
-      title: '',
-      category: 'タスク',
-      priority: '中',
-      dueDate: new Date().toISOString().split('T')[0],
-      content: '',
-    });
-    setIsModalOpen(false);
+    if (editingMinutes) {
+      setMinutesList(minutesList.map(m => m.id === editingMinutes.id ? minutesData : m));
+    } else {
+      setMinutesList([minutesData, ...minutesList]);
+    }
+
+    // 議事録内タスクをタスク管理本体へ直接登録・連携
+    const newlyCreatedTasks: TaskItem[] = mFormTasks.map((mt, idx) => ({
+      id: Date.now() + idx + 1,
+      title: mt.title,
+      assignee: mt.assignee,
+      dueDate: mt.dueDate,
+      category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
+      priority: mt.priority,
+      completed: false,
+      repeat: 'none',
+      linkedMinutesId: minutesData.id
+    }));
+
+    setTasks(prev => [...newlyCreatedTasks, ...prev]);
+    setIsMinutesModalOpen(false);
   };
+
+  const handleDeleteMinutes = (id: number) => {
+    if (confirm('この議事録を削除しますか？')) {
+      setMinutesList(minutesList.filter(m => m.id !== id));
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // フィルタリング（年月・検索など）
+  // ---------------------------------------------------------------------------
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(t => {
+      // 年月フィルター (YYYY-MM)
+      const matchesYearMonth = t.dueDate.startsWith(selectedYearMonth);
+      // 検索ワード
+      const matchesSearch = t.title.includes(taskSearch) || t.category.includes(taskSearch);
+      // カテゴリーフィルター
+      const matchesCategory = taskCategoryFilter === 'all' || t.category === taskCategoryFilter;
+      // 担当者フィルター
+      const matchesAssignee = taskAssigneeFilter === 'all' || t.assignee === taskAssigneeFilter;
+
+      return matchesYearMonth && matchesSearch && matchesCategory && matchesAssignee;
+    });
+  }, [tasks, selectedYearMonth, taskSearch, taskCategoryFilter, taskAssigneeFilter]);
+
+  const filteredMinutes = useMemo(() => {
+    return minutesList.filter(m => {
+      const matchesYearMonth = m.date.startsWith(selectedYearMonth);
+      const matchesSearch = m.title.includes(minutesSearch) || m.notes.includes(minutesSearch) || m.category.includes(minutesSearch);
+      return matchesYearMonth && matchesSearch;
+    });
+  }, [minutesList, selectedYearMonth, minutesSearch]);
+
+  // カレンダー用：選択された年月のカレンダー情報構築
+  const calendarDays = useMemo(() => {
+    const [yearStr, monthStr] = selectedYearMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDayIndex = new Date(year, month - 1, 1).getDay();
+
+    const days = [];
+    // 前月の空白埋め
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push({ day: null, dateStr: '' });
+    }
+    // 当月の日付
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dStr = String(d).padStart(2, '0');
+      const dateStr = `${selectedYearMonth}-${dStr}`;
+      days.push({ day: d, dateStr });
+    }
+    return days;
+  }, [selectedYearMonth]);
+
+  // 年月選択肢の生成（過去2年〜未来1年程度）
+  const yearMonthOptions = useMemo(() => {
+    const options = [];
+    const currentDate = new Date();
+    for (let i = -12; i <= 12; i++) {
+      const d = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+      const val = d.toISOString().slice(0, 7);
+      options.push(val);
+    }
+    // 重複除去＆ソート降順
+    return Array.from(new Set(options)).sort().reverse();
+  }, []);
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        {/* トップタイトル & 年月セレクターバー */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div>
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <span>📝</span> タスク・議事録管理
+              <span>📋</span> タスク・議事録統合管理システム
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              ジムの運営タスク、ミーティング議事録、アイデアを管理します。
+              ジム運営のタスク管理、定型タスク連動型ミーティング議事録、カレンダー予定を一元管理します。
             </p>
           </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end flex-wrap">
+            {/* 年月セレクト */}
+            <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-500">表示年月:</span>
+              <select
+                value={selectedYearMonth}
+                onChange={(e) => setSelectedYearMonth(e.target.value)}
+                className="bg-transparent text-sm font-bold text-slate-700 focus:outline-none cursor-pointer"
+              >
+                {yearMonthOptions.map(ym => (
+                  <option key={ym} value={ym}>{ym.replace('-', '年')}月</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenAddTask}
+                className="bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-4 py-2 rounded-xl font-semibold text-sm transition shadow-sm flex items-center gap-1.5"
+              >
+                <span>＋</span> タスク追加
+              </button>
+              <button
+                onClick={handleOpenAddMinutes}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-semibold text-sm transition shadow-sm flex items-center gap-1.5"
+              >
+                <span>📝</span> 議事録作成
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* メインタブ切り替え */}
+        <div className="flex border-b border-slate-200 gap-4">
           <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center gap-2"
+            onClick={() => setActiveTab('task')}
+            className={`pb-3 px-4 font-bold text-sm transition border-b-2 ${
+              activeTab === 'task'
+                ? 'border-[#5e9bc4] text-[#5e9bc4]'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
           >
-            <span>＋</span> 新規作成
+            ◻︎ タスク管理 ({filteredTasks.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('minutes')}
+            className={`pb-3 px-4 font-bold text-sm transition border-b-2 ${
+              activeTab === 'minutes'
+                ? 'border-[#5e9bc4] text-[#5e9bc4]'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            ◻︎ ミーティング議事録 ({filteredMinutes.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('calendar')}
+            className={`pb-3 px-4 font-bold text-sm transition border-b-2 ${
+              activeTab === 'calendar'
+                ? 'border-[#5e9bc4] text-[#5e9bc4]'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            📅 カレンダー表示
           </button>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
-          <div className="w-full md:w-96">
-            <input
-              type="text"
-              placeholder="タイトルや内容で検索..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
-            />
-          </div>
-          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-            <button
-              onClick={() => setFilterCategory('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                filterCategory === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              すべて
-            </button>
-            <button
-              onClick={() => setFilterCategory('タスク')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                filterCategory === 'タスク' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              タスク
-            </button>
-            <button
-              onClick={() => setFilterCategory('議事録')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                filterCategory === '議事録' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              議事録
-            </button>
-            <button
-              onClick={() => setFilterCategory('アイデア')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                filterCategory === 'アイデア' ? 'bg-[#5e9bc4] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              アイデア
-            </button>
-          </div>
-        </div>
+        {/* =================================================================== */}
+        {/* タブ1: タスク管理 */}
+        {/* =================================================================== */}
+        {activeTab === 'task' && (
+          <div className="space-y-4">
+            {/* フィルター・検索バー */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3 justify-between items-center">
+              <div className="w-full md:w-80">
+                <input
+                  type="text"
+                  placeholder="タスク内容で検索..."
+                  value={taskSearch}
+                  onChange={(e) => setTaskSearch(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                />
+              </div>
 
-        <div className="space-y-3">
-          {filteredTasks.length > 0 ? (
-            filteredTasks.map((item) => (
-              <div
-                key={item.id}
-                className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${
-                  item.completed ? 'opacity-60 bg-slate-50' : ''
-                }`}
-              >
-                <div className="flex items-start gap-3 w-full">
-                  <input
-                    type="checkbox"
-                    checked={item.completed}
-                    onChange={() => toggleComplete(item.id)}
-                    className="mt-1 w-4 h-4 rounded border-slate-300 text-[#5e9bc4] focus:ring-[#5e9bc4]"
-                  />
-                  <div className="space-y-1 w-full">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600">
-                        {item.category}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                          item.priority === '高'
-                            ? 'bg-rose-100 text-rose-700'
-                            : item.priority === '中'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        優先度: {item.priority}
-                      </span>
-                      <span className="text-xs text-slate-400">期日: {item.dueDate}</span>
-                    </div>
-                    <h3 className={`font-bold text-slate-800 ${item.completed ? 'line-through text-slate-400' : ''}`}>
-                      {item.title}
-                    </h3>
-                    <p className="text-xs text-slate-600 whitespace-pre-wrap bg-slate-50 p-2.5 rounded-xl">
-                      {item.content || '詳細なし'}
-                    </p>
-                  </div>
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                {/* 担当者フィルター */}
+                <select
+                  value={taskAssigneeFilter}
+                  onChange={(e) => setTaskAssigneeFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-700"
+                >
+                  <option value="all">担当者: すべて</option>
+                  <option value="TAKA">TAKA</option>
+                  <option value="NANA">NANA</option>
+                </select>
+
+                {/* カテゴリーフィルター */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
+                  {['all', 'SNS', '顧客フォロー', '事務', 'キャンペーン'].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setTaskCategoryFilter(cat)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        taskCategoryFilter === cat
+                          ? 'bg-[#5e9bc4] text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {cat === 'all' ? '全カテゴリー' : cat}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-slate-200">
-              該当するタスク・議事録が見つかりませんでした。
             </div>
-          )}
-        </div>
+
+            {/* タスク一覧 */}
+            <div className="space-y-3">
+              {filteredTasks.length > 0 ? (
+                filteredTasks.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition ${
+                      item.completed ? 'opacity-60 bg-slate-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-start gap-3 w-full">
+                      <input
+                        type="checkbox"
+                        checked={item.completed}
+                        onChange={() => toggleComplete(item.id)}
+                        className="mt-1 w-4 h-4 rounded border-slate-300 text-[#5e9bc4] focus:ring-[#5e9bc4] cursor-pointer"
+                      />
+                      <div className="space-y-1.5 w-full">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* 担当者色分け表示 */}
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-bold text-white ${
+                              item.assignee === 'TAKA' ? 'bg-[#5e9bc4]' : 'bg-emerald-600'
+                            }`}
+                          >
+                            {item.assignee}
+                          </span>
+
+                          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600">
+                            {item.category}
+                          </span>
+
+                          {/* 重要フラグ（赤強調・重要ボタン） */}
+                          {item.priority && (
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
+                              🔥 重要
+                            </span>
+                          )}
+
+                          {item.repeat !== 'none' && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                              🔄 繰り返し ({item.repeat === 'weekly' ? '週' : '月'})
+                            </span>
+                          )}
+
+                          <span className="text-xs text-slate-400 ml-auto">期日: {item.dueDate}</span>
+                        </div>
+
+                        <h3 className={`font-bold text-slate-800 text-sm sm:text-base ${item.completed ? 'line-through text-slate-400' : ''}`}>
+                          {item.title}
+                        </h3>
+                      </div>
+                    </div>
+
+                    {/* 操作ボタン（修正・削除） */}
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      <button
+                        onClick={() => handleOpenEditTask(item)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+                      >
+                        修正
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(item.id)}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-slate-200">
+                  該当するタスクが見つかりませんでした。
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* タブ2: ミーティング議事録 */}
+        {/* =================================================================== */}
+        {activeTab === 'minutes' && (
+          <div className="space-y-4">
+            {/* 検索バー */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
+              <div className="w-full md:w-96">
+                <input
+                  type="text"
+                  placeholder="議事録のタイトルや内容で検索..."
+                  value={minutesSearch}
+                  onChange={(e) => setMinutesSearch(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
+                />
+              </div>
+              <div className="text-xs font-semibold text-slate-500 hidden md:block">
+                対象年月: {selectedYearMonth}
+              </div>
+            </div>
+
+            {/* 議事録カード一覧 */}
+            <div className="space-y-4">
+              {filteredMinutes.length > 0 ? (
+                filteredMinutes.map((m) => (
+                  <div key={m.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-slate-100 pb-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-[#5e9bc4] text-white">
+                            {m.category}
+                          </span>
+                          <span className="text-xs text-slate-400 font-semibold">{m.date}</span>
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">{m.title}</h3>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenEditMinutes(m)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+                        >
+                          修正
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMinutes(m.id)}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* キャンペーンまたはMTの詳細情報 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                      {m.targetAmount !== undefined && (
+                        <div>
+                          <span className="text-slate-400 block">目標金額</span>
+                          <span className="font-bold text-slate-800 text-sm">¥{m.targetAmount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {m.targetCount !== undefined && (
+                        <div>
+                          <span className="text-slate-400 block">目標件数</span>
+                          <span className="font-bold text-slate-800 text-sm">{m.targetCount} 件</span>
+                        </div>
+                      )}
+                      {m.salesProgress && (
+                        <div>
+                          <span className="text-slate-400 block">売上進捗</span>
+                          <span className="font-bold text-slate-800 text-sm">{m.salesProgress}</span>
+                        </div>
+                      )}
+                      {m.targetAchievementRate && (
+                        <div>
+                          <span className="text-slate-400 block">目標達成率</span>
+                          <span className="font-bold text-slate-800 text-sm">{m.targetAchievementRate}</span>
+                        </div>
+                      )}
+                      {m.campaignProgress && (
+                        <div>
+                          <span className="text-slate-400 block">キャンペーン進捗</span>
+                          <span className="font-bold text-slate-800 text-sm">{m.campaignProgress}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 連動タスク一覧表示 */}
+                    {m.tasks.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">連動定型タスク</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {m.tasks.map((t, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${t.assignee === 'TAKA' ? 'bg-[#5e9bc4]' : 'bg-emerald-600'}`}>
+                                  {t.assignee}
+                                </span>
+                                <span className="font-semibold text-slate-700">{t.title}</span>
+                              </div>
+                              <span className="text-slate-400">期日: {t.dueDate}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 議事録詳細テキスト */}
+                    <div className="text-xs text-slate-600 whitespace-pre-wrap bg-white p-3 rounded-xl border border-slate-100">
+                      {m.notes || 'MT詳細メモなし'}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-slate-200">
+                  該当する議事録が見つかりませんでした。
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* タブ3: カレンダー表示 */}
+        {/* =================================================================== */}
+        {activeTab === 'calendar' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-800">
+                📅 {selectedYearMonth.replace('-', '年')}月のスケジュールカレンダー
+              </h3>
+              <p className="text-xs text-slate-500">日付ごとのタスク予定がひと目で分かります</p>
+            </div>
+
+            {/* 曜日ヘッダー */}
+            <div className="grid grid-cols-7 gap-1 text-center font-bold text-xs text-slate-500 border-b border-slate-200 pb-2">
+              <span className="text-rose-500">日</span>
+              <span>月</span>
+              <span>火</span>
+              <span>水</span>
+              <span>木</span>
+              <span>金</span>
+              <span className="text-[#5e9bc4]">土</span>
+            </div>
+
+            {/* カレンダーグリッド */}
+            <div className="grid grid-cols-7 gap-1.5">
+              {calendarDays.map((item, index) => {
+                const dayTasks = item.dateStr ? tasks.filter(t => t.dueDate === item.dateStr) : [];
+                return (
+                  <div
+                    key={index}
+                    className={`min-h-[100px] p-2 rounded-xl border flex flex-col justify-between transition ${
+                      item.day
+                        ? 'bg-white border-slate-200 hover:border-[#5e9bc4]/50'
+                        : 'bg-slate-50/50 border-transparent'
+                    }`}
+                  >
+                    {item.day && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-700">{item.day}</span>
+                          {dayTasks.length > 0 && (
+                            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">
+                              {dayTasks.length}件
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1 overflow-y-auto max-h-[70px] mt-1">
+                          {dayTasks.map(t => (
+                            <div
+                              key={t.id}
+                              onClick={() => handleOpenEditTask(t)}
+                              className={`text-[10px] p-1 rounded truncate cursor-pointer transition ${
+                                t.completed ? 'bg-slate-100 text-slate-400 line-through' : 'bg-slate-100 text-slate-700 hover:bg-[#5e9bc4]/10 hover:text-[#5e9bc4]'
+                              }`}
+                              title={t.title}
+                            >
+                              <span className={`font-bold mr-1 ${t.assignee === 'TAKA' ? 'text-[#5e9bc4]' : 'text-emerald-600'}`}>
+                                [{t.assignee}]
+                              </span>
+                              {t.title}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
 
-      {isModalOpen && (
+      {/* =================================================================== */}
+      {/* タスク登録・修正モーダル */}
+      {/* =================================================================== */}
+      {isTaskModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-lg text-slate-800">新規タスク・議事録の追加</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+              <h3 className="font-bold text-lg text-slate-800">
+                {editingTask ? 'タスクの修正' : '新規タスクの追加'}
+              </h3>
+              <button onClick={() => setIsTaskModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
             </div>
-            <form onSubmit={handleAddTask} className="space-y-4">
+
+            <form onSubmit={handleSaveTask} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">タイトル *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">タスク内容 *</label>
                 <input
                   type="text"
                   required
-                  placeholder="タイトルを入力..."
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  placeholder="例: チラシ掲示とSNS告知準備..."
+                  value={tFormTitle}
+                  onChange={(e) => setTFormTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5e9bc4]/50"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">種別</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">担当者</label>
                   <select
-                    value={newTask.category}
-                    onChange={(e: any) => setNewTask({ ...newTask, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                    value={tFormAssignee}
+                    onChange={(e) => setTFormAssignee(e.target.value as Assignee)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white font-bold"
                   >
-                    <option value="タスク">タスク</option>
-                    <option value="議事録">議事録</option>
-                    <option value="アイデア">アイデア</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">優先度</label>
-                  <select
-                    value={newTask.priority}
-                    onChange={(e: any) => setNewTask({ ...newTask, priority: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
-                  >
-                    <option value="高">高</option>
-                    <option value="中">中</option>
-                    <option value="低">低</option>
+                    <option value="TAKA">TAKA</option>
+                    <option value="NANA">NANA</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">期日</label>
                   <input
                     type="date"
-                    value={newTask.dueDate}
-                    onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                    value={tFormDueDate}
+                    onChange={(e) => setTFormDueDate(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">詳細・内容</label>
-                <textarea
-                  rows={3}
-                  placeholder="詳細な内容や議事録本文..."
-                  value={newTask.content}
-                  onChange={(e) => setNewTask({ ...newTask, content: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
+                  <select
+                    value={tFormCategory}
+                    onChange={(e) => setTFormCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                  >
+                    <option value="SNS">SNS</option>
+                    <option value="顧客フォロー">顧客フォロー</option>
+                    <option value="事務">事務</option>
+                    <option value="その他">その他（手入力）</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">繰り返し登録</label>
+                  <select
+                    value={tFormRepeat}
+                    onChange={(e) => setTFormRepeat(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                  >
+                    <option value="none">なし</option>
+                    <option value="weekly">週単位で繰り返し</option>
+                    <option value="monthly">月単位で繰り返し</option>
+                  </select>
+                </div>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              {tFormCategory === 'その他' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">その他のカテゴリー名 *</label>
+                  <input
+                    type="text"
+                    placeholder="カテゴリー名を入力..."
+                    value={tFormOtherCategory}
+                    onChange={(e) => setTFormOtherCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  />
+                </div>
+              )}
+
+              {/* 重要フラグ設定（赤強調・重要ボタン） */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="priorityCheck"
+                  checked={tFormPriority}
+                  onChange={(e) => setTFormPriority(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                />
+                <label htmlFor="priorityCheck" className="text-xs font-bold text-rose-600 cursor-pointer flex items-center gap-1">
+                  <span>🔥</span> 重要フラグを立てる（赤強調表示）
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsTaskModalOpen(false)}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
                 >
                   キャンセル
@@ -281,7 +925,250 @@ export default function TaskManagerPage() {
                   type="submit"
                   className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
                 >
-                  追加する
+                  保存する
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* 議事録作成・修正モーダル */}
+      {/* =================================================================== */}
+      {isMinutesModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">
+                {editingMinutes ? 'ミーティング議事録の修正' : '新規ミーティング議事録の作成'}
+              </h3>
+              <button onClick={() => setIsMinutesModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveMinutes} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">日時 *</label>
+                  <input
+                    type="date"
+                    required
+                    value={mFormDate}
+                    onChange={(e) => setMFormDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
+                  <select
+                    value={mFormCategory}
+                    onChange={(e) => handleCategoryChangeForMinutes(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white font-bold"
+                  >
+                    <option value="キャンペーン">キャンペーン</option>
+                    <option value="週MT">週MT</option>
+                    <option value="月MT">月MT</option>
+                    <option value="その他">その他（手入力）</option>
+                  </select>
+                </div>
+              </div>
+
+              {mFormCategory === 'その他' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">その他のカテゴリー名 *</label>
+                  <input
+                    type="text"
+                    placeholder="カテゴリー名を入力..."
+                    value={mFormOtherCategory}
+                    onChange={(e) => setMFormOtherCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">タイトル *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例: 9月度第2回ミーティング議事録"
+                  value={mFormTitle}
+                  onChange={(e) => setMFormTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </div>
+
+              {/* キャンペーン選択時の目標金額・件数入力 */}
+              {mFormCategory === 'キャンペーン' && (
+                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">目標金額 (円)</label>
+                    <input
+                      type="number"
+                      placeholder="例: 500000"
+                      value={mFormTargetAmount}
+                      onChange={(e) => setMFormTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">目標件数</label>
+                    <input
+                      type="number"
+                      placeholder="例: 30"
+                      value={mFormTargetCount}
+                      onChange={(e) => setMFormTargetCount(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* MTの詳細登録（売上進捗・目標達成率・キャンペーン進捗） */}
+              <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">売上進捗</label>
+                  <input
+                    type="text"
+                    placeholder="例: 順調 / 予算比90%"
+                    value={mFormSalesProgress}
+                    onChange={(e) => setMFormSalesProgress(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">目標達成率</label>
+                  <input
+                    type="text"
+                    placeholder="例: 85%"
+                    value={mFormTargetAchievementRate}
+                    onChange={(e) => setMFormTargetAchievementRate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">キャンペーン進捗</label>
+                  <input
+                    type="text"
+                    placeholder="例: 準備中"
+                    value={mFormCampaignProgress}
+                    onChange={(e) => setMFormCampaignProgress(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* 定型タスク登録・タスク連動セクション */}
+              <div className="space-y-2 border-t border-slate-100 pt-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-slate-700">定型タスク登録・タスク管理への直接連動</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddPresetToMinutes}
+                      className="px-2.5 py-1 bg-[#5e9bc4]/10 hover:bg-[#5e9bc4]/20 text-[#5e9bc4] rounded-lg text-xs font-bold transition"
+                    >
+                      + キャンペーン定型プリセット追加
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddBlankTaskToMinutes}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold transition"
+                    >
+                      + 空白タスク追加
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-44 overflow-y-auto">
+                  {mFormTasks.map((t, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                      <input
+                        type="text"
+                        placeholder="タスク内容"
+                        value={t.title}
+                        onChange={(e) => {
+                          const updated = [...mFormTasks];
+                          updated[idx].title = e.target.value;
+                          setMFormTasks(updated);
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                      />
+                      <select
+                        value={t.assignee}
+                        onChange={(e) => {
+                          const updated = [...mFormTasks];
+                          updated[idx].assignee = e.target.value as Assignee;
+                          setMFormTasks(updated);
+                        }}
+                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-bold"
+                      >
+                        <option value="TAKA">TAKA</option>
+                        <option value="NANA">NANA</option>
+                      </select>
+                      <input
+                        type="date"
+                        value={t.dueDate}
+                        onChange={(e) => {
+                          const updated = [...mFormTasks];
+                          updated[idx].dueDate = e.target.value;
+                          setMFormTasks(updated);
+                        }}
+                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...mFormTasks];
+                          updated[idx].priority = !updated[idx].priority;
+                          setMFormTasks(updated);
+                        }}
+                        className={`px-2 py-1.5 rounded-lg text-xs font-bold transition ${
+                          t.priority ? 'bg-rose-100 text-rose-700 border border-rose-300' : 'bg-slate-200 text-slate-500'
+                        }`}
+                        title="重要フラグ"
+                      >
+                        🔥
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTaskFromMinutes(idx)}
+                        className="text-slate-400 hover:text-rose-600 font-bold px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {mFormTasks.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-2">タスクが追加されていません。プリセットまたは空白タスクを追加してください。</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">MT詳細・議事録メモ</label>
+                <textarea
+                  rows={3}
+                  placeholder="会議の議事録詳細や決定事項を入力..."
+                  value={mFormNotes}
+                  onChange={(e) => setMFormNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsMinutesModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-sm font-semibold"
+                >
+                  保存してタスクに連携
                 </button>
               </div>
             </form>
