@@ -46,6 +46,15 @@ interface Parent {
   ticketsHistory: TicketHistory[];
 }
 
+interface NearbyInfo {
+  id: string;
+  title: string;
+  category: '大会・イベント' | '近隣施設' | 'その他';
+  date: string;
+  location: string;
+  description: string;
+}
+
 interface Student {
   id: string;
   parentId: string; // 1:N 構造（保護者ID）
@@ -58,6 +67,10 @@ interface Student {
   concern: string;
   target: string;
   memo: string;
+  // 要望対応：独立した3つのメモ欄
+  customMemo1: string;
+  customMemo2: string;
+  customMemo3: string;
   physicalHistory: PhysicalData[];
   sessions: Session[];
 }
@@ -87,6 +100,26 @@ export default function ClientsPage() {
     }
   ]);
 
+  // 近隣情報・イベントデータ（全体共通または受講生紐付け）
+  const [nearbyInfos, setNearbyInfos] = useState<NearbyInfo[]>([
+    {
+      id: 'nb-1',
+      title: '練馬区ジュニアサッカー大会 予選リーグ',
+      category: '大会・イベント',
+      date: '2026-10-15',
+      location: '区立総合運動場グラウンド',
+      description: '初戦突破を目標に、アジリティ系メニューを強化中。'
+    },
+    {
+      id: 'nb-2',
+      title: '光が丘体育館 サブアリーナ開放日',
+      category: '近隣施設',
+      date: '2026-09-25',
+      location: '光が丘体育館',
+      description: '自主トレでのスペース利用に活用可能。'
+    }
+  ]);
+
   // 受講生データ一覧
   const [students, setStudents] = useState<Student[]>([
     {
@@ -101,6 +134,9 @@ export default function ClientsPage() {
       concern: 'サッカーでの体幹ブレ・走力向上',
       target: 'トレセン選出・ブレない軸作り',
       memo: '右足首捻挫の既往歴あり。兄。',
+      customMemo1: '【特記事項】アップ時に股関節周りの可動域チェックを念入りに行う。',
+      customMemo2: '【食事面】練習後のプロテイン摂取と炭水化物の補給を意識させる。',
+      customMemo3: '【自主練】週末のランニングフォーム動画をLINEで提出予定。',
       physicalHistory: [
         {
           id: 'm-1',
@@ -139,6 +175,9 @@ export default function ClientsPage() {
       concern: '運動神経向上・ボール感覚',
       target: 'アジリティUP',
       memo: '弟。リズムトレーニングを好む。',
+      customMemo1: '【特記事項】集中力が切れやすいので、前半に楽しいリズム系を挟む。',
+      customMemo2: '【食事面】好き嫌いが多く野菜を少しずつ克服中。',
+      customMemo3: '【自主練】おうちでコーディネーショントレーニング5分。',
       physicalHistory: [
         {
           id: 'm-3',
@@ -160,10 +199,7 @@ export default function ClientsPage() {
   // UI状態
   const [selectedStudentId, setSelectedStudentId] = useState<string>('s-001');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
-
-  // 手動同期ローディング状態
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'nearby' | 'edit_info'>('carte');
 
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
@@ -193,6 +229,21 @@ export default function ClientsPage() {
   const [editSessionContent, setEditSessionContent] = useState<string>('');
   const [editSessionHomework, setEditSessionHomework] = useState<string>('');
 
+  // 近隣情報追加・編集用ステート
+  const [newNearbyTitle, setNewNearbyTitle] = useState('');
+  const [newNearbyCategory, setNewNearbyCategory] = useState<'大会・イベント' | '近隣施設' | 'その他'>('大会・イベント');
+  const [newNearbyDate, setNewNearbyDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newNearbyLocation, setNewNearbyLocation] = useState('');
+  const [newNearbyDesc, setNewNearbyDesc] = useState('');
+  const [editingNearbyId, setEditingNearbyId] = useState<string | null>(null);
+  const [editNearbyTitle, setEditNearbyTitle] = useState('');
+  const [editNearbyDesc, setEditNearbyDesc] = useState('');
+
+  // 3つのメモ欄編集用ステート
+  const [editCustomMemo1, setEditCustomMemo1] = useState(currentStudent.customMemo1);
+  const [editCustomMemo2, setEditCustomMemo2] = useState(currentStudent.customMemo2);
+  const [editCustomMemo3, setEditCustomMemo3] = useState(currentStudent.customMemo3);
+
   const [editForm, setEditForm] = useState({
     name: currentStudent.name,
     kana: currentStudent.kana,
@@ -201,8 +252,6 @@ export default function ClientsPage() {
     target: currentStudent.target,
     memo: currentStudent.memo
   });
-
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // 自動アラート判定ロジック
@@ -253,20 +302,14 @@ export default function ClientsPage() {
         target: target.target,
         memo: target.memo
       });
+      setEditCustomMemo1(target.customMemo1);
+      setEditCustomMemo2(target.customMemo2);
+      setEditCustomMemo3(target.customMemo3);
       if (target.physicalHistory.length > 0) {
         setBeforeDate(target.physicalHistory[0].date);
         setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
       }
     }
-  };
-
-  // スクエア手動データ更新ハンドラー
-  const handleManualSyncSquare = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      alert('Squareから最新の決済・チケット情報を手動で取得・更新しました！');
-    }, 800);
   };
 
   const handleAddSession = () => {
@@ -372,77 +415,6 @@ export default function ClientsPage() {
     }
   };
 
-  const handleFileUpload = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    targetDate: string,
-    type: 'posture' | 'test',
-    keyName?: 'front' | 'side' | 'back'
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-
-          if (type === 'posture' && keyName) {
-            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-            return {
-              ...m,
-              posturePhotos: { ...currentPhotos, [keyName]: url }
-            };
-          } else if (type === 'test') {
-            return {
-              ...m,
-              testPhotos: [...(m.testPhotos || []), url]
-            };
-          }
-          return m;
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-    e.target.value = '';
-  };
-
-  const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
-    if (!confirm('この姿勢写真を削除しますか？')) return;
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-          const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-          return {
-            ...m,
-            posturePhotos: { ...currentPhotos, [keyName]: null }
-          };
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-  };
-
-  const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
-    if (!confirm('このテストシート写真を削除しますか？')) return;
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
-          return {
-            ...m,
-            testPhotos: (m.testPhotos || []).filter((_, idx) => idx !== indexToDelete)
-          };
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
-  };
-
   const handleUpdatePhysicalValue = (targetDate: string, field: keyof PhysicalData, val: any) => {
     setStudents(prev =>
       prev.map(s => {
@@ -451,6 +423,48 @@ export default function ClientsPage() {
         return { ...s, physicalHistory: updated };
       })
     );
+  };
+
+  // 3つのメモ欄の保存処理
+  const handleSaveCustomMemos = () => {
+    setStudents(prev =>
+      prev.map(s => (s.id === currentStudent.id ? { ...s, customMemo1: editCustomMemo1, customMemo2: editCustomMemo2, customMemo3: editCustomMemo3 } : s))
+    );
+    alert('3つのメモ欄を更新しました！');
+  };
+
+  // 近隣情報・イベント追加・削除・編集ハンドラー
+  const handleAddNearby = () => {
+    if (!newNearbyTitle || !newNearbyLocation) {
+      alert('タイトルと場所を入力してください。');
+      return;
+    }
+    const newItem: NearbyInfo = {
+      id: `nb-${Date.now()}`,
+      title: newNearbyTitle,
+      category: newNearbyCategory,
+      date: newNearbyDate,
+      location: newNearbyLocation,
+      description: newNearbyDesc
+    };
+    setNearbyInfos([newItem, ...nearbyInfos]);
+    setNewNearbyTitle('');
+    setNewNearbyLocation('');
+    setNewNearbyDesc('');
+    alert('近隣情報・イベントを追加しました！');
+  };
+
+  const handleDeleteNearby = (id: string) => {
+    if (!confirm('この近隣情報を削除しますか？')) return;
+    setNearbyInfos(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleSaveEditNearby = (id: string) => {
+    setNearbyInfos(prev =>
+      prev.map(item => (item.id === id ? { ...item, title: editNearbyTitle, description: editNearbyDesc } : item))
+    );
+    setEditingNearbyId(null);
+    alert('近隣情報を更新しました！');
   };
 
   const handleSaveInfo = () => {
@@ -485,18 +499,8 @@ export default function ClientsPage() {
     );
   });
 
-  const calcDiff = (afterVal: number, beforeVal: number, unit: string, isImprovementWhenIncrease: boolean = true) => {
-    if (afterVal === undefined || beforeVal === undefined) return null;
-    const diff = Number((afterVal - beforeVal).toFixed(1));
-    if (diff === 0) return <span className="text-slate-400 font-normal">±0{unit}</span>;
-    const formattedStr = diff > 0 ? `+${diff}${unit}` : `${diff}${unit}`;
-    let colorClass = isImprovementWhenIncrease ? (diff > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800') : (diff < 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800');
-    return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${colorClass}`}>{formattedStr}</span>;
-  };
-
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans pb-12">
-      {/* 共通の Header コンポーネントを使用 */}
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
@@ -573,7 +577,6 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* アラートバッジ群 */}
                 {currentAlerts.length > 0 && (
                   <div className="flex flex-col gap-1.5">
                     {currentAlerts.map((alt, idx) => (
@@ -603,16 +606,19 @@ export default function ClientsPage() {
                 </div>
               )}
 
-              {/* タブ */}
-              <div className="flex border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
+              {/* タブ切り替え */}
+              <div className="flex flex-wrap border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
                 <button onClick={() => setActiveTab('carte')} className={`pb-3 border-b-2 transition ${activeTab === 'carte' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  📋 カルテ (セッション & 計測・写真比較)
+                  📋 カルテ (セッション & 計測)
                 </button>
                 <button onClick={() => setActiveTab('tickets')} className={`pb-3 border-b-2 transition ${activeTab === 'tickets' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  🎟️ チケット購入履歴 & Square
+                  🎟️ チケット・Square
+                </button>
+                <button onClick={() => setActiveTab('nearby')} className={`pb-3 border-b-2 transition ${activeTab === 'nearby' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                  📍 近隣情報・イベント
                 </button>
                 <button onClick={() => setActiveTab('edit_info')} className={`pb-3 border-b-2 transition ${activeTab === 'edit_info' ? 'border-[#5e9bc4] text-[#5e9bc4]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-                  ✏️ 基本情報編集・削除
+                  ✏️ 基本情報・3つのメモ
                 </button>
               </div>
             </div>
@@ -620,22 +626,19 @@ export default function ClientsPage() {
             {/* TAB 1: カルテ */}
             {activeTab === 'carte' && (
               <div className="space-y-6">
-
                 {/* 新規セッション記録の追加 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✍️</span> 新規セッション記録の追加</h3>
-                    <div className="flex items-center gap-2 text-xs">
-                      <label className="flex items-center gap-1 font-semibold text-slate-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={useTicket}
-                          onChange={e => setUseTicket(e.target.checked)}
-                          className="rounded text-[#5e9bc4]"
-                        />
-                        回数券を1回消化する
-                      </label>
-                    </div>
+                    <label className="flex items-center gap-1 font-semibold text-slate-600 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={useTicket}
+                        onChange={e => setUseTicket(e.target.checked)}
+                        className="rounded text-[#5e9bc4]"
+                      />
+                      回数券を1回消化する
+                    </label>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
@@ -660,7 +663,7 @@ export default function ClientsPage() {
                     <input type="text" placeholder="例: 片足ドローイン 1分×2" value={newSessionHomework} onChange={e => setNewSessionHomework(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2 outline-none" />
                   </div>
                   <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
-                    セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
+                    セッションを登録する {useTicket ? '(回数券1回消化)' : ''}
                   </button>
                 </div>
 
@@ -715,220 +718,199 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 3ヶ月定期計測・写真比較 */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
+                {/* 計測データ管理 */}
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="border-b pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📊</span> 3ヶ月定期計測・姿勢 & 測定シート比較</h3>
-                      <p className="text-[11px] text-slate-400">計測データの追加・数値編集・写真の差し替えおよび削除が可能</p>
-                    </div>
-
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📊</span> 身体測定・数値履歴</h3>
                     <div className="flex items-center gap-2">
                       <input type="date" value={newMeasureDate} onChange={e => setNewMeasureDate(e.target.value)} className="border rounded px-2.5 py-1 text-xs" />
-                      <button onClick={handleAddNewMeasureDate} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition whitespace-nowrap">
-                        ＋ 新規計測日を追加
+                      <button onClick={handleAddNewMeasureDate} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition">
+                        ＋ 計測日追加
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                      <div className="flex items-center gap-1 flex-1">
-                        <span className="font-bold text-slate-600 bg-slate-200 px-2 py-1 rounded">Before</span>
-                        <select value={beforeDate} onChange={e => setBeforeDate(e.target.value)} className="border rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1">
-                          {physicalDates.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                      <span className="font-bold text-slate-400">vs</span>
-                      <div className="flex items-center gap-1 flex-1">
-                        <span className="font-bold text-white bg-[#5e9bc4] px-2 py-1 rounded">After</span>
-                        <select value={afterDate} onChange={e => setAfterDate(e.target.value)} className="border rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1">
-                          {physicalDates.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    <button onClick={() => handleDeleteMeasureDate(afterDate)} className="text-xs text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded hover:bg-rose-100 font-bold transition">
-                      🗑️ 選択中のAfter計測日({afterDate})を削除
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                    {beforePhysical && (
-                      <div className="bg-slate-50 p-3.5 rounded-xl border space-y-2">
-                        <span className="font-bold text-slate-600 block border-b pb-1">📅 Before: {beforePhysical.date}</span>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div><label className="text-slate-400 text-[10px]">体重(kg)</label><input type="number" step="0.1" value={beforePhysical.weight} onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))} className="w-full border rounded p-1 font-bold" /></div>
-                          <div><label className="text-slate-400 text-[10px]">体脂肪(%)</label><input type="number" step="0.1" value={beforePhysical.fat} onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))} className="w-full border rounded p-1 font-bold" /></div>
-                          <div><label className="text-slate-400 text-[10px]">筋肉量(kg)</label><input type="number" step="0.1" value={beforePhysical.muscle} onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))} className="w-full border rounded p-1 font-bold" /></div>
+                  <div className="space-y-3">
+                    {currentStudent.physicalHistory.map(m => (
+                      <div key={m.id} className="p-3 bg-slate-50 border rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
+                        <div className="font-bold text-slate-700 flex items-center gap-2">
+                          <span>{m.date}</span>
+                          <button onClick={() => handleDeleteMeasureDate(m.date)} className="text-[10px] text-rose-500 hover:underline bg-rose-50 px-2 py-0.5 rounded border border-rose-200">削除</button>
                         </div>
-                      </div>
-                    )}
-                    {afterPhysical && (
-                      <div className="bg-sky-50/40 p-3.5 rounded-xl border border-sky-200 space-y-2">
-                        <div className="flex justify-between items-center border-b pb-1">
-                          <span className="font-bold text-[#5e9bc4]">📅 After: {afterPhysical.date}</span>
-                          <div className="flex gap-2 text-[11px]">
-                            <span>体重: {calcDiff(afterPhysical.weight, beforePhysical.weight, 'kg', false)}</span>
-                            <span>体脂肪: {calcDiff(afterPhysical.fat, beforePhysical.fat, '%', false)}</span>
-                            <span>筋肉: {calcDiff(afterPhysical.muscle, beforePhysical.muscle, 'kg', true)}</span>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div>
+                            <span className="text-slate-400 text-[10px] block">体重</span>
+                            <input type="number" step="0.1" value={m.weight} onChange={e => handleUpdatePhysicalValue(m.date, 'weight', parseFloat(e.target.value))} className="w-16 border rounded p-1 font-bold text-center" /> kg
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] block">体脂肪率</span>
+                            <input type="number" step="0.1" value={m.fat} onChange={e => handleUpdatePhysicalValue(m.date, 'fat', parseFloat(e.target.value))} className="w-16 border rounded p-1 font-bold text-center" /> %
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[10px] block">筋肉量</span>
+                            <input type="number" step="0.1" value={m.muscle} onChange={e => handleUpdatePhysicalValue(m.date, 'muscle', parseFloat(e.target.value))} className="w-16 border rounded p-1 font-bold text-center" /> kg
                           </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div><label className="text-slate-400 text-[10px]">体重(kg)</label><input type="number" step="0.1" value={afterPhysical.weight} onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value))} className="w-full border rounded p-1 font-bold" /></div>
-                          <div><label className="text-slate-400 text-[10px]">体脂肪(%)</label><input type="number" step="0.1" value={afterPhysical.fat} onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value))} className="w-full border rounded p-1 font-bold" /></div>
-                          <div><label className="text-slate-400 text-[10px]">筋肉量(kg)</label><input type="number" step="0.1" value={afterPhysical.muscle} onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value))} className="w-full border rounded p-1 font-bold" /></div>
-                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* 姿勢写真 */}
-                  <div className="space-y-3 pt-2">
-                    <h4 className="font-bold text-xs text-slate-700">📸 姿勢写真 比較 & 差し替え・削除</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {(['front', 'side', 'back'] as const).map(key => {
-                        const labelMap = { front: '正面 (Front)', side: '側面 (Side)', back: '背面 (Back)' };
-                        const beforeImg = beforePhysical?.posturePhotos?.[key];
-                        const afterImg = afterPhysical?.posturePhotos?.[key];
-
-                        return (
-                          <div key={key} className="bg-slate-50 border rounded-xl p-3.5 space-y-2">
-                            <span className="font-bold text-xs text-slate-700 text-center block">{labelMap[key]}</span>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="space-y-1">
-                                <span className="text-[10px] text-slate-500 font-bold block text-center">Before</span>
-                                <div className="h-28 bg-white border rounded-lg flex items-center justify-center overflow-hidden relative group">
-                                  {beforeImg ? (
-                                    <>
-                                      <img src={beforeImg} alt="Before" className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(beforeImg)} />
-                                      <button onClick={() => handleDeletePosturePhoto(beforeDate, key)} className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow" title="削除">×</button>
-                                    </>
-                                  ) : <span className="text-[10px] text-slate-400">未登録</span>}
-                                  <label className="absolute bottom-1 right-1 bg-slate-800/80 hover:bg-[#5e9bc4] text-white text-[10px] px-1.5 py-0.5 rounded cursor-pointer">
-                                    {beforeImg ? '差し替え' : '＋'}
-                                    <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, beforeDate, 'posture', key)} />
-                                  </label>
-                                </div>
-                              </div>
-
-                              <div className="space-y-1">
-                                <span className="text-[10px] text-[#5e9bc4] font-bold block text-center">After</span>
-                                <div className="h-28 bg-white border rounded-lg flex items-center justify-center overflow-hidden relative group">
-                                  {afterImg ? (
-                                    <>
-                                      <img src={afterImg} alt="After" className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(afterImg)} />
-                                      <button onClick={() => handleDeletePosturePhoto(afterDate, key)} className="absolute top-1 right-1 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow" title="削除">×</button>
-                                    </>
-                                  ) : <span className="text-[10px] text-slate-400">未登録</span>}
-                                  <label className="absolute bottom-1 right-1 bg-slate-800/80 hover:bg-[#5e9bc4] text-white text-[10px] px-1.5 py-0.5 rounded cursor-pointer">
-                                    {afterImg ? '差し替え' : '＋'}
-                                    <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, afterDate, 'posture', key)} />
-                                  </label>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* ケガゼロ・フィジカルチェックテスト写真 */}
-                  <div className="space-y-3 pt-2">
-                    <h4 className="font-bold text-xs text-slate-700">📋 ケガゼロ・フィジカルチェック 測定シート写真</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      <div className="bg-slate-50 border rounded-xl p-3.5 space-y-2">
-                        <div className="flex justify-between items-center"><span className="font-bold text-slate-600">Before ({beforeDate})</span>
-                          <label className="bg-[#5e9bc4] text-white text-[10px] font-bold px-2 py-1 rounded cursor-pointer">+ 写真追加<input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, beforeDate, 'test')} /></label>
-                        </div>
-                        <div className="flex flex-wrap gap-2 min-h-[70px] items-center">
-                          {beforePhysical?.testPhotos?.map((tPhoto, idx) => (
-                            <div key={idx} className="relative w-16 h-16 bg-white border rounded overflow-hidden group">
-                              <img src={tPhoto} alt="Test" className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(tPhoto)} />
-                              <button onClick={() => handleDeleteTestPhoto(beforeDate, idx)} className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">×</button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="bg-sky-50/40 border border-sky-200 rounded-xl p-3.5 space-y-2">
-                        <div className="flex justify-between items-center"><span className="font-bold text-[#5e9bc4]">After ({afterDate})</span>
-                          <label className="bg-[#5e9bc4] text-white text-[10px] font-bold px-2 py-1 rounded cursor-pointer">+ 写真追加<input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, afterDate, 'test')} /></label>
-                        </div>
-                        <div className="flex flex-wrap gap-2 min-h-[70px] items-center">
-                          {afterPhysical?.testPhotos?.map((tPhoto, idx) => (
-                            <div key={idx} className="relative w-16 h-16 bg-white border rounded overflow-hidden group">
-                              <img src={tPhoto} alt="Test" className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(tPhoto)} />
-                              <button onClick={() => handleDeleteTestPhoto(afterDate, idx)} className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">×</button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
-
               </div>
             )}
 
-            {/* TAB 2: チケット履歴 (ここに手動Square更新ボタンを設置) */}
+            {/* TAB 2: チケット・Square */}
             {activeTab === 'tickets' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <div className="flex justify-between items-center border-b pb-3">
-                  <h3 className="font-bold text-slate-800 text-sm">🎟️ チケット・決済履歴 ({currentParent.name} 様)</h3>
-                  <button
-                    onClick={handleManualSyncSquare}
-                    disabled={isSyncing}
-                    className="bg-[#5e9bc4] hover:bg-sky-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <span>{isSyncing ? '🔄 同期中...' : '🔄 スクエアデータを手動更新'}</span>
-                  </button>
-                </div>
-                
-                <div className="space-y-3 pt-2">
+                <h3 className="font-bold text-slate-800 text-sm">🎟️ チケット購入・決済履歴 (Square連携)</h3>
+                <div className="space-y-3">
                   {currentParent.ticketsHistory.map(th => (
-                    <div key={th.id} className="p-4 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
-                      <div>
-                        <div className="font-bold text-slate-800 text-sm">{th.title}</div>
-                        <div className="text-slate-500 mt-1">購入日: {th.date} ／ 有効期限: {th.expire}</div>
-                        <div className="text-[10px] text-[#5e9bc4] mt-0.5">Square決済ID: {th.squarePaymentId}</div>
+                    <div key={th.id} className="p-4 bg-slate-50 border rounded-lg text-xs space-y-1">
+                      <div className="flex justify-between font-bold text-slate-700">
+                        <span>{th.title} ({th.count}回券)</span>
+                        <span className="text-emerald-600">有効期限: {th.expire}</span>
                       </div>
-                      <span className="text-emerald-600 font-black text-lg">{th.count}回</span>
+                      <p className="text-slate-500">購入日: {th.date} / Square決済ID: <code className="bg-slate-200 px-1 py-0.5 rounded">{th.squarePaymentId}</code></p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* TAB 3: 基本情報編集 */}
-            {activeTab === 'edit_info' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
-                <h3 className="font-bold text-slate-800 text-sm">✏️ 受講生および保護者情報の編集</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><label className="block text-slate-500 mb-1 font-semibold">受講生 氏名</label><input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded p-2" /></div>
-                  <div><label className="block text-slate-500 mb-1 font-semibold">フリガナ</label><input type="text" value={editForm.kana} onChange={e => setEditForm({ ...editForm, kana: e.target.value })} className="w-full border rounded p-2" /></div>
-                  <div><label className="block text-slate-500 mb-1 font-semibold">保護者 連絡先</label><input type="text" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full border rounded p-2" /></div>
-                  <div className="md:col-span-2"><label className="block text-slate-500 mb-1 font-semibold">お悩み</label><input type="text" value={editForm.concern} onChange={e => setEditForm({ ...editForm, concern: e.target.value })} className="w-full border rounded p-2" /></div>
-                  <div className="md:col-span-2"><label className="block text-slate-500 mb-1 font-semibold">目標</label><input type="text" value={editForm.target} onChange={e => setEditForm({ ...editForm, target: e.target.value })} className="w-full border rounded p-2" /></div>
+            {/* TAB 3: 近隣情報・イベント（修正・削除対応） */}
+            {activeTab === 'nearby' && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+                <div className="border-b pb-3">
+                  <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📍</span> 近隣情報・イベント管理</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">周辺の競技場、大会スケジュール、施設情報を登録・編集・削除できます。</p>
                 </div>
-                <button onClick={handleSaveInfo} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-6 py-2.5 rounded-lg transition">変更を保存する</button>
+
+                {/* 新規追加フォーム */}
+                <div className="bg-sky-50/60 p-4 rounded-xl border border-sky-100 space-y-3 text-xs">
+                  <h4 className="font-bold text-[#5e9bc4]">＋ 新規イベント・情報の追加</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input type="text" placeholder="タイトル（例: 区民大会）" value={newNearbyTitle} onChange={e => setNewNearbyTitle(e.target.value)} className="border rounded p-2 bg-white" />
+                    <select value={newNearbyCategory} onChange={e => setNewNearbyCategory(e.target.value as any)} className="border rounded p-2 bg-white font-bold text-slate-700">
+                      <option value="大会・イベント">大会・イベント</option>
+                      <option value="近隣施設">近隣施設</option>
+                      <option value="その他">その他</option>
+                    </select>
+                    <input type="date" value={newNearbyDate} onChange={e => setNewNearbyDate(e.target.value)} className="border rounded p-2 bg-white" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input type="text" placeholder="場所（例: 練馬総合グラウンド）" value={newNearbyLocation} onChange={e => setNewNearbyLocation(e.target.value)} className="border rounded p-2 bg-white" />
+                    <input type="text" placeholder="詳細メモ・説明" value={newNearbyDesc} onChange={e => setNewNearbyDesc(e.target.value)} className="border rounded p-2 bg-white" />
+                  </div>
+                  <button onClick={handleAddNearby} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded shadow-sm transition">
+                    登録する
+                  </button>
+                </div>
+
+                {/* 一覧・編集・削除 */}
+                <div className="space-y-3">
+                  {nearbyInfos.map(item => (
+                    <div key={item.id} className="p-4 bg-slate-50 border rounded-xl text-xs space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${item.category === '大会・イベント' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-[#5e9bc4]'}`}>
+                            {item.category}
+                          </span>
+                          <span className="font-bold text-slate-700">{item.date}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setEditingNearbyId(item.id); setEditNearbyTitle(item.title); setEditNearbyDesc(item.description); }} className="text-sky-600 hover:underline">編集</button>
+                          <button onClick={() => handleDeleteNearby(item.id)} className="text-rose-500 hover:underline">削除</button>
+                        </div>
+                      </div>
+
+                      {editingNearbyId === item.id ? (
+                        <div className="space-y-2 pt-2 border-t">
+                          <input type="text" value={editNearbyTitle} onChange={e => setEditNearbyTitle(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="タイトル" />
+                          <input type="text" value={editNearbyDesc} onChange={e => setEditNearbyDesc(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="説明文" />
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => handleSaveEditNearby(item.id)} className="bg-emerald-600 text-white px-3 py-1 rounded font-bold">保存</button>
+                            <button onClick={() => setEditingNearbyId(null)} className="bg-slate-300 px-3 py-1 rounded">キャンセル</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-sm mt-1">{item.title}</h4>
+                          <p className="text-slate-500">📍 {item.location}</p>
+                          {item.description && <p className="text-slate-700 bg-white p-2 rounded border mt-1">{item.description}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: 基本情報編集 ＆ メモ欄3つ */}
+            {activeTab === 'edit_info' && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+                <div className="border-b pb-3">
+                  <h3 className="font-bold text-slate-800 text-sm">✏️ 基本情報・3つのメモ欄の編集</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">受講生のプロフィール情報と、独立した3つのメモ欄を自由に編集できます。</p>
+                </div>
+
+                {/* 基本情報フォーム */}
+                <div className="space-y-4 text-xs">
+                  <h4 className="font-bold text-[#5e9bc4]">■ 基本プロフィール</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-500 mb-1 font-semibold">氏名</label>
+                      <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded p-2" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 mb-1 font-semibold">フリガナ</label>
+                      <input type="text" value={editForm.kana} onChange={e => setEditForm({ ...editForm, kana: e.target.value })} className="w-full border rounded p-2" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 mb-1 font-semibold">保護者連絡先</label>
+                      <input type="text" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full border rounded p-2" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 mb-1 font-semibold">お悩み・課題</label>
+                      <input type="text" value={editForm.concern} onChange={e => setEditForm({ ...editForm, concern: e.target.value })} className="w-full border rounded p-2" />
+                    </div>
+                  </div>
+                  <button onClick={handleSaveInfo} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded shadow-sm transition">
+                    基本情報を保存する
+                  </button>
+                </div>
+
+                <hr />
+
+                {/* 3つのメモ欄 */}
+                <div className="space-y-4 text-xs">
+                  <h4 className="font-bold text-emerald-700">■ 独立した3つのメモ欄（指導方針・特記事項など）</h4>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ①（例: トレーニング特記事項・既往歴）</label>
+                      <textarea rows={3} value={editCustomMemo1} onChange={e => setEditCustomMemo1(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ②（例: 食事・栄養・生活習慣アドバイス）</label>
+                      <textarea rows={3} value={editCustomMemo2} onChange={e => setEditCustomMemo2(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ③（例: 自主トレ・保護者との共有事項）</label>
+                      <textarea rows={3} value={editCustomMemo3} onChange={e => setEditCustomMemo3(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                  </div>
+
+                  <button onClick={handleSaveCustomMemos} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded shadow-sm transition">
+                    3つのメモを保存する
+                  </button>
+                </div>
               </div>
             )}
 
           </div>
         </div>
       </main>
-
-      {/* プレビューモーダル */}
-      {previewImage && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 cursor-pointer" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-4xl max-h-[90vh]">
-            <img src={previewImage} alt="Preview" className="max-w-full max-h-[85vh] object-contain rounded-lg border-2 border-white shadow-2xl" />
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-10 right-0 bg-white text-slate-800 font-bold px-3 py-1 rounded text-xs">閉じる ✕</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
