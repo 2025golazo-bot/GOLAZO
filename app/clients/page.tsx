@@ -42,7 +42,7 @@ interface Parent {
   name: string;
   kana: string;
   phone: string;
-  isTicketSystem: boolean; // 回数券システムを使用するかどうか（通常チケットの場合はfalse）
+  isTicketSystem: boolean; // 回数券システムを使用するかどうか
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
 }
@@ -65,14 +65,14 @@ interface Student {
 }
 
 export default function ClientsPage() {
-  // 保護者データ (回数券利用有無のフラグ `isTicketSystem` を追加)
+  // 保護者データ
   const [parents, setParents] = useState<Parent[]>([
     {
       id: 'p-101',
       name: '藤田 奈々',
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
-      isTicketSystem: true, // 回数券あり
+      isTicketSystem: true,
       ticketRemaining: 8,
       ticketsHistory: [
         { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
@@ -83,7 +83,7 @@ export default function ClientsPage() {
       name: '山田 太郎',
       kana: 'ヤマダ タロウ',
       phone: '090-1234-5678',
-      isTicketSystem: false, // 通常チケット（都度払い・月謝等、回数券残数非表示対象）
+      isTicketSystem: false,
       ticketRemaining: 0,
       ticketsHistory: [
         { id: 'th-2', date: '2026-08-01', title: '通常都度レッスン', count: 1, expire: '2027-02-01', squarePaymentId: 'sq_pay_772200' }
@@ -171,12 +171,15 @@ export default function ClientsPage() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
+  // カルテ（セッション）編集用モーダルステート
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+
   // 選択中の生徒と保護者
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
-  // 姿勢写真 & 測定シート 比較用（Before / After）年月選択
+  // 姿勢写真 & 測定シート 比較用
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
@@ -239,7 +242,7 @@ export default function ClientsPage() {
     }
   };
 
-  // セッション追加（回数券利用時のみ自動減算）
+  // セッション追加
   const handleAddSession = () => {
     if (!newSessionContent) return;
     const newSession: Session = {
@@ -266,6 +269,36 @@ export default function ClientsPage() {
     alert('セッションを登録しました！');
   };
 
+  // セッションの編集保存
+  const handleUpdateSession = () => {
+    if (!editingSession) return;
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        return {
+          ...s,
+          sessions: s.sessions.map(ses => (ses.id === editingSession.id ? editingSession : ses))
+        };
+      })
+    );
+    setEditingSession(null);
+    alert('セッション記録を更新しました！');
+  };
+
+  // セッションの削除
+  const handleDeleteSession = (sessionId: string) => {
+    if (!confirm('このセッション記録を削除しますか？')) return;
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        return {
+          ...s,
+          sessions: s.sessions.filter(ses => ses.id !== sessionId)
+        };
+      })
+    );
+  };
+
   // 削除ハンドラー
   const handleDeleteStudent = (id: string) => {
     if (confirm('本当にこの受講生データを削除しますか？')) {
@@ -288,7 +321,7 @@ export default function ClientsPage() {
     }, 1200);
   };
 
-  // 写真アップロード・取り込み直し（差し替え）ハンドラー
+  // 写真アップロード・取り込み直しハンドラー
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -312,7 +345,7 @@ export default function ClientsPage() {
               ...m,
               posturePhotos: {
                 ...currentPhotos,
-                [keyName]: url // 新しい画像で上書き（取り込み直し）
+                [keyName]: url
               }
             };
           } else if (type === 'test') {
@@ -385,12 +418,10 @@ export default function ClientsPage() {
     );
   };
 
-  // 身体データの保存ボタンハンドラー
   const handleSavePhysicalData = () => {
     alert('身体データおよび測定数値を保存（登録）しました！');
   };
 
-  // 基本情報保存
   const handleSaveInfo = () => {
     setStudents(prev =>
       prev.map(s => (s.id === currentStudent.id ? { ...s, name: editForm.name, kana: editForm.kana, concern: editForm.concern, target: editForm.target, memo: editForm.memo } : s))
@@ -401,7 +432,6 @@ export default function ClientsPage() {
     alert('基本情報を更新しました');
   };
 
-  // フィルター用
   const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
   const availableMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
@@ -444,7 +474,7 @@ export default function ClientsPage() {
               <span>📋</span> 受講生・カルテ管理システム
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              会員情報、セッション記録、3ヶ月定期計測、写真の登録・差し替え、Square連携を一元管理します。
+              会員情報、セッション記録、カルテの修正・削除、3ヶ月定期計測、Square連携を一元管理します。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -534,7 +564,7 @@ export default function ClientsPage() {
 
           {/* 右カラム：メインコンテンツ */}
           <div className="md:col-span-3 space-y-5">
-            {/* 顧客基本ヘッダーカード（回数券利用時のみ残数表示） */}
+            {/* 顧客基本ヘッダーカード */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -550,7 +580,6 @@ export default function ClientsPage() {
                       保護者 (Square連携): {currentParent.name} 様 ({currentParent.phone})
                     </span>
 
-                    {/* 条件分岐: 回数券システムの保護者の場合のみ回数券残数を表示 */}
                     {currentParent.isTicketSystem && (
                       <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
                         <span>🎟️</span> 家族共通回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
@@ -683,14 +712,14 @@ export default function ClientsPage() {
                   </button>
                 </div>
 
-                {/* 2. 時系列セッション履歴 */}
+                {/* 2. 時系列セッション履歴（修正・削除ボタン付き） */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                     <div>
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                         <span>📅</span> 時系列セッション履歴
                       </h3>
-                      <p className="text-[11px] text-slate-400">過去の指導内容と宿題の履歴</p>
+                      <p className="text-[11px] text-slate-400">過去の指導内容と宿題の履歴（修正・削除が可能）</p>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs bg-slate-50 p-1.5 rounded-lg border border-slate-200">
@@ -727,10 +756,27 @@ export default function ClientsPage() {
                   <div className="space-y-2.5">
                     {filteredSessions.length > 0 ? (
                       filteredSessions.map(session => (
-                        <div key={session.id} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
-                          <div className="flex justify-between font-bold text-slate-700">
-                            <span>{session.date}</span>
-                            <span className="text-[#5e9bc4] bg-sky-100/50 px-2 py-0.5 rounded">担当: {session.staff}</span>
+                        <div key={session.id} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-2">
+                          <div className="flex justify-between items-center font-bold text-slate-700">
+                            <div className="flex items-center gap-2">
+                              <span>{session.date}</span>
+                              <span className="text-[#5e9bc4] bg-sky-100/50 px-2 py-0.5 rounded">担当: {session.staff}</span>
+                            </div>
+                            {/* 修正・削除ボタン */}
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => setEditingSession(session)}
+                                className="px-2 py-1 bg-white border border-slate-300 hover:bg-amber-500 hover:text-white rounded text-[10px] font-semibold transition text-slate-700 shadow-sm"
+                              >
+                                修正
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSession(session.id)}
+                                className="px-2 py-1 bg-white border border-slate-300 hover:bg-rose-500 hover:text-white rounded text-[10px] font-semibold transition text-slate-700 shadow-sm"
+                              >
+                                削除
+                              </button>
+                            </div>
                           </div>
                           <p className="text-slate-800 font-medium">{session.content}</p>
                           {session.homework && (
@@ -746,7 +792,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 3. 3ヶ月定期計測・身体データ & 写真管理（削除・取り込み直し・サイズ調整対応） */}
+                {/* 3. 3ヶ月定期計測・身体データ & 写真管理 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
                   <div className="flex justify-between items-center border-b pb-3">
                     <div>
@@ -755,7 +801,6 @@ export default function ClientsPage() {
                       </h3>
                       <p className="text-[11px] text-slate-400">数値の増減確認、写真の取り込み直し・削除・サイズ調整が可能です</p>
                     </div>
-                    {/* 明確な登録ボタン */}
                     <button
                       onClick={handleSavePhysicalData}
                       className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-sm"
@@ -880,14 +925,14 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 姿勢チェック写真（正面・側面・背面） - 削除、取り込み直し、サイズプレビュー対応 */}
+                  {/* 姿勢チェック写真管理 */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center justify-between">
                       <span className="flex items-center gap-1">📸 姿勢チェック写真管理 (Before / After)</span>
                       <span className="text-[10px] text-slate-400">クリックで拡大プレビュー</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Before 側写真 */}
+                      {/* Before */}
                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                         <span className="font-bold text-slate-600 block border-b pb-1">📸 Before ({beforeDate}) の姿勢写真</span>
                         <div className="grid grid-cols-3 gap-2">
@@ -906,7 +951,6 @@ export default function ClientsPage() {
                                         className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
                                         onClick={() => setPreviewImage(photoUrl)}
                                       />
-                                      {/* 削除および取り込み直し（変更）ボタン */}
                                       <div className="absolute top-1 right-1 flex gap-1">
                                         <label className="cursor-pointer bg-sky-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow hover:bg-sky-700" title="画像を取り込み直す">
                                           🔄
@@ -945,7 +989,7 @@ export default function ClientsPage() {
                         </div>
                       </div>
 
-                      {/* After 側写真 */}
+                      {/* After */}
                       <div className="bg-sky-50/40 p-4 rounded-xl border border-sky-200 space-y-3">
                         <span className="font-bold text-[#5e9bc4] block border-b pb-1">📸 After ({afterDate}) の姿勢写真</span>
                         <div className="grid grid-cols-3 gap-2">
@@ -1004,7 +1048,7 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 測定結果・テストシート写真（ケガゼロチェック等） */}
+                  {/* 測定結果シート写真 */}
                   <div className="space-y-3 pt-2">
                     <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
                       <span>📄</span> ケガゼロ・フィジカルチェック測定シート写真 ({afterDate})
@@ -1152,7 +1196,7 @@ export default function ClientsPage() {
         </div>
       </main>
 
-      {/* 写真拡大プレビューモーダル（サイズ調整・確認用） */}
+      {/* 写真拡大プレビューモーダル */}
       {previewImage && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl bg-white p-2 shadow-2xl">
@@ -1163,6 +1207,72 @@ export default function ClientsPage() {
               ✕
             </button>
             <img src={previewImage} alt="拡大プレビュー" className="max-w-full max-h-[80vh] object-contain mx-auto rounded-lg" />
+          </div>
+        </div>
+      )}
+
+      {/* セッション記録（カルテ）修正モーダル */}
+      {editingSession && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-lg text-slate-800">セッション記録の修正</h3>
+              <button onClick={() => setEditingSession(null)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-500 mb-1 font-semibold">日時</label>
+                <input
+                  type="date"
+                  value={editingSession.date}
+                  onChange={e => setEditingSession({ ...editingSession, date: e.target.value })}
+                  className="w-full border p-2 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1 font-semibold">担当トレーナー</label>
+                <select
+                  value={editingSession.staff}
+                  onChange={e => setEditingSession({ ...editingSession, staff: e.target.value })}
+                  className="w-full border p-2 rounded-lg font-bold text-[#5e9bc4]"
+                >
+                  <option value="TAKA">TAKA (藤田 渉仁)</option>
+                  <option value="NANA">NANA (藤田 奈々)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1 font-semibold">セッション内容</label>
+                <input
+                  type="text"
+                  value={editingSession.content}
+                  onChange={e => setEditingSession({ ...editingSession, content: e.target.value })}
+                  className="w-full border p-2 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1 font-semibold">宿題・自主トレ指示</label>
+                <input
+                  type="text"
+                  value={editingSession.homework}
+                  onChange={e => setEditingSession({ ...editingSession, homework: e.target.value })}
+                  className="w-full border p-2 rounded-lg"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setEditingSession(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleUpdateSession}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold shadow-sm"
+              >
+                更新する
+              </button>
+            </div>
           </div>
         </div>
       )}
