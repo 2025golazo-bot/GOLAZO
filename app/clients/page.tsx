@@ -92,7 +92,7 @@ export default function ClientsPage() {
     }
   ]);
 
-  // 受講生データ一覧（兄弟の紐付け：p-101に「藤田 陸」「藤田 凛」を紐付け）
+  // 受講生データ一覧
   const [students, setStudents] = useState<Student[]>([
     {
       id: 's-001',
@@ -213,7 +213,6 @@ export default function ClientsPage() {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
 
   // 写真拡大プレビュー用ステート
@@ -223,7 +222,7 @@ export default function ClientsPage() {
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
   
-  // ★重要：同じ保護者IDを持つ「きょうだい・家族」の生徒一覧を自動抽出
+  // 兄弟・家族紐付けの生徒一覧
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
@@ -235,7 +234,6 @@ export default function ClientsPage() {
   // 新規計測日追加用の入力ステート
   const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // 選択された日付に対応する PhysicalData オブジェクトを特定
   const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
   const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
 
@@ -244,6 +242,7 @@ export default function ClientsPage() {
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
 
+  // ★修正：常時現在の生徒・保護者情報を反映するための編集用フォームステート
   const [editForm, setEditForm] = useState({
     name: currentStudent.name,
     kana: currentStudent.kana,
@@ -269,10 +268,11 @@ export default function ClientsPage() {
     setSelectedStudentId(id);
     const target = students.find(s => s.id === id);
     if (target) {
+      const parent = parents.find(p => p.id === target.parentId);
       setEditForm({
         name: target.name,
         kana: target.kana,
-        phone: parents.find(p => p.id === target.parentId)?.phone || '',
+        phone: parent?.phone || '',
         concern: target.concern,
         target: target.target,
         memo: target.memo
@@ -280,9 +280,6 @@ export default function ClientsPage() {
       if (target.physicalHistory.length > 0) {
         setBeforeDate(target.physicalHistory[0].date);
         setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
-      } else {
-        setBeforeDate('');
-        setAfterDate('');
       }
     }
   };
@@ -333,7 +330,6 @@ export default function ClientsPage() {
       prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions] } : s))
     );
 
-    // ★家族共有回数券の残高から1回消化
     setParents(prev =>
       prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
     );
@@ -374,18 +370,10 @@ export default function ClientsPage() {
   const handleDeleteStudent = (id: string) => {
     if (confirm('本当にこの受講生データを削除しますか？')) {
       setStudents(prev => prev.filter(s => s.id !== id));
-      if (selectedStudentId === id) {
-        const remaining = filteredStudents.filter(s => s.id !== id);
-        if (remaining.length > 0) {
-          setSelectedStudentId(remaining[0].id);
-          handleSelectStudent(remaining[0].id);
-        } else {
-          const allStudents = students.filter(s => s.id !== id);
-          if (allStudents.length > 0) {
-            setSelectedStudentId(allStudents[0].id);
-            handleSelectStudent(allStudents[0].id);
-          }
-        }
+      const remaining = students.filter(s => s.id !== id);
+      if (remaining.length > 0) {
+        setSelectedStudentId(remaining[0].id);
+        handleSelectStudent(remaining[0].id);
       }
     }
   };
@@ -484,8 +472,8 @@ export default function ClientsPage() {
         return { ...p, phone: editForm.phone };
       })
     );
-    setEditingStudent(null);
-    alert('生徒情報を更新しました！');
+    setActiveTab('carte');
+    alert('生徒情報を正常に更新しました！');
   };
 
   return (
@@ -572,7 +560,7 @@ export default function ClientsPage() {
                 <span>📅 初回レッスン: {currentStudent.firstLessonDate}</span>
               </div>
 
-              {/* ★重要：兄弟・家族紐付け切り替えリンク */}
+              {/* 兄弟・家族紐付け切り替えリンク */}
               {siblingStudents.length > 1 && (
                 <div className="flex items-center gap-2 mt-2.5 text-xs bg-indigo-50/60 p-2 rounded-lg border border-indigo-100">
                   <span className="text-slate-500 font-bold">family 家族共有グループ:</span>
@@ -593,7 +581,7 @@ export default function ClientsPage() {
               )}
             </div>
 
-            {/* タブ切り替え ＆ 編集ボタン */}
+            {/* タブ切り替え ＆ 削除ボタン */}
             <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
               <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                 <button
@@ -614,7 +602,7 @@ export default function ClientsPage() {
                 </button>
                 <button
                   onClick={() => {
-                    setEditingStudent(currentStudent);
+                    // タブ切り替え時に最新の生徒データを編集フォームにセット
                     setEditForm({
                       name: currentStudent.name,
                       kana: currentStudent.kana,
@@ -646,14 +634,12 @@ export default function ClientsPage() {
           {/* タブ 1: カルテ・比較・セッション記録 */}
           {activeTab === 'carte' && (
             <div className="flex flex-col gap-6">
-              {/* アラート表示 */}
               {currentStudent.alert && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs font-medium flex items-center gap-2">
                   <span>{currentStudent.alert}</span>
                 </div>
               )}
 
-              {/* 目標・お悩みカード */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div>
                   <span className="text-[11px] text-slate-500 block font-bold mb-1">🎯 お悩み・課題</span>
@@ -665,9 +651,7 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              {/* ---------------------------------------------------- */}
-              {/* 【身体データ数値変化の自動算出】 */}
-              {/* ---------------------------------------------------- */}
+              {/* 身体データ数値変化の自動算出 */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                   <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
@@ -681,7 +665,6 @@ export default function ClientsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* 体重 */}
                   <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col gap-1 shadow-sm">
                     <span className="text-[10px] text-slate-500 font-bold">体重 (kg)</span>
                     <div className="flex items-baseline justify-between">
@@ -690,28 +673,16 @@ export default function ClientsPage() {
                         <span className="text-xs text-slate-400">(前回: {beforePhysical?.weight ?? 0})</span>
                       </div>
                       {(() => {
-                        const diff = +(
-                          (afterPhysical?.weight || 0) - (beforePhysical?.weight || 0)
-                        ).toFixed(1);
-                        const isPlus = diff > 0;
+                        const diff = +((afterPhysical?.weight || 0) - (beforePhysical?.weight || 0)).toFixed(1);
                         return (
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded font-bold ${
-                              diff === 0
-                                ? 'bg-slate-100 text-slate-600'
-                                : isPlus
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            }`}
-                          >
-                            {isPlus ? `+${diff}kg` : `${diff}kg`}
+                          <span className={`text-xs px-2 py-0.5 rounded font-bold ${diff > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
+                            {diff > 0 ? `+${diff}kg` : `${diff}kg`}
                           </span>
                         );
                       })()}
                     </div>
                   </div>
 
-                  {/* 体脂肪率 */}
                   <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col gap-1 shadow-sm">
                     <span className="text-[10px] text-slate-500 font-bold">体脂肪率 (%)</span>
                     <div className="flex items-baseline justify-between">
@@ -720,28 +691,16 @@ export default function ClientsPage() {
                         <span className="text-xs text-slate-400">(前回: {beforePhysical?.fat ?? 0})</span>
                       </div>
                       {(() => {
-                        const diff = +(
-                          (afterPhysical?.fat || 0) - (beforePhysical?.fat || 0)
-                        ).toFixed(1);
-                        const isPlus = diff > 0;
+                        const diff = +((afterPhysical?.fat || 0) - (beforePhysical?.fat || 0)).toFixed(1);
                         return (
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded font-bold ${
-                              diff === 0
-                                ? 'bg-slate-100 text-slate-600'
-                                : isPlus
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}
-                          >
-                            {isPlus ? `+${diff}%` : `${diff}%`}
+                          <span className={`text-xs px-2 py-0.5 rounded font-bold ${diff > 0 ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                            {diff > 0 ? `+${diff}%` : `${diff}%`}
                           </span>
                         );
                       })()}
                     </div>
                   </div>
 
-                  {/* 筋肉量 */}
                   <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col gap-1 shadow-sm">
                     <span className="text-[10px] text-slate-500 font-bold">筋肉量 (kg)</span>
                     <div className="flex items-baseline justify-between">
@@ -750,21 +709,10 @@ export default function ClientsPage() {
                         <span className="text-xs text-slate-400">(前回: {beforePhysical?.muscle ?? 0})</span>
                       </div>
                       {(() => {
-                        const diff = +(
-                          (afterPhysical?.muscle || 0) - (beforePhysical?.muscle || 0)
-                        ).toFixed(1);
-                        const isPlus = diff > 0;
+                        const diff = +((afterPhysical?.muscle || 0) - (beforePhysical?.muscle || 0)).toFixed(1);
                         return (
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded font-bold ${
-                              diff === 0
-                                ? 'bg-slate-100 text-slate-600'
-                                : isPlus
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}
-                          >
-                            {isPlus ? `+${diff}kg` : `${diff}kg`}
+                          <span className={`text-xs px-2 py-0.5 rounded font-bold ${diff > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                            {diff > 0 ? `+${diff}kg` : `${diff}kg`}
                           </span>
                         );
                       })()}
@@ -773,9 +721,7 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              {/* ---------------------------------------------------- */}
-              {/* 【上部配置】セッション・レッスン記録 ＆ 履歴 */}
-              {/* ---------------------------------------------------- */}
+              {/* 新規セッション・レッスン記録の追加 */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col gap-4">
                 <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                   <span>📝</span> 新規セッション・レッスン記録の追加 (家族共有チケットから1回消化)
@@ -872,16 +818,13 @@ export default function ClientsPage() {
                 </div>
               </div>
 
-              {/* ---------------------------------------------------- */}
-              {/* 【下部配置】写真や測定結果・比較セクション */}
-              {/* ---------------------------------------------------- */}
+              {/* 写真・測定シート比較セクション */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 shadow-sm">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-slate-200 pb-3">
                   <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                     <span>📊</span> 姿勢 ＆ 測定シート写真 比較
                   </h3>
                   
-                  {/* 比較する日付の選択ボックス */}
                   <div className="flex items-center gap-2 text-xs">
                     <div className="flex items-center gap-1">
                       <span className="text-slate-500 font-bold">Before</span>
@@ -913,7 +856,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                {/* 1. 姿勢写真 比較ビュー (正面・側面・背面) */}
+                {/* 姿勢写真 比較 */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {(['front', 'side', 'back'] as const).map(key => {
                     const labelMap = { front: '正面 (Front)', side: '側面 (Side)', back: '背面 (Back)' };
@@ -924,54 +867,32 @@ export default function ClientsPage() {
                       <div key={key} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex flex-col gap-2">
                         <div className="text-[11px] font-bold text-slate-700 text-center">{labelMap[key]}</div>
                         <div className="grid grid-cols-2 gap-2">
-                          {/* Before側の姿勢写真 */}
                           <div className="flex flex-col items-center gap-1">
                             <span className="text-[10px] text-indigo-600 font-bold">Before ({beforeDate})</span>
                             <div className="w-full h-28 bg-white border border-slate-300 rounded flex items-center justify-center overflow-hidden relative group">
                               {beforeImg ? (
-                                <img
-                                  src={beforeImg}
-                                  alt="Before"
-                                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
-                                  onClick={() => setPreviewImage(beforeImg)}
-                                />
+                                <img src={beforeImg} alt="Before" className="w-full h-full object-cover cursor-pointer hover:scale-105 transition" onClick={() => setPreviewImage(beforeImg)} />
                               ) : (
                                 <span className="text-[10px] text-slate-400">未登録</span>
                               )}
                               <label className="absolute bottom-1 right-1 bg-slate-800/80 hover:bg-indigo-600 text-[10px] text-white px-1.5 py-0.5 rounded cursor-pointer transition">
                                 ＋
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={e => handleFileUpload(e, beforeDate, 'posture', key)}
-                                />
+                                <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, beforeDate, 'posture', key)} />
                               </label>
                             </div>
                           </div>
 
-                          {/* After側の姿勢写真 */}
                           <div className="flex flex-col items-center gap-1">
                             <span className="text-[10px] text-emerald-600 font-bold">After ({afterDate})</span>
                             <div className="w-full h-28 bg-white border border-slate-300 rounded flex items-center justify-center overflow-hidden relative group">
                               {afterImg ? (
-                                <img
-                                  src={afterImg}
-                                  alt="After"
-                                  className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
-                                  onClick={() => setPreviewImage(afterImg)}
-                                />
+                                <img src={afterImg} alt="After" className="w-full h-full object-cover cursor-pointer hover:scale-105 transition" onClick={() => setPreviewImage(afterImg)} />
                               ) : (
                                 <span className="text-[10px] text-slate-400">未登録</span>
                               )}
                               <label className="absolute bottom-1 right-1 bg-slate-800/80 hover:bg-indigo-600 text-[10px] text-white px-1.5 py-0.5 rounded cursor-pointer transition">
                                 ＋
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={e => handleFileUpload(e, afterDate, 'posture', key)}
-                                />
+                                <input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, afterDate, 'posture', key)} />
                               </label>
                             </div>
                           </div>
@@ -981,181 +902,7 @@ export default function ClientsPage() {
                   })}
                 </div>
 
-                {/* 2. ケガゼロ測定シート写真 比較ビュー */}
-                <div className="mt-2 border-t border-slate-200 pt-3">
-                  <div className="text-xs font-bold text-slate-800 mb-2 flex items-center justify-between">
-                    <span>🛡️ ケガゼロ測定シート写真比較</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Before側 */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col gap-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-indigo-600">Before ({beforeDate})</span>
-                        <label className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-2 py-0.5 rounded cursor-pointer transition">
-                          + 写真追加
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={e => handleFileUpload(e, beforeDate, 'kegazero')}
-                          />
-                        </label>
-                      </div>
-                      <div className="flex flex-wrap gap-2 min-h-[70px] items-center">
-                        {beforePhysical?.kegazeroPhotos && beforePhysical.kegazeroPhotos.length > 0 ? (
-                          beforePhysical.kegazeroPhotos.map((photo, idx) => (
-                            <div key={`b-kegazero-${idx}`} className="relative w-16 h-16 bg-white border border-slate-300 rounded overflow-hidden group">
-                              <img
-                                src={photo}
-                                alt={`Before Kegazero ${idx + 1}`}
-                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
-                                onClick={() => setPreviewImage(photo)}
-                              />
-                              <button
-                                onClick={() => handleDeletePhotoItem(beforeDate, 'kegazero', idx)}
-                                className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                                title="削除"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic w-full text-center py-2">写真なし</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* After側 */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col gap-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-emerald-600">After ({afterDate})</span>
-                        <label className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded cursor-pointer transition">
-                          + 写真追加
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={e => handleFileUpload(e, afterDate, 'kegazero')}
-                          />
-                        </label>
-                      </div>
-                      <div className="flex flex-wrap gap-2 min-h-[70px] items-center">
-                        {afterPhysical?.kegazeroPhotos && afterPhysical.kegazeroPhotos.length > 0 ? (
-                          afterPhysical.kegazeroPhotos.map((photo, idx) => (
-                            <div key={`a-kegazero-${idx}`} className="relative w-16 h-16 bg-white border border-slate-300 rounded overflow-hidden group">
-                              <img
-                                src={photo}
-                                alt={`After Kegazero ${idx + 1}`}
-                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
-                                onClick={() => setPreviewImage(photo)}
-                              />
-                              <button
-                                onClick={() => handleDeletePhotoItem(afterDate, 'kegazero', idx)}
-                                className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                                title="削除"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic w-full text-center py-2">写真なし</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. フィジカルチェック測定シート写真 比較ビュー */}
-                <div className="mt-2 border-t border-slate-200 pt-3">
-                  <div className="text-xs font-bold text-slate-800 mb-2 flex items-center justify-between">
-                    <span>📋 フィジカルチェック測定シート写真比較</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Before側 */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col gap-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-indigo-600">Before ({beforeDate})</span>
-                        <label className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] px-2 py-0.5 rounded cursor-pointer transition">
-                          + 写真追加
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={e => handleFileUpload(e, beforeDate, 'physicalCheck')}
-                          />
-                        </label>
-                      </div>
-                      <div className="flex flex-wrap gap-2 min-h-[70px] items-center">
-                        {beforePhysical?.physicalCheckPhotos && beforePhysical.physicalCheckPhotos.length > 0 ? (
-                          beforePhysical.physicalCheckPhotos.map((photo, idx) => (
-                            <div key={`b-pcheck-${idx}`} className="relative w-16 h-16 bg-white border border-slate-300 rounded overflow-hidden group">
-                              <img
-                                src={photo}
-                                alt={`Before PhysicalCheck ${idx + 1}`}
-                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
-                                onClick={() => setPreviewImage(photo)}
-                              />
-                              <button
-                                onClick={() => handleDeletePhotoItem(beforeDate, 'physicalCheck', idx)}
-                                className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                                title="削除"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic w-full text-center py-2">写真なし</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* After側 */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col gap-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-emerald-600">After ({afterDate})</span>
-                        <label className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded cursor-pointer transition">
-                          + 写真追加
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={e => handleFileUpload(e, afterDate, 'physicalCheck')}
-                          />
-                        </label>
-                      </div>
-                      <div className="flex flex-wrap gap-2 min-h-[70px] items-center">
-                        {afterPhysical?.physicalCheckPhotos && afterPhysical.physicalCheckPhotos.length > 0 ? (
-                          afterPhysical.physicalCheckPhotos.map((photo, idx) => (
-                            <div key={`a-pcheck-${idx}`} className="relative w-16 h-16 bg-white border border-slate-300 rounded overflow-hidden group">
-                              <img
-                                src={photo}
-                                alt={`After PhysicalCheck ${idx + 1}`}
-                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition"
-                                onClick={() => setPreviewImage(photo)}
-                              />
-                              <button
-                                onClick={() => handleDeletePhotoItem(afterDate, 'physicalCheck', idx)}
-                                className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                                title="削除"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic w-full text-center py-2">写真なし</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 新規測定日追加フォーム */}
+                {/* 新規測定日追加 */}
                 <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col md:flex-row items-center justify-between gap-3">
                   <div className="flex items-center gap-2 w-full md:w-auto">
                     <span className="text-xs font-bold text-slate-700 whitespace-nowrap">📅 新規測定日を追加:</span>
