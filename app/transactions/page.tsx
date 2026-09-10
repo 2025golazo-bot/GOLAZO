@@ -12,10 +12,11 @@ export default async function TransactionsPage() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  const list = (transactions || []) as any[];
+  // 強制的にanyキャストを行い、TypeScriptの型チェックを完全にスキップします
+  const list = (transactions || []) as Array<any>;
 
   // 簡易集計
-  const totalAmount = list.reduce((acc, cur) => acc + (cur.amount || 0), 0);
+  const totalAmount = list.reduce((acc, cur) => acc + (Number(cur.amount) || 0), 0);
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
@@ -57,7 +58,7 @@ export default async function TransactionsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {list.length > 0 ? (
-                list.map((tx) => (
+                list.map((tx: any) => (
                   <tr key={tx.id} className="hover:bg-slate-50/80 transition">
                     <td className="p-3 text-slate-500">{formatDate(tx.date)}</td>
                     <td className="p-3 font-bold text-slate-800">{tx.client}</td>
@@ -69,7 +70,7 @@ export default async function TransactionsPage() {
                     </td>
                     <td className="p-3 font-semibold text-[#5e9bc4]">{tx.staff}</td>
                     <td className="p-3 text-right font-bold text-slate-800">
-                      ¥{(tx.amount || 0).toLocaleString()}
+                      ¥{(Number(tx.amount) || 0).toLocaleString()}
                     </td>
                   </tr>
                 ))
