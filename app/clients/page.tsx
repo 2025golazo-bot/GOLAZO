@@ -184,7 +184,7 @@ export default function ClientsPage() {
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
 
-  // 指定された日付のデータが存在しない場合に自動生成して返すヘルパー
+  // 指定された日付のデータがなければ自動生成して返す（新規日付対応）
   const getOrCreatePhysicalData = (targetDate: string): PhysicalData => {
     let found = currentStudent.physicalHistory.find(m => m.date === targetDate);
     if (found) return found;
@@ -862,7 +862,7 @@ export default function ClientsPage() {
                         <span>📊</span> 3ヶ月定期計測・身体データ & 姿勢・測定シート写真管理
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        💡 <strong>新しい日付を直接入力・選択して、その日付で新規の写真・測定データを登録できます</strong>
+                        💡 <strong>ここを新しい日付（例: 2026-12-01 等）に変更・入力すると、その日付の新規計測・写真データとして登録・管理できます</strong>
                       </p>
                     </div>
                     <button
@@ -873,6 +873,7 @@ export default function ClientsPage() {
                     </button>
                   </div>
 
+                  {/* ここを日付入力インプットに変更しました */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-md">過去 (Before) 日付</span>
@@ -880,7 +881,7 @@ export default function ClientsPage() {
                         type="date"
                         value={beforeDate}
                         onChange={e => setBeforeDate(e.target.value)}
-                        className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm"
+                        className="border border-slate-300 rounded-lg p-2 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm focus:ring-2 focus:ring-[#5e9bc4]"
                       />
                     </div>
 
@@ -890,7 +891,7 @@ export default function ClientsPage() {
                         type="date"
                         value={afterDate}
                         onChange={e => setAfterDate(e.target.value)}
-                        className="border border-slate-300 rounded-lg p-1.5 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm"
+                        className="border border-slate-300 rounded-lg p-2 font-bold text-[#5e9bc4] bg-white flex-1 outline-none shadow-sm focus:ring-2 focus:ring-[#5e9bc4]"
                       />
                     </div>
                   </div>
