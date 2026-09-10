@@ -83,7 +83,7 @@ export default function ClientsPage() {
       name: '藤田 奈々',
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
-      ticketRemaining: 1, // 残り1回でチケットアラート動作確認用
+      ticketRemaining: 1,
       ticketsHistory: [
         { id: 'th-1', date: '2026-06-01', title: '10回券 (共通)', count: 10, expire: '2026-12-01', squarePaymentId: 'sq_pay_998811' }
       ]
@@ -100,7 +100,7 @@ export default function ClientsPage() {
     }
   ]);
 
-  // 近隣情報・イベントデータ（全体共通または受講生紐付け）
+  // 近隣情報・イベントデータ（全体共通）
   const [nearbyInfos, setNearbyInfos] = useState<NearbyInfo[]>([
     {
       id: 'nb-1',
@@ -130,7 +130,7 @@ export default function ClientsPage() {
       age: 11,
       birthdate: '2015-05-12',
       firstLessonDate: '2026-03-01',
-      lastReservationDate: '2026-08-20', // 1ヶ月以上前
+      lastReservationDate: '2026-08-20',
       concern: 'サッカーでの体幹ブレ・走力向上',
       target: 'トレセン選出・ブレない軸作り',
       memo: '右足首捻挫の既往歴あり。兄。',
@@ -171,7 +171,7 @@ export default function ClientsPage() {
       age: 8,
       birthdate: '2018-09-20',
       firstLessonDate: '2026-04-10',
-      lastReservationDate: '2026-09-01', // 2週間以上前
+      lastReservationDate: '2026-09-01',
       concern: '運動神経向上・ボール感覚',
       target: 'アジリティUP',
       memo: '弟。リズムトレーニングを好む。',
@@ -205,24 +205,16 @@ export default function ClientsPage() {
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
   const siblingStudents = students.filter(s => s.parentId === currentParent.id);
 
-  // 比較用データステート
-  const physicalDates = currentStudent.physicalHistory.map(m => m.date);
-  const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
-  const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
-
-  const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
-  const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
-
-  const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
-
-  // セッションフィルター＆新規フォーム
-  const [selectedYear, setSelectedYear] = useState<string>('ALL');
-  const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
+  // 新規セッション用ステート
   const [newSessionDate, setNewSessionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
   const [useTicket, setUseTicket] = useState<boolean>(true);
+
+  // セッションフィルター用
+  const [selectedYear, setSelectedYear] = useState<string>('ALL');
+  const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
 
   // 編集用ステート
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -253,9 +245,7 @@ export default function ClientsPage() {
     memo: currentStudent.memo
   });
 
-  // ---------------------------------------------------------------------------
-  // 自動アラート判定ロジック
-  // ---------------------------------------------------------------------------
+  // 自動アラート判定
   const getAlertBadges = (student: Student, parent: Parent) => {
     const alerts: { text: string; type: 'warning' | 'danger' }[] = [];
     const today = new Date();
@@ -287,9 +277,7 @@ export default function ClientsPage() {
 
   const currentAlerts = getAlertBadges(currentStudent, currentParent);
 
-  // ---------------------------------------------------------------------------
   // ハンドラー類
-  // ---------------------------------------------------------------------------
   const handleSelectStudent = (id: string) => {
     setSelectedStudentId(id);
     const target = students.find(s => s.id === id);
@@ -305,10 +293,6 @@ export default function ClientsPage() {
       setEditCustomMemo1(target.customMemo1);
       setEditCustomMemo2(target.customMemo2);
       setEditCustomMemo3(target.customMemo3);
-      if (target.physicalHistory.length > 0) {
-        setBeforeDate(target.physicalHistory[0].date);
-        setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
-      }
     }
   };
 
@@ -365,75 +349,6 @@ export default function ClientsPage() {
     );
   };
 
-  const handleAddNewMeasureDate = () => {
-    if (!newMeasureDate) return;
-    if (currentStudent.physicalHistory.some(m => m.date === newMeasureDate)) {
-      alert('すでに登録されている計測日です。');
-      return;
-    }
-
-    const newPh: PhysicalData = {
-      id: `m-${Date.now()}`,
-      date: newMeasureDate,
-      weight: 0,
-      fat: 0,
-      muscle: 0,
-      note: '定期計測',
-      posturePhotos: { front: null, side: null, back: null },
-      testPhotos: []
-    };
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updated = [...s.physicalHistory, newPh].sort((a, b) => a.date.localeCompare(b.date));
-        return { ...s, physicalHistory: updated };
-      })
-    );
-    setAfterDate(newMeasureDate);
-    alert(`計測日 (${newMeasureDate}) を追加しました！`);
-  };
-
-  const handleDeleteMeasureDate = (targetDate: string) => {
-    if (currentStudent.physicalHistory.length <= 1) {
-      alert('これ以上削除できません（最低1件の計測データが必要です）。');
-      return;
-    }
-    if (!confirm(`${targetDate} の計測データを削除しますか？`)) return;
-
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updated = s.physicalHistory.filter(m => m.date !== targetDate);
-        return { ...s, physicalHistory: updated };
-      })
-    );
-    const remaining = currentStudent.physicalHistory.filter(m => m.date !== targetDate);
-    if (remaining.length > 0) {
-      setBeforeDate(remaining[0].date);
-      setAfterDate(remaining[remaining.length - 1].date);
-    }
-  };
-
-  const handleUpdatePhysicalValue = (targetDate: string, field: keyof PhysicalData, val: any) => {
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updated = s.physicalHistory.map(m => (m.date === targetDate ? { ...m, [field]: val } : m));
-        return { ...s, physicalHistory: updated };
-      })
-    );
-  };
-
-  // 3つのメモ欄の保存処理
-  const handleSaveCustomMemos = () => {
-    setStudents(prev =>
-      prev.map(s => (s.id === currentStudent.id ? { ...s, customMemo1: editCustomMemo1, customMemo2: editCustomMemo2, customMemo3: editCustomMemo3 } : s))
-    );
-    alert('3つのメモ欄を更新しました！');
-  };
-
-  // 近隣情報・イベント追加・削除・編集ハンドラー
   const handleAddNearby = () => {
     if (!newNearbyTitle || !newNearbyLocation) {
       alert('タイトルと場所を入力してください。');
@@ -465,16 +380,6 @@ export default function ClientsPage() {
     );
     setEditingNearbyId(null);
     alert('近隣情報を更新しました！');
-  };
-
-  const handleSaveInfo = () => {
-    setStudents(prev =>
-      prev.map(s => (s.id === currentStudent.id ? { ...s, name: editForm.name, kana: editForm.kana, concern: editForm.concern, target: editForm.target, memo: editForm.memo } : s))
-    );
-    setParents(prev =>
-      prev.map(p => (p.id === currentParent.id ? { ...p, phone: editForm.phone } : p))
-    );
-    alert('基本情報を更新しました');
   };
 
   const availableYears = Array.from(new Set(currentStudent.sessions.map(s => s.date.substring(0, 4)))).sort().reverse();
@@ -717,193 +622,125 @@ export default function ClientsPage() {
                     )}
                   </div>
                 </div>
-
-                {/* 計測データ管理 */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <div className="border-b pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📊</span> 身体測定・数値履歴</h3>
-                    <div className="flex items-center gap-2">
-                      <input type="date" value={newMeasureDate} onChange={e => setNewMeasureDate(e.target.value)} className="border rounded px-2.5 py-1 text-xs" />
-                      <button onClick={handleAddNewMeasureDate} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition">
-                        ＋ 計測日追加
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {currentStudent.physicalHistory.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 border rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
-                        <div className="font-bold text-slate-700 flex items-center gap-2">
-                          <span>{m.date}</span>
-                          <button onClick={() => handleDeleteMeasureDate(m.date)} className="text-[10px] text-rose-500 hover:underline bg-rose-50 px-2 py-0.5 rounded border border-rose-200">削除</button>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">体重</span>
-                            <input type="number" step="0.1" value={m.weight} onChange={e => handleUpdatePhysicalValue(m.date, 'weight', parseFloat(e.target.value))} className="w-16 border rounded p-1 font-bold text-center" /> kg
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">体脂肪率</span>
-                            <input type="number" step="0.1" value={m.fat} onChange={e => handleUpdatePhysicalValue(m.date, 'fat', parseFloat(e.target.value))} className="w-16 border rounded p-1 font-bold text-center" /> %
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">筋肉量</span>
-                            <input type="number" step="0.1" value={m.muscle} onChange={e => handleUpdatePhysicalValue(m.date, 'muscle', parseFloat(e.target.value))} className="w-16 border rounded p-1 font-bold text-center" /> kg
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
             {/* TAB 2: チケット・Square */}
             {activeTab === 'tickets' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-800 text-sm">🎟️ チケット購入・決済履歴 (Square連携)</h3>
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>🎟️</span> チケット・Square 履歴</h3>
                 <div className="space-y-3">
                   {currentParent.ticketsHistory.map(th => (
-                    <div key={th.id} className="p-4 bg-slate-50 border rounded-lg text-xs space-y-1">
-                      <div className="flex justify-between font-bold text-slate-700">
-                        <span>{th.title} ({th.count}回券)</span>
-                        <span className="text-emerald-600">有効期限: {th.expire}</span>
+                    <div key={th.id} className="p-3 bg-slate-50 border rounded-lg text-xs space-y-1">
+                      <div className="flex justify-between font-bold">
+                        <span>{th.title} (購入数: {th.count}回)</span>
+                        <span className="text-[#5e9bc4]">有効期限: {th.expire}</span>
                       </div>
-                      <p className="text-slate-500">購入日: {th.date} / Square決済ID: <code className="bg-slate-200 px-1 py-0.5 rounded">{th.squarePaymentId}</code></p>
+                      <p className="text-slate-500">購入日: {th.date} / Square決済ID: <span className="font-mono bg-slate-200 px-1 py-0.5 rounded">{th.squarePaymentId}</span></p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* TAB 3: 近隣情報・イベント（修正・削除対応） */}
+            {/* TAB 3: 近隣情報・イベント */}
             {activeTab === 'nearby' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
-                <div className="border-b pb-3">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
+                <div>
                   <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📍</span> 近隣情報・イベント管理</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">周辺の競技場、大会スケジュール、施設情報を登録・編集・削除できます。</p>
+                  <p className="text-xs text-slate-500 mt-0.5">周辺の競技場、大会スケジュール、施設情報を登録・編集・削除できます。</p>
                 </div>
 
-                {/* 新規追加フォーム */}
-                <div className="bg-sky-50/60 p-4 rounded-xl border border-sky-100 space-y-3 text-xs">
-                  <h4 className="font-bold text-[#5e9bc4]">＋ 新規イベント・情報の追加</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <input type="text" placeholder="タイトル（例: 区民大会）" value={newNearbyTitle} onChange={e => setNewNearbyTitle(e.target.value)} className="border rounded p-2 bg-white" />
-                    <select value={newNearbyCategory} onChange={e => setNewNearbyCategory(e.target.value as any)} className="border rounded p-2 bg-white font-bold text-slate-700">
+                {/* 新規登録フォーム */}
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-700">＋ 新規イベント・情報の追加</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <input
+                      type="text"
+                      placeholder="タイトル (例: 区民大会)"
+                      value={newNearbyTitle}
+                      onChange={e => setNewNearbyTitle(e.target.value)}
+                      className="border rounded-lg p-2 bg-white outline-none"
+                    />
+                    <select
+                      value={newNearbyCategory}
+                      onChange={e => setNewNearbyCategory(e.target.value as any)}
+                      className="border rounded-lg p-2 bg-white outline-none font-bold text-[#5e9bc4]"
+                    >
                       <option value="大会・イベント">大会・イベント</option>
                       <option value="近隣施設">近隣施設</option>
                       <option value="その他">その他</option>
                     </select>
-                    <input type="date" value={newNearbyDate} onChange={e => setNewNearbyDate(e.target.value)} className="border rounded p-2 bg-white" />
+                    <input
+                      type="date"
+                      value={newNearbyDate}
+                      onChange={e => setNewNearbyDate(e.target.value)}
+                      className="border rounded-lg p-2 bg-white outline-none"
+                    />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <input type="text" placeholder="場所（例: 練馬総合グラウンド）" value={newNearbyLocation} onChange={e => setNewNearbyLocation(e.target.value)} className="border rounded p-2 bg-white" />
-                    <input type="text" placeholder="詳細メモ・説明" value={newNearbyDesc} onChange={e => setNewNearbyDesc(e.target.value)} className="border rounded p-2 bg-white" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <input
+                      type="text"
+                      placeholder="場所 (例: 練馬区総合グラウンド)"
+                      value={newNearbyLocation}
+                      onChange={e => setNewNearbyLocation(e.target.value)}
+                      className="border rounded-lg p-2 bg-white outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="詳細メモ・説明"
+                      value={newNearbyDesc}
+                      onChange={e => setNewNearbyDesc(e.target.value)}
+                      className="border rounded-lg p-2 bg-white outline-none"
+                    />
                   </div>
-                  <button onClick={handleAddNearby} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded shadow-sm transition">
+                  <button
+                    onClick={handleAddNearby}
+                    className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-xs px-4 py-2 rounded-lg transition shadow-sm"
+                  >
                     登録する
                   </button>
                 </div>
 
-                {/* 一覧・編集・削除 */}
+                {/* 一覧表示 */}
                 <div className="space-y-3">
                   {nearbyInfos.map(item => (
-                    <div key={item.id} className="p-4 bg-slate-50 border rounded-xl text-xs space-y-2">
+                    <div key={item.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${item.category === '大会・イベント' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-[#5e9bc4]'}`}>
-                            {item.category}
-                          </span>
-                          <span className="font-bold text-slate-700">{item.date}</span>
+                          <span className="bg-sky-100 text-[#5e9bc4] font-bold px-2 py-0.5 rounded">{item.category}</span>
+                          <span className="text-slate-500 font-semibold">{item.date}</span>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => { setEditingNearbyId(item.id); setEditNearbyTitle(item.title); setEditNearbyDesc(item.description); }} className="text-sky-600 hover:underline">編集</button>
                           <button onClick={() => handleDeleteNearby(item.id)} className="text-rose-500 hover:underline">削除</button>
                         </div>
                       </div>
-
-                      {editingNearbyId === item.id ? (
-                        <div className="space-y-2 pt-2 border-t">
-                          <input type="text" value={editNearbyTitle} onChange={e => setEditNearbyTitle(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="タイトル" />
-                          <input type="text" value={editNearbyDesc} onChange={e => setEditNearbyDesc(e.target.value)} className="w-full border rounded p-1 bg-white" placeholder="説明文" />
-                          <div className="flex gap-2 justify-end">
-                            <button onClick={() => handleSaveEditNearby(item.id)} className="bg-emerald-600 text-white px-3 py-1 rounded font-bold">保存</button>
-                            <button onClick={() => setEditingNearbyId(null)} className="bg-slate-300 px-3 py-1 rounded">キャンセル</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <h4 className="font-bold text-slate-900 text-sm mt-1">{item.title}</h4>
-                          <p className="text-slate-500">📍 {item.location}</p>
-                          {item.description && <p className="text-slate-700 bg-white p-2 rounded border mt-1">{item.description}</p>}
-                        </div>
-                      )}
+                      <h4 className="font-bold text-slate-800 text-sm">{item.title}</h4>
+                      <p className="text-slate-600 flex items-center gap-1"><span>📍</span> {item.location}</p>
+                      {item.description && <p className="text-slate-500 bg-white p-2 rounded border">{item.description}</p>}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* TAB 4: 基本情報編集 ＆ メモ欄3つ */}
+            {/* TAB 4: 基本情報・3つのメモ */}
             {activeTab === 'edit_info' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
-                <div className="border-b pb-3">
-                  <h3 className="font-bold text-slate-800 text-sm">✏️ 基本情報・3つのメモ欄の編集</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">受講生のプロフィール情報と、独立した3つのメモ欄を自由に編集できます。</p>
-                </div>
-
-                {/* 基本情報フォーム */}
-                <div className="space-y-4 text-xs">
-                  <h4 className="font-bold text-[#5e9bc4]">■ 基本プロフィール</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-500 mb-1 font-semibold">氏名</label>
-                      <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded p-2" />
-                    </div>
-                    <div>
-                      <label className="block text-slate-500 mb-1 font-semibold">フリガナ</label>
-                      <input type="text" value={editForm.kana} onChange={e => setEditForm({ ...editForm, kana: e.target.value })} className="w-full border rounded p-2" />
-                    </div>
-                    <div>
-                      <label className="block text-slate-500 mb-1 font-semibold">保護者連絡先</label>
-                      <input type="text" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full border rounded p-2" />
-                    </div>
-                    <div>
-                      <label className="block text-slate-500 mb-1 font-semibold">お悩み・課題</label>
-                      <input type="text" value={editForm.concern} onChange={e => setEditForm({ ...editForm, concern: e.target.value })} className="w-full border rounded p-2" />
-                    </div>
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✏️</span> 基本情報・3つのメモ編集</h3>
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">お名前</label>
+                    <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded p-2" />
                   </div>
-                  <button onClick={handleSaveInfo} className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold px-4 py-2 rounded shadow-sm transition">
-                    基本情報を保存する
-                  </button>
-                </div>
-
-                <hr />
-
-                {/* 3つのメモ欄 */}
-                <div className="space-y-4 text-xs">
-                  <h4 className="font-bold text-emerald-700">■ 独立した3つのメモ欄（指導方針・特記事項など）</h4>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ①（例: トレーニング特記事項・既往歴）</label>
-                      <textarea rows={3} value={editCustomMemo1} onChange={e => setEditCustomMemo1(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ②（例: 食事・栄養・生活習慣アドバイス）</label>
-                      <textarea rows={3} value={editCustomMemo2} onChange={e => setEditCustomMemo2(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 mb-1 font-bold">メモ欄 ③（例: 自主トレ・保護者との共有事項）</label>
-                      <textarea rows={3} value={editCustomMemo3} onChange={e => setEditCustomMemo3(e.target.value)} className="w-full border rounded p-2.5 outline-none focus:ring-2 focus:ring-emerald-500" />
-                    </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">お悩み</label>
+                    <input type="text" value={editForm.concern} onChange={e => setEditForm({ ...editForm, concern: e.target.value })} className="w-full border rounded p-2" />
                   </div>
-
-                  <button onClick={handleSaveCustomMemos} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded shadow-sm transition">
-                    3つのメモを保存する
-                  </button>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">目標</label>
+                    <input type="text" value={editForm.target} onChange={e => setEditForm({ ...editForm, target: e.target.value })} className="w-full border rounded p-2" />
+                  </div>
                 </div>
               </div>
             )}
