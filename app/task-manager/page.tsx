@@ -1,13 +1,14 @@
 // app/task-manager/page.tsx
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import Header from '@/components/Header';
 
 type Assignee = 'TAKA' | 'NANA';
 
 type TaskItem = {
-  id: number;
+  id: string;
   title: string;
   assignee: Assignee;
   dueDate: string; // YYYY-MM-DD
@@ -15,7 +16,7 @@ type TaskItem = {
   priority: boolean; // 重要フラグ（赤強調・重要ボタン）
   completed: boolean;
   repeat: 'none' | 'weekly' | 'monthly';
-  linkedMinutesId?: number;
+  linkedMinutesId?: string;
 };
 
 type MinutesItem = {
@@ -53,28 +54,101 @@ export default function TaskManagerPage() {
   );
 
   // --- タスクの状態 ---
-  const [tasks, setTasks] = useState<TaskItem[]>([
-    {
-      id: 1,
-      title: 'SNS広告のクリエイティブ修正',
-      assignee: 'TAKA',
-      dueDate: '2026-09-20',
-      category: 'SNS',
-      priority: true,
-      completed: false,
-      repeat: 'weekly',
-    },
-    {
-      id: 2,
-      title: '新規顧客へのフォローアップ連絡',
-      assignee: 'NANA',
-      dueDate: '2026-09-15',
-      category: '顧客フォロー',
-      priority: false,
-      completed: false,
-      repeat: 'none',
-    },
-  ]);
+  // タスクはSupabaseから読み込みます。初回は既存UIのサンプル2件を
+  // Supabaseへ登録することで、これまでの画面表示も維持します。
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const supabase = useMemo(() => createClient(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTasks = async () => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('タスク読み込みエラー:', error);
+        alert(`タスクの読み込みに失敗しました。\\n${error.message}`);
+        return;
+      }
+
+      if (cancelled) return;
+
+      const loadedTasks: TaskItem[] = (data ?? []).map((row) => ({
+        id: String(row.id),
+        title: row.title ?? '',
+        assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
+        dueDate: row.due_date ?? '',
+        category: row.category ?? 'その他',
+        priority: Boolean(row.priority),
+        completed: Boolean(row.completed),
+        repeat: row.repeat === 'weekly' || row.repeat === 'monthly' ? row.repeat : 'none',
+        linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
+      }));
+
+      // まだSupabaseにタスクが1件もない場合は、従来画面にあった
+      // サンプルタスクを一度だけ登録します。
+      if (loadedTasks.length === 0) {
+        const seedTasks = [
+          {
+            title: 'SNS広告のクリエイティブ修正',
+            assignee: 'TAKA',
+            due_date: '2026-09-20',
+            category: 'SNS',
+            priority: true,
+            completed: false,
+            repeat: 'weekly',
+          },
+          {
+            title: '新規顧客へのフォローアップ連絡',
+            assignee: 'NANA',
+            due_date: '2026-09-15',
+            category: '顧客フォロー',
+            priority: false,
+            completed: false,
+            repeat: 'none',
+          },
+        ];
+
+        const { data: seededData, error: seedError } = await supabase
+          .from('tasks')
+          .insert(seedTasks)
+          .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+          .order('created_at', { ascending: false });
+
+        if (seedError) {
+          console.error('初期タスク登録エラー:', seedError);
+          alert(`初期タスクの登録に失敗しました。\\n${seedError.message}`);
+          return;
+        }
+
+        const seededTasks: TaskItem[] = (seededData ?? []).map((row) => ({
+          id: String(row.id),
+          title: row.title ?? '',
+          assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
+          dueDate: row.due_date ?? '',
+          category: row.category ?? 'その他',
+          priority: Boolean(row.priority),
+          completed: Boolean(row.completed),
+          repeat: row.repeat === 'weekly' || row.repeat === 'monthly' ? row.repeat : 'none',
+          linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
+        }));
+
+        if (!cancelled) setTasks(seededTasks);
+        return;
+      }
+
+      setTasks(loadedTasks);
+    };
+
+    loadTasks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
 
   const [taskSearch, setTaskSearch] = useState('');
   const [taskCategoryFilter, setTaskCategoryFilter] = useState('all');
@@ -166,48 +240,151 @@ export default function TaskManagerPage() {
     setIsTaskModalOpen(true);
   };
 
-  const handleSaveTask = (e: React.FormEvent) => {
+  const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tFormTitle.trim()) return;
 
-    const finalCategory = tFormCategory === 'その他' ? (tFormOtherCategory.trim() || 'その他') : tFormCategory;
+    const finalCategory =
+      tFormCategory === 'その他'
+        ? (tFormOtherCategory.trim() || 'その他')
+        : tFormCategory;
+
+    const taskPayload = {
+      title: tFormTitle.trim(),
+      assignee: tFormAssignee,
+      due_date: tFormDueDate,
+      category: finalCategory,
+      priority: tFormPriority,
+      repeat: tFormRepeat,
+    };
 
     if (editingTask) {
-      // 既存タスクの更新
-      setTasks(tasks.map(t => t.id === editingTask.id ? {
-        ...t,
-        title: tFormTitle.trim(),
-        assignee: tFormAssignee,
-        dueDate: tFormDueDate,
-        category: finalCategory,
-        priority: tFormPriority,
-        repeat: tFormRepeat
-      } : t));
-    } else {
-      // 新規タスクの追加
-      const newTaskItem: TaskItem = {
-        id: Date.now(),
-        title: tFormTitle.trim(),
-        assignee: tFormAssignee,
-        dueDate: tFormDueDate,
-        category: finalCategory,
-        priority: tFormPriority,
-        completed: false,
-        repeat: tFormRepeat
+      // 既存タスクをSupabaseで上書き更新
+      const { data, error } = await supabase
+        .from('tasks')
+        .update(taskPayload)
+        .eq('id', editingTask.id)
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+        .single();
+
+      if (error) {
+        console.error('タスク更新エラー:', error);
+        alert(`タスクの更新に失敗しました。\\n${error.message}`);
+        return;
+      }
+
+      if (!data) {
+        alert('タスクの更新結果を取得できませんでした。');
+        return;
+      }
+
+      const updatedTask: TaskItem = {
+        id: String(data.id),
+        title: data.title ?? '',
+        assignee: data.assignee === 'NANA' ? 'NANA' : 'TAKA',
+        dueDate: data.due_date ?? '',
+        category: data.category ?? 'その他',
+        priority: Boolean(data.priority),
+        completed: Boolean(data.completed),
+        repeat: data.repeat === 'weekly' || data.repeat === 'monthly' ? data.repeat : 'none',
+        linkedMinutesId: data.linked_minutes_id ? String(data.linked_minutes_id) : undefined,
       };
-      setTasks([newTaskItem, ...tasks]);
+
+      setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t));
+    } else {
+      // 新規タスクをSupabaseへ保存
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          ...taskPayload,
+          completed: false,
+        })
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+        .single();
+
+      if (error) {
+        console.error('タスク登録エラー:', error);
+        alert(`タスクの保存に失敗しました。\\n${error.message}`);
+        return;
+      }
+
+      if (!data) {
+        alert('保存したタスクを取得できませんでした。');
+        return;
+      }
+
+      const newTaskItem: TaskItem = {
+        id: String(data.id),
+        title: data.title ?? '',
+        assignee: data.assignee === 'NANA' ? 'NANA' : 'TAKA',
+        dueDate: data.due_date ?? '',
+        category: data.category ?? 'その他',
+        priority: Boolean(data.priority),
+        completed: Boolean(data.completed),
+        repeat: data.repeat === 'weekly' || data.repeat === 'monthly' ? data.repeat : 'none',
+        linkedMinutesId: data.linked_minutes_id ? String(data.linked_minutes_id) : undefined,
+      };
+
+      setTasks(prev => [newTaskItem, ...prev]);
     }
+
     setIsTaskModalOpen(false);
   };
 
-  const handleDeleteTask = (id: number) => {
-    if (confirm('このタスクを削除してもよろしいですか？')) {
-      setTasks(tasks.filter(t => t.id !== id));
+  const handleDeleteTask = async (id: string) => {
+    if (!confirm('このタスクを削除してもよろしいですか？')) return;
+
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('タスク削除エラー:', error);
+      alert(`タスクの削除に失敗しました。\\n${error.message}`);
+      return;
     }
+
+    setTasks(prev => prev.filter(t => t.id !== id));
   };
 
-  const toggleComplete = (id: number) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+  const toggleComplete = async (id: string) => {
+    const currentTask = tasks.find(t => t.id === id);
+    if (!currentTask) return;
+
+    const nextCompleted = !currentTask.completed;
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ completed: nextCompleted })
+      .eq('id', id)
+      .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+      .single();
+
+    if (error) {
+      console.error('タスク完了状態更新エラー:', error);
+      alert(`タスク状態の更新に失敗しました。\\n${error.message}`);
+      return;
+    }
+
+    if (!data) {
+      alert('タスクの更新結果を取得できませんでした。');
+      return;
+    }
+
+    const updatedTask: TaskItem = {
+      id: String(data.id),
+      title: data.title ?? '',
+      assignee: data.assignee === 'NANA' ? 'NANA' : 'TAKA',
+      dueDate: data.due_date ?? '',
+      category: data.category ?? 'その他',
+      priority: Boolean(data.priority),
+      completed: Boolean(data.completed),
+      repeat: data.repeat === 'weekly' || data.repeat === 'monthly' ? data.repeat : 'none',
+      linkedMinutesId: data.linked_minutes_id ? String(data.linked_minutes_id) : undefined,
+    };
+
+    setTasks(prev => prev.map(t => t.id === id ? updatedTask : t));
   };
 
   // ---------------------------------------------------------------------------
@@ -281,7 +458,7 @@ export default function TaskManagerPage() {
     setMFormTasks(mFormTasks.filter((_, i) => i !== index));
   };
 
-  const handleSaveMinutes = (e: React.FormEvent) => {
+  const handleSaveMinutes = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mFormTitle.trim()) return;
 
@@ -307,19 +484,46 @@ export default function TaskManagerPage() {
     } else {
       // 新規議事録追加
       setMinutesList([minutesData, ...minutesList]);
-      // 連動タスクをタスク管理へ追加
-      const newlyCreatedTasks: TaskItem[] = mFormTasks.map((mt, idx) => ({
-        id: Date.now() + idx + 1,
-        title: mt.title,
-        assignee: mt.assignee,
-        dueDate: mt.dueDate,
-        category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
-        priority: mt.priority,
-        completed: false,
-        repeat: 'none',
-        linkedMinutesId: minutesData.id
-      }));
-      setTasks(prev => [...newlyCreatedTasks, ...prev]);
+      // 連動タスクをタスク管理へ追加し、Supabaseにも保存
+      const linkedTaskPayloads = mFormTasks
+        .filter(mt => mt.title.trim())
+        .map(mt => ({
+          title: mt.title.trim(),
+          assignee: mt.assignee,
+          due_date: mt.dueDate,
+          category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
+          priority: mt.priority,
+          completed: false,
+          repeat: 'none',
+          linked_minutes_id: String(minutesData.id),
+        }));
+
+      if (linkedTaskPayloads.length > 0) {
+        const { data: linkedData, error: linkedError } = await supabase
+          .from('tasks')
+          .insert(linkedTaskPayloads)
+          .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+          .order('created_at', { ascending: false });
+
+        if (linkedError) {
+          console.error('議事録連動タスク保存エラー:', linkedError);
+          alert(`連動タスクの保存に失敗しました。\\n${linkedError.message}`);
+        } else {
+          const newlyCreatedTasks: TaskItem[] = (linkedData ?? []).map((row) => ({
+            id: String(row.id),
+            title: row.title ?? '',
+            assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
+            dueDate: row.due_date ?? '',
+            category: row.category ?? 'その他',
+            priority: Boolean(row.priority),
+            completed: Boolean(row.completed),
+            repeat: row.repeat === 'weekly' || row.repeat === 'monthly' ? row.repeat : 'none',
+            linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
+          }));
+
+          setTasks(prev => [...newlyCreatedTasks, ...prev]);
+        }
+      }
     }
 
     setIsMinutesModalOpen(false);
@@ -336,7 +540,7 @@ export default function TaskManagerPage() {
   // ---------------------------------------------------------------------------
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
-      const matchesYearMonth = t.dueDate.startsWith(selectedYearMonth);
+      const matchesYearMonth = t.dueDate ? t.dueDate.startsWith(selectedYearMonth) : false;
       const matchesSearch = t.title.includes(taskSearch) || t.category.includes(taskSearch);
       const matchesCategory = taskCategoryFilter === 'all' || t.category === taskCategoryFilter;
       const matchesAssignee = taskAssigneeFilter === 'all' || t.assignee === taskAssigneeFilter;
