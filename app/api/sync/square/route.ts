@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         expire: '購入日から6ヶ月',
         squarePaymentId: paymentId,
         squareOrderId: order.id,
-        receiptUrl: order.tenders?.[0]?.receiptUrl || undefined,
+        receiptUrl: undefined,
         amount: totalPrice,
       };
     });
