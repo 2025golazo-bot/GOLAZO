@@ -105,42 +105,75 @@ export default function LocalInfoPage() {
     }
   };
 
-const handleAdd = () => {
-    if (!newTitle || !newLocation) {
-      alert('タイトルと場所を入力してください。');
-      return;
-    }
-    const newItem: TeamInfo = {
-      id: `team-${Date.now()}`,
-      title: newTitle,
+const handleAdd = async () => {
+  if (!newTitle || !newLocation) {
+    alert('タイトルと場所を入力してください。');
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('local_info')
+    .insert({
+      school_or_team_name: newTitle,
+      district: 'その他',
+      event_name: newTitle,
+      url: newUrl || null,
+      staff_name: newContactName || null,
+      memo: newMemo1 || null,
       category: newCategory,
       sport: newSport,
-      date: newDate,
+      event_date: newDate || null,
       location: newLocation,
-      url: newUrl,
-      contactName: newContactName,
-      contactEmail: newContactEmail,
-      businessCardFront: newCardFront,
-      businessCardBack: newCardBack,
+      contact_name: newContactName,
+      contact_email: newContactEmail,
+      business_card_front: newCardFront,
+      business_card_back: newCardBack,
       memo1: newMemo1,
       memo2: newMemo2,
       memo3: newMemo3
-    };
-    setTeamInfos([newItem, ...teamInfos]);
-    // フォームリセット
-    setNewTitle('');
-    setNewSport('');
-    setNewLocation('');
-    setNewUrl('');
-    setNewContactName('');
-    setNewContactEmail('');
-    setNewCardFront('');
-    setNewCardBack('');
-    setNewMemo1('');
-    setNewMemo2('');
-    setNewMemo3('');
-    alert('チーム・イベント情報を追加しました！');
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error(error);
+    alert(`Supabaseへの保存に失敗しました。\n${error.message}`);
+    return;
+  }
+
+  const newItem: TeamInfo = {
+    id: data.id,
+    title: data.event_name,
+    category: data.category,
+    sport: data.sport,
+    date: data.event_date || '',
+    location: data.location,
+    url: data.url || '',
+    contactName: data.contact_name || '',
+    contactEmail: data.contact_email || '',
+    businessCardFront: data.business_card_front || '',
+    businessCardBack: data.business_card_back || '',
+    memo1: data.memo1 || '',
+    memo2: data.memo2 || '',
+    memo3: data.memo3 || ''
   };
+
+  setTeamInfos([newItem, ...teamInfos]);
+
+  setNewTitle('');
+  setNewSport('');
+  setNewLocation('');
+  setNewUrl('');
+  setNewContactName('');
+  setNewContactEmail('');
+  setNewCardFront('');
+  setNewCardBack('');
+  setNewMemo1('');
+  setNewMemo2('');
+  setNewMemo3('');
+
+  alert('チーム・イベント情報を追加しました！');
+};
 
   const handleDelete = (id: string) => {
     if (!confirm('この情報を削除しますか？')) return;
