@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from '@/components/Header';
+import { createClient } from '@/lib/supabase/client';
 
 interface TeamInfo {
   id: string;
@@ -21,40 +22,43 @@ interface TeamInfo {
 }
 
 export default function LocalInfoPage() {
-  const [teamInfos, setTeamInfos] = useState<TeamInfo[]>([
-    {
-      id: 'team-1',
-      title: '練馬区ジュニアサッカー大会 予選リーグ',
-      category: '大会・イベント',
-      sport: 'サッカー',
-      date: '2026-10-15',
-      location: '区立総合運動場グラウンド',
-      url: 'https://example.com/nerima-soccer',
-      contactName: '山田 太郎',
-      contactEmail: 'yamada@example.com',
-      businessCardFront: '',
-      businessCardBack: '',
-      memo1: '初戦突破を目標に、アジリティ系メニューを強化中。',
-      memo2: '集合時間は試合開始の1時間前。',
-      memo3: '駐車場は関係者のみ利用可能。'
-    },
-    {
-      id: 'team-2',
-      title: '光が丘FCスポーツ少年団',
-      category: 'チーム・団体',
-      sport: 'サッカー',
-      date: '2026-09-25',
-      location: '光が丘体育館',
-      url: 'https://example.com/hikarigaoka-fc',
-      contactName: '鈴木 次郎',
-      contactEmail: 'suzuki@example.com',
-      businessCardFront: '',
-      businessCardBack: '',
-      memo1: '合同練習の sparring パートナーとして交流あり。',
-      memo2: '連絡担当者は鈴木コーチ。',
-      memo3: '春季・秋季の年2回合同合宿を実施。'
-    }
-  ]);
+  const [teamInfos, setTeamInfos] = useState<TeamInfo[]>([]);
+  const supabase = createClient();
+
+  useEffect(() => {
+    const loadTeamInfos = async () => {
+      const { data, error } = await supabase
+        .from('local_info')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('local_info の読み込みに失敗しました:', error);
+        return;
+      }
+
+      const items: TeamInfo[] = (data ?? []).map((row) => ({
+        id: row.id,
+        title: row.event_name ?? '',
+        category: row.category ?? '大会・イベント',
+        sport: row.sport ?? '',
+        date: row.event_date ?? '',
+        location: row.location ?? '',
+        url: row.url ?? '',
+        contactName: row.contact_name ?? '',
+        contactEmail: row.contact_email ?? '',
+        businessCardFront: row.business_card_front ?? '',
+        businessCardBack: row.business_card_back ?? '',
+        memo1: row.memo1 ?? row.memo ?? '',
+        memo2: row.memo2 ?? '',
+        memo3: row.memo3 ?? '',
+      }));
+
+      setTeamInfos(items);
+    };
+
+    loadTeamInfos();
+  }, []);
 
   // 新規登録用ステート
   const [newTitle, setNewTitle] = useState('');
@@ -101,7 +105,7 @@ export default function LocalInfoPage() {
     }
   };
 
-  const handleAdd = () => {
+const handleAdd = () => {
     if (!newTitle || !newLocation) {
       alert('タイトルと場所を入力してください。');
       return;
