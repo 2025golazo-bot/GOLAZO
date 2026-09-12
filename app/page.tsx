@@ -58,24 +58,25 @@ export default function StudentManager() {
 
       if (customersError) throw customersError;
 
-      // salesテーブル（セッション記録）を取得
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('*');
+      // training_logsテーブル（トレーニング記録）を取得
+      const { data: trainingLogsData, error: trainingLogsError } = await supabase
+        .from('training_logs')
+        .select('*')
+        .order('date', { ascending: false });
 
-      if (salesError) throw salesError;
+      if (trainingLogsError) throw trainingLogsError;
 
       // データ整形（Supabaseのデータをアプリ用の型にマッピング）
       if (customersData && customersData.length > 0) {
         const formattedStudents: Student[] = customersData.map((c: any) => {
-          // 該当する生徒のセッション履歴をフィルター
-          const studentSessions: Session[] = (salesData || [])
-            .filter((s: any) => s.customer_square_id === c.id || s.customer_square_id === c.square_id)
-            .map((s: any) => ({
-              id: s.id,
-              date: s.created_at ? s.created_at.split('T')[0] : '日付なし',
-              content: s.source || '（内容なし）',
-              notes: s.square_payment_id ? `決済ID: ${s.square_payment_id}` : ''
+          // 該当する生徒のトレーニング履歴をフィルター
+          const studentSessions: Session[] = (trainingLogsData || [])
+            .filter((log: any) => String(log.customer_id) === String(c.id))
+            .map((log: any) => ({
+              id: log.id,
+              date: log.date || (log.created_at ? log.created_at.split('T')[0] : '日付なし'),
+              content: log.content || '（内容なし）',
+              notes: log.memo || ''
             }));
 
           return {
@@ -106,15 +107,15 @@ export default function StudentManager() {
     if (!selectedStudentId || !newSessionDate || !newSessionContent) return;
 
     try {
-      // Supabaseの sales テーブルにデータを挿入 (INSERT)
+      // Supabaseの training_logs テーブルにデータを挿入 (INSERT)
       const { data, error } = await supabase
-        .from('sales')
+        .from('training_logs')
         .insert([
           {
-            customer_square_id: selectedStudentId,
-            source: newSessionContent,
-            amount: 0,
-            square_payment_id: newSessionNotes || null
+            customer_id: selectedStudentId,
+            date: newSessionDate,
+            content: newSessionContent,
+            memo: newSessionNotes || null
           }
         ])
         .select();
@@ -134,6 +135,7 @@ export default function StudentManager() {
 
     } catch (err) {
       console.error('保存処理中にエラーが発生しました:', err);
+      alert('保存処理中にエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
