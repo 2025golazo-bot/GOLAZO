@@ -1,165 +1,248 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// --- Supabase クライアントの完全安全な初期化 ---
-// ビルド時（プレレンダー時）に環境変数が無くても絶対にクラッシュしないようにガード
 const getSupabaseClient = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error('Supabaseの環境変数が設定されていません。');
+  }
   return createClient(url, key);
 };
 
 const supabase = getSupabaseClient();
 
-// --- 型定義 ---
 interface Session {
   id: string;
   date: string;
   content: string;
-  notes?: string;
-  photoUrl?: string;
+  notes: string;
 }
 
 interface Student {
   id: string;
-  parentId: string;
   name: string;
-  grade?: string;
-  goal?: string;
+  kana: string;
+  grade: string;
+  age: number | null;
+  goal: string;
+  concern: string;
+  memo: string;
   sessions: Session[];
 }
 
-export default function StudentManager() {
-  const [isMounted, setIsMounted] = useState<boolean>(false);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
+const emptySessionForm = { date: '', content: '', notes: '' };
 
-  // 新規セッション追加フォームの状態
-  const [newSessionDate, setNewSessionDate] = useState<string>('');
-  const [newSessionContent, setNewSessionContent] = useState<string>('');
-  const [newSessionNotes, setNewSessionNotes] = useState<string>('');
+export default function StudentManager() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const [sessionForm, setSessionForm] = useState(emptySessionForm);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [goalForm, setGoalForm] = useState('');
+  const [savingGoal, setSavingGoal] = useState(false);
+
+  const currentStudent = useMemo(
+    () => students.find((student) => student.id === selectedStudentId) ?? null,
+    [students, selectedStudentId]
+  );
 
   useEffect(() => {
-    setIsMounted(true);
-    fetchDataFromSupabase();
+    fetchData();
   }, []);
 
-  // --- 1. Supabaseからデータを取得する処理 ---
-  const fetchDataFromSupabase = async () => {
+  useEffect(() => {
+    setGoalForm(currentStudent?.goal === '未設定' ? '' : currentStudent?.goal ?? '');
+  }, [currentStudent?.id, currentStudent?.goal]);
+
+  const fetchData = async (keepSelectedId = true) => {
     setLoading(true);
+    setErrorMessage('');
+
     try {
-      // customersテーブル（生徒一覧）を取得
-      const { data: customersData, error: customersError } = await supabase
-        .from('customers')
-        .select('*');
+      const [{ data: customersData, error: customersError }, { data: logsData, error: logsError }] =
+        await Promise.all([
+          supabase.from('customers').select('*').order('name', { ascending: true }),
+          supabase.from('training_logs').select('*').order('date', { ascending: false }).order('created_at', { ascending: false })
+        ]);
 
       if (customersError) throw customersError;
+      if (logsError) throw logsError;
 
-      // training_logsテーブル（トレーニング記録）を取得
-      const { data: trainingLogsData, error: trainingLogsError } = await supabase
-        .from('training_logs')
-        .select('*')
-        .order('date', { ascending: false });
+      const formatted: Student[] = (customersData ?? []).map((customer: any) => {
+        const sessions: Session[] = (logsData ?? [])
+          .filter((log: any) => String(log.customer_id) === String(customer.id))
+          .map((log: any) => ({
+            id: String(log.id),
+            date: log.date || (log.created_at ? String(log.created_at).slice(0, 10) : ''),
+            content: log.content || '',
+            notes: log.memo || ''
+          }));
 
-      if (trainingLogsError) throw trainingLogsError;
+        return {
+          id: String(customer.id),
+          name: customer.name || [customer.family_name, customer.given_name].filter(Boolean).join(' ') || String(customer.id),
+          kana: customer.kana || '',
+          grade: customer.grade || '未設定',
+          age: typeof customer.age === 'number' ? customer.age : null,
+          // customersテーブルでは目標を target に保存しているため、targetを正として扱う
+          goal: customer.target || '未設定',
+          concern: customer.concern || '',
+          memo: customer.memo || customer.custom_memo_1 || '',
+          sessions
+        };
+      });
 
-      // データ整形（Supabaseのデータをアプリ用の型にマッピング）
-      if (customersData && customersData.length > 0) {
-        const formattedStudents: Student[] = customersData.map((c: any) => {
-          // 該当する生徒のトレーニング履歴をフィルター
-          const studentSessions: Session[] = (trainingLogsData || [])
-            .filter((log: any) => String(log.customer_id) === String(c.id))
-            .map((log: any) => ({
-              id: log.id,
-              date: log.date || (log.created_at ? log.created_at.split('T')[0] : '日付なし'),
-              content: log.content || '（内容なし）',
-              notes: log.memo || ''
-            }));
-
-          return {
-            id: c.id,
-            parentId: 'p1',
-            name: c.name || c.id,
-            grade: c.grade || '未設定',
-            goal: c.goal || '未設定',
-            sessions: studentSessions
-          };
-        });
-
-        setStudents(formattedStudents);
-        setSelectedStudentId(formattedStudents[0]?.id || '');
-      } else {
-        setStudents([]);
-      }
+      setStudents(formatted);
+      setSelectedStudentId((prev) => {
+        if (keepSelectedId && prev && formatted.some((student) => student.id === prev)) return prev;
+        return formatted[0]?.id || '';
+      });
     } catch (error) {
-      console.error('Supabaseからのデータ取得に失敗しました:', error);
+      const text = error instanceof Error ? error.message : String(error);
+      console.error(error);
+      setErrorMessage(`データ取得に失敗しました: ${text}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- 2. Supabaseへ新規セッションを追加・保存する処理 ---
-  const handleAddSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStudentId || !newSessionDate || !newSessionContent) return;
+  const handleSaveSession = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedStudentId || !sessionForm.date || !sessionForm.content.trim()) return;
+
+    setSaving(true);
+    setMessage('');
+    setErrorMessage('');
 
     try {
-      // Supabaseの training_logs テーブルにデータを挿入 (INSERT)
-      const { data, error } = await supabase
-        .from('training_logs')
-        .insert([
-          {
-            customer_id: selectedStudentId,
-            date: newSessionDate,
-            content: newSessionContent,
-            memo: newSessionNotes || null
-          }
-        ])
-        .select();
+      const payload = {
+        customer_id: selectedStudentId,
+        date: sessionForm.date,
+        content: sessionForm.content.trim(),
+        memo: sessionForm.notes.trim() || null
+      };
 
-      if (error) {
-        alert('Supabaseへの保存に失敗しました: ' + error.message);
-        return;
+      if (editingSessionId) {
+        const { error } = await supabase
+          .from('training_logs')
+          .update(payload)
+          .eq('id', editingSessionId);
+        if (error) throw error;
+        setMessage('トレーニング記録を更新しました。');
+      } else {
+        const { error } = await supabase.from('training_logs').insert([payload]);
+        if (error) throw error;
+        setMessage('トレーニング記録を保存しました。');
       }
 
-      alert('データがSupabaseに正常に保存されました！');
-
-      // フォームをリセットして最新データを再取得
-      setNewSessionDate('');
-      setNewSessionContent('');
-      setNewSessionNotes('');
-      fetchDataFromSupabase();
-
-    } catch (err) {
-      console.error('保存処理中にエラーが発生しました:', err);
-      alert('保存処理中にエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)));
+      setSessionForm(emptySessionForm);
+      setEditingSessionId(null);
+      await fetchData();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      console.error(error);
+      setErrorMessage(`保存に失敗しました: ${text}`);
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (!isMounted) return null;
+  const startEditSession = (session: Session) => {
+    setEditingSessionId(session.id);
+    setSessionForm({ date: session.date, content: session.content, notes: session.notes });
+    setMessage('');
+    setErrorMessage('');
+    window.scrollTo({ top: 300, behavior: 'smooth' });
+  };
 
-  const currentStudent = students.find((s) => s.id === selectedStudentId);
+  const cancelEdit = () => {
+    setEditingSessionId(null);
+    setSessionForm(emptySessionForm);
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    if (!window.confirm('このトレーニング記録を削除しますか？')) return;
+
+    setMessage('');
+    setErrorMessage('');
+    try {
+      const { error } = await supabase.from('training_logs').delete().eq('id', sessionId);
+      if (error) throw error;
+      if (editingSessionId === sessionId) cancelEdit();
+      setMessage('トレーニング記録を削除しました。');
+      await fetchData();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      console.error(error);
+      setErrorMessage(`削除に失敗しました: ${text}`);
+    }
+  };
+
+  const saveGoal = async () => {
+    if (!currentStudent) return;
+
+    setSavingGoal(true);
+    setMessage('');
+    setErrorMessage('');
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ target: goalForm.trim() || null })
+        .eq('id', currentStudent.id);
+      if (error) throw error;
+      setMessage('目標を保存しました。');
+      await fetchData();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      console.error(error);
+      setErrorMessage(`目標の保存に失敗しました: ${text}`);
+    } finally {
+      setSavingGoal(false);
+    }
+  };
+
+  const resetAll = () => {
+    setMessage('');
+    setErrorMessage('');
+    setSessionForm(emptySessionForm);
+    setEditingSessionId(null);
+  };
+
+  if (loading) {
+    return <main style={styles.page}><p>Supabaseからデータを読み込み中...</p></main>;
+  }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1 style={{ borderBottom: '2px solid #333', paddingBottom: '10px' }}>受講生カルテ管理 (Supabase連動版)</h1>
+    <main style={styles.page}>
+      <h1 style={styles.title}>受講生カルテ管理</h1>
+      <p style={styles.subtitle}>Supabase連動版・トレーニング記録管理</p>
 
-      {loading ? (
-        <p>Supabaseからデータを読み込み中...</p>
-      ) : students.length === 0 ? (
-        <p>生徒データが見つかりません。Supabaseの `customers` テーブルにデータを追加してください。</p>
+      {message && <div style={styles.success}>{message}</div>}
+      {errorMessage && <div style={styles.error}>{errorMessage}</div>}
+
+      {students.length === 0 ? (
+        <section style={styles.card}>
+          <h2>受講生が見つかりません</h2>
+          <p>Supabaseの <code>customers</code> テーブルを確認してください。</p>
+        </section>
       ) : (
         <>
-          {/* 生徒選択ドロップダウン */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontWeight: 'bold', marginRight: '10px' }}>受講生を選択:</label>
+          <section style={styles.card}>
+            <label style={styles.label}>受講生を選択</label>
             <select
               value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              style={{ padding: '8px', fontSize: '16px' }}
+              onChange={(event) => {
+                setSelectedStudentId(event.target.value);
+                resetAll();
+              }}
+              style={styles.input}
             >
               {students.map((student) => (
                 <option key={student.id} value={student.id}>
@@ -167,96 +250,143 @@ export default function StudentManager() {
                 </option>
               ))}
             </select>
-          </div>
+          </section>
 
           {currentStudent && (
-            <div>
-              {/* 基本情報表示 */}
-              <div style={{ backgroundColor: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-                <h2>{currentStudent.name} さんの情報</h2>
-                <p><strong>目標:</strong> {currentStudent.goal}</p>
-              </div>
+            <>
+              <section style={styles.card}>
+                <h2 style={styles.sectionTitle}>{currentStudent.name} さんのカルテ</h2>
+                <div style={styles.infoGrid}>
+                  <div><strong>氏名：</strong>{currentStudent.name}</div>
+                  {currentStudent.kana && <div><strong>かな：</strong>{currentStudent.kana}</div>}
+                  <div><strong>学年：</strong>{currentStudent.grade}</div>
+                  {currentStudent.age !== null && <div><strong>年齢：</strong>{currentStudent.age}歳</div>}
+                </div>
 
-              {/* 新規セッション登録フォーム */}
-              <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-                <h3>新規トレーニング記録の追加（Supabaseに直接保存）</h3>
-                <form onSubmit={handleAddSession}>
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px' }}>日付:</label>
-                    <input
-                      type="date"
-                      value={newSessionDate}
-                      onChange={(e) => setNewSessionDate(e.target.value)}
-                      style={{ width: '100%', padding: '8px' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px' }}>トレーニング内容 (sourceに保存):</label>
-                    <textarea
-                      value={newSessionContent}
-                      onChange={(e) => setNewSessionContent(e.target.value)}
-                      rows={3}
-                      style={{ width: '100%', padding: '8px' }}
-                      required
-                    />
-                  </div>
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px' }}>特記事項・メモ:</label>
-                    <input
-                      type="text"
-                      value={newSessionNotes}
-                      onChange={(e) => setNewSessionNotes(e.target.value)}
-                      style={{ width: '100%', padding: '8px' }}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    style={{
-                      backgroundColor: '#0070f3',
-                      color: '#fff',
-                      padding: '10px 20px',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Supabaseに保存
+                <div style={styles.goalBox}>
+                  <label style={styles.label}>目標</label>
+                  <textarea
+                    value={goalForm}
+                    onChange={(event) => setGoalForm(event.target.value)}
+                    rows={2}
+                    placeholder="受講生の目標を入力"
+                    style={styles.textarea}
+                  />
+                  <button onClick={saveGoal} disabled={savingGoal} style={styles.primaryButton}>
+                    {savingGoal ? '保存中...' : '目標を保存'}
                   </button>
-                </form>
-              </div>
+                </div>
 
-              {/* 過去のセッション履歴 */}
-              <div>
-                <h3>トレーニング履歴（Supabaseから読み込み）</h3>
+                {currentStudent.concern && (
+                  <div style={styles.smallBox}><strong>悩み・課題：</strong>{currentStudent.concern}</div>
+                )}
+                {currentStudent.memo && (
+                  <div style={styles.smallBox}><strong>メモ：</strong>{currentStudent.memo}</div>
+                )}
+              </section>
+
+              <section style={styles.card}>
+                <h2 style={styles.sectionTitle}>
+                  {editingSessionId ? 'トレーニング記録を編集' : '新規トレーニング記録'}
+                </h2>
+                <form onSubmit={handleSaveSession}>
+                  <label style={styles.label}>日付</label>
+                  <input
+                    type="date"
+                    value={sessionForm.date}
+                    onChange={(event) => setSessionForm({ ...sessionForm, date: event.target.value })}
+                    style={styles.input}
+                    required
+                  />
+
+                  <label style={styles.label}>トレーニング内容</label>
+                  <textarea
+                    value={sessionForm.content}
+                    onChange={(event) => setSessionForm({ ...sessionForm, content: event.target.value })}
+                    rows={4}
+                    placeholder="実施したトレーニング、確認事項など"
+                    style={styles.textarea}
+                    required
+                  />
+
+                  <label style={styles.label}>特記事項・メモ</label>
+                  <textarea
+                    value={sessionForm.notes}
+                    onChange={(event) => setSessionForm({ ...sessionForm, notes: event.target.value })}
+                    rows={2}
+                    placeholder="気づき、次回への申し送りなど"
+                    style={styles.textarea}
+                  />
+
+                  <div style={styles.buttonRow}>
+                    <button type="submit" disabled={saving} style={styles.primaryButton}>
+                      {saving ? '保存中...' : editingSessionId ? '変更を保存' : 'Supabaseに保存'}
+                    </button>
+                    {editingSessionId && (
+                      <button type="button" onClick={cancelEdit} style={styles.secondaryButton}>
+                        編集をキャンセル
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </section>
+
+              <section style={styles.card}>
+                <div style={styles.historyHeader}>
+                  <h2 style={styles.sectionTitle}>トレーニング履歴</h2>
+                  <span style={styles.count}>{currentStudent.sessions.length}件</span>
+                </div>
+
                 {currentStudent.sessions.length === 0 ? (
                   <p>履歴がありません。</p>
                 ) : (
                   currentStudent.sessions.map((session) => (
-                    <div
-                      key={session.id}
-                      style={{
-                        borderLeft: '4px solid #0070f3',
-                        marginBottom: '15px',
-                        backgroundColor: '#fafafa',
-                        padding: '10px'
-                      }}
-                    >
-                      <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#555' }}>{session.date}</p>
-                      <p style={{ margin: '0 0 5px 0' }}>{session.content}</p>
-                      {session.notes && (
-                        <p style={{ margin: 0, fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                          {session.notes}
-                        </p>
-                      )}
-                    </div>
+                    <article key={session.id} style={styles.session}>
+                      <div style={styles.sessionTop}>
+                        <strong>{session.date}</strong>
+                        <div style={styles.buttonRowSmall}>
+                          <button onClick={() => startEditSession(session)} style={styles.editButton}>編集</button>
+                          <button onClick={() => deleteSession(session.id)} style={styles.deleteButton}>削除</button>
+                        </div>
+                      </div>
+                      <div style={styles.content}>{session.content}</div>
+                      {session.notes && <div style={styles.notes}>メモ：{session.notes}</div>}
+                    </article>
                   ))
                 )}
-              </div>
-            </div>
+              </section>
+            </>
           )}
         </>
       )}
-    </div>
+    </main>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  page: { minHeight: '100vh', background: '#f3f6fa', padding: '32px 20px 60px', fontFamily: 'Arial, sans-serif', color: '#222' },
+  title: { maxWidth: 800, margin: '0 auto 4px', fontSize: 28 },
+  subtitle: { maxWidth: 800, margin: '0 auto 24px', color: '#666' },
+  card: { maxWidth: 800, margin: '0 auto 18px', background: '#fff', border: '1px solid #ddd', borderRadius: 10, padding: 20, boxSizing: 'border-box' },
+  sectionTitle: { margin: '0 0 16px', fontSize: 21 },
+  label: { display: 'block', fontWeight: 700, margin: '12px 0 6px' },
+  input: { width: '100%', boxSizing: 'border-box', padding: 11, border: '1px solid #bbb', borderRadius: 6, fontSize: 16, background: '#fff' },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: 11, border: '1px solid #bbb', borderRadius: 6, fontSize: 15, resize: 'vertical' },
+  primaryButton: { background: '#087cf0', color: '#fff', border: 0, borderRadius: 6, padding: '10px 18px', cursor: 'pointer', fontSize: 15 },
+  secondaryButton: { background: '#fff', color: '#333', border: '1px solid #aaa', borderRadius: 6, padding: '10px 18px', cursor: 'pointer', fontSize: 15 },
+  editButton: { background: '#fff', border: '1px solid #aaa', borderRadius: 5, padding: '5px 10px', cursor: 'pointer' },
+  deleteButton: { background: '#fff', color: '#b42318', border: '1px solid #e0a0a0', borderRadius: 5, padding: '5px 10px', cursor: 'pointer' },
+  buttonRow: { display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' },
+  buttonRowSmall: { display: 'flex', gap: 6 },
+  success: { maxWidth: 800, margin: '0 auto 14px', padding: 12, background: '#eaf8ef', border: '1px solid #a9d9b8', borderRadius: 7, color: '#166534' },
+  error: { maxWidth: 800, margin: '0 auto 14px', padding: 12, background: '#fff0f0', border: '1px solid #e0aaaa', borderRadius: 7, color: '#9b1c1c' },
+  infoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginBottom: 18 },
+  goalBox: { background: '#f7faff', border: '1px solid #dbe8f7', borderRadius: 8, padding: 14 },
+  smallBox: { marginTop: 12, padding: 10, background: '#f7f7f7', borderRadius: 6, lineHeight: 1.6 },
+  historyHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  count: { background: '#eef3f8', padding: '4px 10px', borderRadius: 999, color: '#555' },
+  session: { borderLeft: '4px solid #087cf0', background: '#fafafa', padding: '12px 14px', marginBottom: 12, borderRadius: '0 7px 7px 0' },
+  sessionTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 },
+  content: { whiteSpace: 'pre-wrap', lineHeight: 1.6 },
+  notes: { marginTop: 8, color: '#666', fontSize: 14, whiteSpace: 'pre-wrap' }
+};
