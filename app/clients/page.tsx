@@ -219,7 +219,7 @@ export default function ClientsPage() {
 
     setIsSyncing(true);
     try {
-      const response = await fetch('/api/square/sync', {
+      const response = await fetch('/api/sync/square', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ squareCustomerId: currentParent.squareCustomerId }),

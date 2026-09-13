@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import Header from '@/components/Header';
 
 // --- 型定義 ---
@@ -25,43 +26,45 @@ interface MachineMaker {
 }
 
 export default function MachineMakersPage() {
+  const supabase = createClient();
   // マシン業者・メーカーデータ一覧
-  const [makers, setMakers] = useState<MachineMaker[]>([
-    {
-      id: 'maker-001',
-      name: 'ライフフィットネスジャパン',
-      kana: 'ライフフィットネスジャパン',
-      url: 'https://www.lifefitness.jp',
-      contactPhone: '03-1234-5678',
-      contactPerson: '鈴木 営業担当',
-      isImportant: true, // 重要アラームON
-      memo: '主力マシン（トレッドミル・ウェイト）のメインベンダー。',
-      customMemo1: '【保守契約】年1回の定期点検が保守代金に含まれている。',
-      customMemo2: '【値引き交渉】次回のオプション追加時は10%OFFの相談が可能。',
-      customMemo3: '【連絡事項】担当者の直通メールはsuzuki@lifefitness.example',
-      businessCards: {
-        front: null,
-        back: null,
+  const [makers, setMakers] = useState<MachineMaker[]>([]);
+
+  useEffect(() => {
+    const loadMakers = async () => {
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('vendors の読み込みに失敗しました:', error);
+        return;
       }
-    },
-    {
-      id: 'maker-002',
-      name: 'テクノジム ジャパン',
-      kana: 'テクノジムジャパン',
-      url: 'https://www.technogym.com/ja-JP/',
-      contactPhone: '03-9876-5432',
-      contactPerson: '佐藤 サポート',
-      isImportant: false,
-      memo: 'スタイリッシュなデザインのマシン、アプリ連携が得意。',
-      customMemo1: '【導入実績】バイオストレングスシリーズの見積もりを依頼中。',
-      customMemo2: '【ショールーム】六本木ショールームでいつでもデモ体験可能。',
-      customMemo3: '【納期】輸入の関係で発注後約2ヶ月かかるため注意。',
-      businessCards: {
-        front: null,
-        back: null,
-      }
-    }
-  ]);
+
+      const items: MachineMaker[] = (data ?? []).map((row) => ({
+        id: row.id,
+        name: row.name ?? '',
+        kana: row.kana ?? '',
+        url: row.url ?? '',
+        contactPhone: row.contact_phone ?? '',
+        contactPerson: row.contact_person ?? '',
+        isImportant: row.is_important ?? false,
+        memo: row.memo ?? '',
+        customMemo1: row.custom_memo1 ?? '',
+        customMemo2: row.custom_memo2 ?? '',
+        customMemo3: row.custom_memo3 ?? '',
+        businessCards: {
+          front: row.business_card_front ?? null,
+          back: row.business_card_back ?? null,
+        },
+      }));
+
+      setMakers(items);
+    };
+
+    loadMakers();
+  }, []);
 
   // UI状態
   const [selectedMakerId, setSelectedMakerId] = useState<string>('maker-001');
@@ -79,7 +82,23 @@ export default function MachineMakersPage() {
   const [newMemo, setNewMemo] = useState<string>('');
 
   // 選択中の業者データ
-  const currentMaker = makers.find(m => m.id === selectedMakerId) || makers[0];
+  const currentMaker = makers.find(m => m.id === selectedMakerId) || makers[0] || {
+    id: '',
+    name: '',
+    kana: '',
+    url: '',
+    contactPhone: '',
+    contactPerson: '',
+    isImportant: false,
+    memo: '',
+    customMemo1: '',
+    customMemo2: '',
+    customMemo3: '',
+    businessCards: {
+      front: null,
+      back: null,
+    },
+  };
 
   // 編集用フォームの状態
   const [editName, setEditName] = useState(currentMaker.name);
@@ -129,34 +148,93 @@ export default function MachineMakersPage() {
   };
 
   // 新規業者登録の保存
-  const handleCreateMaker = () => {
+  const handleCreateMaker = async () => {
     if (!newName.trim()) {
       alert('業者名・メーカー名を入力してください。');
       return;
     }
+
+    const { data, error } = await supabase
+      .from('vendors')
+      .insert({
+        name: newName.trim(),
+        kana: newKana || newName.trim(),
+        url: newUrl,
+        contact_phone: newPhone,
+        contact_person: newPerson,
+        is_important: newIsImportant,
+        memo: newMemo,
+        custom_memo1: '',
+        custom_memo2: '',
+        custom_memo3: '',
+        business_card_front: null,
+        business_card_back: null,
+      })
+      .select()
+      .single();
+
+    if (error || !data) {
+      console.error('vendors の登録に失敗しました:', error);
+      alert('業者情報の登録に失敗しました。');
+      return;
+    }
+
     const newMakerObj: MachineMaker = {
-      id: `maker-${Date.now()}`,
-      name: newName,
-      kana: newKana || newName,
-      url: newUrl,
-      contactPhone: newPhone,
-      contactPerson: newPerson,
-      isImportant: newIsImportant,
-      memo: newMemo,
-      customMemo1: '',
-      customMemo2: '',
-      customMemo3: '',
-      businessCards: { front: null, back: null }
+      id: data.id,
+      name: data.name ?? '',
+      kana: data.kana ?? '',
+      url: data.url ?? '',
+      contactPhone: data.contact_phone ?? '',
+      contactPerson: data.contact_person ?? '',
+      isImportant: data.is_important ?? false,
+      memo: data.memo ?? '',
+      customMemo1: data.custom_memo1 ?? '',
+      customMemo2: data.custom_memo2 ?? '',
+      customMemo3: data.custom_memo3 ?? '',
+      businessCards: {
+        front: data.business_card_front ?? null,
+        back: data.business_card_back ?? null,
+      },
     };
 
-    setMakers([newMakerObj, ...makers]);
+    setMakers(prev => [newMakerObj, ...prev]);
     setSelectedMakerId(newMakerObj.id);
     setIsCreatingNew(false);
+    setNewName('');
+    setNewKana('');
+    setNewUrl('');
+    setNewPhone('');
+    setNewPerson('');
+    setNewIsImportant(false);
+    setNewMemo('');
+
     alert('新しいマシン業者を登録しました！');
   };
 
   // 編集内容の保存（修正ボタンの処理）
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
+    const { error } = await supabase
+      .from('vendors')
+      .update({
+        name: editName,
+        kana: editKana,
+        url: editUrl,
+        contact_phone: editPhone,
+        contact_person: editPerson,
+        is_important: editIsImportant,
+        memo: editMemo,
+        custom_memo1: editCustomMemo1,
+        custom_memo2: editCustomMemo2,
+        custom_memo3: editCustomMemo3,
+      })
+      .eq('id', currentMaker.id);
+
+    if (error) {
+      console.error('vendors の更新に失敗しました:', error);
+      alert('業者情報の更新に失敗しました。');
+      return;
+    }
+
     setMakers(prev =>
       prev.map(m => {
         if (m.id !== currentMaker.id) return m;
@@ -175,17 +253,36 @@ export default function MachineMakersPage() {
         };
       })
     );
+
     alert('業者情報を修正・更新しました！');
   };
 
   // 名刺画像のアップロード（取り込み直し）
-  const handleCardImageUpload = (side: 'front' | 'back', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCardImageUpload = async (side: 'front' | 'back', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+
+    reader.onloadend = async () => {
       const resultString = reader.result as string;
+
+      const updateData =
+        side === 'front'
+          ? { business_card_front: resultString }
+          : { business_card_back: resultString };
+
+      const { error } = await supabase
+        .from('vendors')
+        .update(updateData)
+        .eq('id', currentMaker.id);
+
+      if (error) {
+        console.error('名刺画像の保存に失敗しました:', error);
+        alert('名刺画像の保存に失敗しました。');
+        return;
+      }
+
       setMakers(prev =>
         prev.map(m => {
           if (m.id !== currentMaker.id) return m;
@@ -193,14 +290,40 @@ export default function MachineMakersPage() {
             ...m,
             businessCards: {
               ...m.businessCards,
-              [side]: resultString
-            }
+              [side]: resultString,
+            },
           };
         })
       );
-      alert(`名刺（${side === 'front' ? '表面' : '裏面'}）を取り込み直しました！`);
+
+      alert(`名刺（${side === 'front' ? '表面' : '裏面'}）を保存しました！`);
     };
+
     reader.readAsDataURL(file);
+  };
+
+  // 業者情報の削除
+  const handleDeleteMaker = async () => {
+    if (!currentMaker.id) return;
+    if (!confirm(`「${currentMaker.name}」を削除しますか？`)) return;
+
+    const { error } = await supabase
+      .from('vendors')
+      .delete()
+      .eq('id', currentMaker.id);
+
+    if (error) {
+      console.error('vendors の削除に失敗しました:', error);
+      alert('業者情報の削除に失敗しました。');
+      return;
+    }
+
+    const remainingMakers = makers.filter(m => m.id !== currentMaker.id);
+    setMakers(remainingMakers);
+    setSelectedMakerId(remainingMakers[0]?.id ?? '');
+    setActiveTab('details');
+
+    alert('業者情報を削除しました。');
   };
 
   // 名刺画像の削除
@@ -391,12 +514,18 @@ export default function MachineMakersPage() {
                     </div>
 
                     {/* 修正ボタン（ヘッダー部分にも配置：編集タブへ移動して直感的に修正可能） */}
-                    <div>
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => setActiveTab('edit')}
                         className="bg-[#5e9bc4] hover:bg-sky-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1"
                       >
                         <span>✏️</span> 情報を修正する
+                      </button>
+                      <button
+                        onClick={handleDeleteMaker}
+                        className="bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1"
+                      >
+                        <span>🗑️</span> 業者を削除
                       </button>
                     </div>
                   </div>

@@ -105,13 +105,40 @@ export default function LocalInfoPage() {
     }
   };
 
-const handleAdd = () => {
+const handleAdd = async () => {
     if (!newTitle || !newLocation) {
       alert('タイトルと場所を入力してください。');
       return;
     }
+    const { data: insertedRow, error } = await supabase
+      .from("local_info")
+      .insert({
+        school_or_team_name: newTitle,
+        event_name: newTitle,
+        category: newCategory,
+        sport: newSport,
+        event_date: newDate || null,
+        location: newLocation,
+        url: newUrl || null,
+        contact_name: newContactName,
+        contact_email: newContactEmail,
+        business_card_front: newCardFront,
+        business_card_back: newCardBack,
+        memo1: newMemo1,
+        memo2: newMemo2,
+        memo3: newMemo3,
+      })
+      .select()
+      .single();
+
+    if (error || !insertedRow) {
+      console.error("local_info の登録に失敗しました:", error);
+      alert("情報の登録に失敗しました。");
+      return;
+    }
+
     const newItem: TeamInfo = {
-      id: `team-${Date.now()}`,
+      id: insertedRow.id,
       title: newTitle,
       category: newCategory,
       sport: newSport,

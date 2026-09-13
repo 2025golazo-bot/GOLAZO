@@ -4,3 +4,8 @@ out/
 build/
 .env*.local
 .DS_Store
+.vercel
+
+.env.local.backup
+.env.vercel
+tsconfig.tsbuildinfo

@@ -237,3 +237,29 @@ with check (bucket_id = 'gym-media');
 create policy "public_can_read_gym_media"
 on storage.objects for select
 using (bucket_id = 'gym-media');
+
+
+-- ---------------------------------------------------------------------
+-- 10. マシン・業者一覧テーブル
+-- ---------------------------------------------------------------------
+
+create table if not exists vendors (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  kana text,
+  url text,
+  contact_phone text,
+  contact_person text,
+  is_important boolean not null default false,
+  memo text,
+  custom_memo1 text,
+  custom_memo2 text,
+  custom_memo3 text,
+  business_card_front text,
+  business_card_back text,
+  created_at timestamptz default now()
+);
+
+alter publication supabase_realtime add table vendors;
+alter table vendors enable row level security;
+
