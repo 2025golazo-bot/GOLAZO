@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from '@/components/Header';
 
 // --- 型定義 ---
@@ -11,6 +11,13 @@ interface Session {
   content: string;
   homework: string;
   photo: string | null;
+}
+
+interface MeasurementAttachment {
+  id: string;
+  name: string;
+  type: string;
+  dataUrl: string;
 }
 
 interface PhysicalData {
@@ -25,7 +32,11 @@ interface PhysicalData {
     side?: string | null;
     back?: string | null;
   };
-  testPhotos?: string[]; // ケガゼロ/フィジカルチェック等
+  // フィジカルチェック／ケガゼロは測定元ファイルをそのまま添付保存
+  physicalCheckFiles?: MeasurementAttachment[];
+  injuryZeroFiles?: MeasurementAttachment[];
+  // 旧データ互換用
+  testPhotos?: string[];
 }
 
 interface TicketHistory {
@@ -168,6 +179,32 @@ export default function ClientsPage() {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
   const [isSyncing, setIsSyncing] = useState<boolean>(false); // Square同期中のローディング状態
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+
+  // 顧客カルテのデータをブラウザに保存します。
+  useEffect(() => {
+    try {
+      const savedStudents = localStorage.getItem('golazo-clients-students-v2');
+      const savedParents = localStorage.getItem('golazo-clients-parents-v2');
+      if (savedStudents) setStudents(JSON.parse(savedStudents));
+      if (savedParents) setParents(JSON.parse(savedParents));
+    } catch (error) {
+      console.error('顧客カルテデータの読み込みに失敗しました:', error);
+    } finally {
+      setIsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      localStorage.setItem('golazo-clients-students-v2', JSON.stringify(students));
+      localStorage.setItem('golazo-clients-parents-v2', JSON.stringify(parents));
+    } catch (error) {
+      console.error('顧客カルテデータの保存に失敗しました:', error);
+      alert('保存容量を超えた可能性があります。写真・PDFの枚数やサイズを減らしてください。');
+    }
+  }, [students, parents, isLoaded]);
 
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
@@ -182,6 +219,11 @@ export default function ClientsPage() {
   const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
 
   const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // 測定履歴編集用ステート
+  const [editingMeasureId, setEditingMeasureId] = useState<string | null>(null);
+  const [editMeasureDate, setEditMeasureDate] = useState<string>('');
+  const [editMeasureNote, setEditMeasureNote] = useState<string>('');
 
   // セッションフィルター＆新規フォーム
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
@@ -367,6 +409,8 @@ export default function ClientsPage() {
       muscle: 0,
       note: '定期計測',
       posturePhotos: { front: null, side: null, back: null },
+      physicalCheckFiles: [],
+      injuryZeroFiles: [],
       testPhotos: []
     };
 
@@ -379,6 +423,57 @@ export default function ClientsPage() {
     );
     setAfterDate(newMeasureDate);
     alert(`計測日 (${newMeasureDate}) を追加しました！`);
+  };
+
+  const handleStartEditMeasure = (measure: PhysicalData) => {
+    setEditingMeasureId(measure.id);
+    setEditMeasureDate(measure.date);
+    setEditMeasureNote(measure.note || '');
+  };
+
+  const handleCancelEditMeasure = () => {
+    setEditingMeasureId(null);
+    setEditMeasureDate('');
+    setEditMeasureNote('');
+  };
+
+  const handleSaveEditMeasure = (measureId: string) => {
+    if (!editMeasureDate) {
+      alert('測定日を入力してください。');
+      return;
+    }
+
+    const duplicate = currentStudent.physicalHistory.some(
+      m => m.id !== measureId && m.date === editMeasureDate
+    );
+    if (duplicate) {
+      alert('その測定日はすでに登録されています。別の日付を指定してください。');
+      return;
+    }
+
+    const targetMeasure = currentStudent.physicalHistory.find(m => m.id === measureId);
+    if (!targetMeasure) return;
+
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updated = s.physicalHistory
+          .map(m =>
+            m.id === measureId
+              ? { ...m, date: editMeasureDate, note: editMeasureNote }
+              : m
+          )
+          .sort((a, b) => a.date.localeCompare(b.date));
+        return { ...s, physicalHistory: updated };
+      })
+    );
+
+    // 日付を変更した場合も比較対象を新しい日付へ追従させる
+    if (beforeDate === targetMeasure.date) setBeforeDate(editMeasureDate);
+    if (afterDate === targetMeasure.date) setAfterDate(editMeasureDate);
+
+    handleCancelEditMeasure();
+    alert(`測定結果（${editMeasureDate}）を更新しました。`);
   };
 
   const handleDeleteMeasureDate = (targetDate: string) => {
@@ -405,36 +500,62 @@ export default function ClientsPage() {
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
-    type: 'posture' | 'test',
+    type: 'posture' | 'physicalCheck' | 'injuryZero',
     keyName?: 'front' | 'side' | 'back'
   ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== currentStudent.id) return s;
-        const updatedHistory = s.physicalHistory.map(m => {
-          if (m.date !== targetDate) return m;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || '');
+        if (!dataUrl) return;
 
-          if (type === 'posture' && keyName) {
-            const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
-            return {
-              ...m,
-              posturePhotos: { ...currentPhotos, [keyName]: url }
-            };
-          } else if (type === 'test') {
-            return {
-              ...m,
-              testPhotos: [...(m.testPhotos || []), url]
-            };
-          }
-          return m;
-        });
-        return { ...s, physicalHistory: updatedHistory };
-      })
-    );
+        setStudents(prev =>
+          prev.map(s => {
+            if (s.id !== currentStudent.id) return s;
+
+            const updatedHistory = s.physicalHistory.map(m => {
+              if (m.date !== targetDate) return m;
+
+              if (type === 'posture' && keyName) {
+                return {
+                  ...m,
+                  posturePhotos: {
+                    ...(m.posturePhotos || { front: null, side: null, back: null }),
+                    [keyName]: dataUrl
+                  }
+                };
+              }
+
+              const attachment: MeasurementAttachment = {
+                id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: file.name,
+                type: file.type || 'application/octet-stream',
+                dataUrl
+              };
+
+              if (type === 'physicalCheck') {
+                return {
+                  ...m,
+                  physicalCheckFiles: [...(m.physicalCheckFiles || []), attachment]
+                };
+              }
+
+              return {
+                ...m,
+                injuryZeroFiles: [...(m.injuryZeroFiles || []), attachment]
+              };
+            });
+
+            return { ...s, physicalHistory: updatedHistory };
+          })
+        );
+      };
+      reader.readAsDataURL(file);
+    });
+
     e.target.value = '';
   };
 
@@ -456,18 +577,33 @@ export default function ClientsPage() {
     );
   };
 
-  const handleDeleteTestPhoto = (targetDate: string, indexToDelete: number) => {
-    if (!confirm('このテストシート写真を削除しますか？')) return;
+  const handleDeleteMeasurementFile = (
+    targetDate: string,
+    type: 'physicalCheck' | 'injuryZero',
+    fileId: string
+  ) => {
+    if (!confirm('この測定結果ファイルを削除しますか？')) return;
+
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
+
         const updatedHistory = s.physicalHistory.map(m => {
           if (m.date !== targetDate) return m;
+
+          if (type === 'physicalCheck') {
+            return {
+              ...m,
+              physicalCheckFiles: (m.physicalCheckFiles || []).filter(file => file.id !== fileId)
+            };
+          }
+
           return {
             ...m,
-            testPhotos: (m.testPhotos || []).filter((_, idx) => idx !== indexToDelete)
+            injuryZeroFiles: (m.injuryZeroFiles || []).filter(file => file.id !== fileId)
           };
         });
+
         return { ...s, physicalHistory: updatedHistory };
       })
     );
@@ -861,10 +997,197 @@ export default function ClientsPage() {
                     </table>
                   </div>
 
-                  <div className="flex justify-end pt-2">
-                    <button onClick={() => handleDeleteMeasureDate(afterDate)} className="text-xs text-rose-500 hover:underline">
-                      🗑️ 選択中のAfter計測日 ({afterDate}) のデータを削除する
-                    </button>
+                  {/* 姿勢写真：Before / Afterを正面・側面・背面で個別保存 */}
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-slate-700 text-xs">📸 姿勢写真（正面・側面・背面）</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {[
+                        { key: 'front' as const, label: '正面 (Front)' },
+                        { key: 'side' as const, label: '側面 (Side)' },
+                        { key: 'back' as const, label: '背面 (Back)' }
+                      ].map(({ key, label }) => (
+                        <div key={key} className="border rounded-xl p-3 bg-slate-50">
+                          <div className="font-bold text-xs text-slate-600 mb-2">{label}</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { title: 'Before', date: beforeDate, data: beforePhysical?.posturePhotos?.[key] },
+                              { title: 'After', date: afterDate, data: afterPhysical?.posturePhotos?.[key] }
+                            ].map(item => (
+                              <div key={`${key}-${item.title}`} className="bg-white rounded-lg border p-2">
+                                <div className="text-[10px] font-bold text-slate-500 mb-1">{item.title}</div>
+                                {item.data ? (
+                                  <div className="relative">
+                                    <img src={item.data} alt={`${label} ${item.title}`} className="w-full h-28 object-cover rounded border" />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePosturePhoto(item.date, key)}
+                                      className="absolute top-1 right-1 bg-rose-500 text-white rounded-full w-5 h-5 text-xs"
+                                    >×</button>
+                                  </div>
+                                ) : (
+                                  <div className="h-28 flex items-center justify-center text-[10px] text-slate-400 border border-dashed rounded">未登録</div>
+                                )}
+                                <label className="mt-2 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2 py-1.5 rounded cursor-pointer">
+                                  {item.data ? '写真を差し替え' : '写真を追加'}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={e => handleFileUpload(e, item.date, 'posture', key)}
+                                  />
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 測定結果ファイル：フィジカルチェックとケガゼロを分離 */}
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-slate-700 text-xs">📄 測定結果ファイル</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[
+                        {
+                          type: 'physicalCheck' as const,
+                          title: 'フィジカルチェック',
+                          files: afterPhysical?.physicalCheckFiles || []
+                        },
+                        {
+                          type: 'injuryZero' as const,
+                          title: 'ケガゼロプロジェクト',
+                          files: afterPhysical?.injuryZeroFiles || []
+                        }
+                      ].map(section => (
+                        <div key={section.type} className="border rounded-xl p-4 bg-white">
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <h5 className="font-bold text-xs text-slate-700">{section.title}</h5>
+                            <label className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2.5 py-1.5 rounded cursor-pointer whitespace-nowrap">
+                              ＋ PDF / 写真を追加
+                              <input
+                                type="file"
+                                accept="application/pdf,image/*"
+                                multiple
+                                className="hidden"
+                                onChange={e => handleFileUpload(e, afterDate, section.type)}
+                              />
+                            </label>
+                          </div>
+                          {section.files.length > 0 ? (
+                            <div className="space-y-2">
+                              {section.files.map(file => (
+                                <div key={file.id} className="flex items-center justify-between gap-2 bg-slate-50 border rounded-lg p-2">
+                                  <a
+                                    href={file.dataUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[11px] text-[#5e9bc4] font-bold hover:underline truncate"
+                                    title={file.name}
+                                  >
+                                    {file.type === 'application/pdf' ? '📄' : '🖼️'} {file.name}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMeasurementFile(afterDate, section.type, file.id)}
+                                    className="text-[10px] text-rose-500 hover:underline whitespace-nowrap"
+                                  >
+                                    削除
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 py-3 text-center border border-dashed rounded-lg">
+                              測定結果のPDFまたは写真を登録してください
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      ※ 測定結果そのものは別ファイルで作成し、GOLAZOにはPDFまたは写真を記録として添付します。
+                    </p>
+                  </div>
+
+                  {/* 測定履歴の修正・削除 */}
+                  <div className="border-t pt-4 space-y-3">
+                    <div>
+                      <h4 className="font-bold text-slate-700 text-xs">📝 測定履歴の修正・削除</h4>
+                      <p className="text-[10px] text-slate-400 mt-1">過去の測定日やメモを後から修正できます。数値は上の表から直接修正できます。</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {[...currentStudent.physicalHistory].sort((a, b) => a.date.localeCompare(b.date)).map(measure => (
+                        <div key={measure.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                          {editingMeasureId === measure.id ? (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">測定日</label>
+                                  <input
+                                    type="date"
+                                    value={editMeasureDate}
+                                    onChange={e => setEditMeasureDate(e.target.value)}
+                                    className="w-full border border-slate-300 rounded p-2 text-xs bg-white"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">メモ</label>
+                                  <input
+                                    type="text"
+                                    value={editMeasureNote}
+                                    onChange={e => setEditMeasureNote(e.target.value)}
+                                    className="w-full border border-slate-300 rounded p-2 text-xs bg-white"
+                                    placeholder="例：3ヶ月定期測定"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditMeasure}
+                                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded text-[10px] font-bold"
+                                >
+                                  キャンセル
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditMeasure(measure.id)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-[10px] font-bold"
+                                >
+                                  保存
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                              <div>
+                                <span className="font-bold text-xs text-slate-700">📅 {measure.date}</span>
+                                {measure.note && <span className="ml-2 text-[10px] text-slate-400">{measure.note}</span>}
+                              </div>
+                              <div className="flex gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditMeasure(measure)}
+                                  className="text-[10px] text-sky-600 hover:underline font-bold"
+                                >
+                                  ✏️ 編集
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMeasureDate(measure.date)}
+                                  disabled={currentStudent.physicalHistory.length <= 1}
+                                  className="text-[10px] text-rose-500 hover:underline font-bold disabled:text-slate-300 disabled:no-underline"
+                                >
+                                  🗑️ 削除
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
