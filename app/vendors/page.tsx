@@ -327,8 +327,25 @@ export default function MachineMakersPage() {
   };
 
   // 名刺画像の削除
-  const handleDeleteCardImage = (side: 'front' | 'back') => {
+  const handleDeleteCardImage = async (side: 'front' | 'back') => {
     if (!confirm(`名刺（${side === 'front' ? '表面' : '裏面'}）を削除しますか？`)) return;
+
+    const updateData =
+      side === 'front'
+        ? { business_card_front: null }
+        : { business_card_back: null };
+
+    const { error } = await supabase
+      .from('vendors')
+      .update(updateData)
+      .eq('id', currentMaker.id);
+
+    if (error) {
+      console.error('名刺画像削除エラー:', error);
+      alert('名刺画像の削除に失敗しました。');
+      return;
+    }
+
     setMakers(prev =>
       prev.map(m => {
         if (m.id !== currentMaker.id) return m;
@@ -341,6 +358,8 @@ export default function MachineMakersPage() {
         };
       })
     );
+
+    alert('名刺画像を削除しました。');
   };
 
   // 検索フィルタリング
