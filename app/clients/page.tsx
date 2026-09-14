@@ -35,6 +35,12 @@ interface PhysicalData {
   // フィジカルチェック／ケガゼロは測定元ファイルをそのまま添付保存
   physicalCheckFiles?: MeasurementAttachment[];
   injuryZeroFiles?: MeasurementAttachment[];
+  earAcupuncturePhotos?: {
+    beforeRight?: string | null;
+    afterRight?: string | null;
+    beforeLeft?: string | null;
+    afterLeft?: string | null;
+  };
   // 旧データ互換用
   testPhotos?: string[];
 }
@@ -669,6 +675,47 @@ export default function ClientsPage() {
     e.target.value = '';
   };
 
+  const handleUpdateEarAcupuncturePhoto = (targetDate: string, keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft', dataUrl: string | null) => {
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== currentStudent.id) return s;
+        const updatedHistory = s.physicalHistory.map(m => {
+          if (m.date !== targetDate) return m;
+          return {
+            ...m,
+            earAcupuncturePhotos: {
+              ...(m.earAcupuncturePhotos || {}),
+              [keyName]: dataUrl
+            }
+          };
+        });
+        return { ...s, physicalHistory: updatedHistory };
+      })
+    );
+  };
+
+  const handleEarAcupuncturePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, targetDate: string, keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('耳ツボ写真は画像ファイルを選択してください。');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (dataUrl) handleUpdateEarAcupuncturePhoto(targetDate, keyName, dataUrl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleDeleteEarAcupuncturePhoto = (targetDate: string, keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft') => {
+    if (!confirm('この耳ツボ写真を削除しますか？')) return;
+    handleUpdateEarAcupuncturePhoto(targetDate, keyName, null);
+  };
+
   const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
     if (!confirm('この姿勢写真を削除しますか？')) return;
     setStudents(prev =>
@@ -1181,6 +1228,42 @@ export default function ClientsPage() {
                               </div>
                             ))}
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 耳ツボ写真：施術前後・左右を個別保存 */}
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-slate-700 text-xs">👂 耳ツボ写真（施術前・施術後／右・左）</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {[
+                        { key: 'beforeRight' as const, label: '施術前・右', date: beforeDate, data: beforePhysical?.earAcupuncturePhotos?.beforeRight },
+                        { key: 'afterRight' as const, label: '施術後・右', date: afterDate, data: afterPhysical?.earAcupuncturePhotos?.afterRight },
+                        { key: 'beforeLeft' as const, label: '施術前・左', date: beforeDate, data: beforePhysical?.earAcupuncturePhotos?.beforeLeft },
+                        { key: 'afterLeft' as const, label: '施術後・左', date: afterDate, data: afterPhysical?.earAcupuncturePhotos?.afterLeft }
+                      ].map(item => (
+                        <div key={item.key} className="border rounded-xl p-3 bg-slate-50">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div>
+                              <div className={`inline-block text-[10px] font-bold px-2 py-1 rounded ${item.key.startsWith('after') ? 'bg-[#5e9bc4] text-white' : 'bg-slate-200 text-slate-600'}`}>{item.label}</div>
+                              <div className="text-[10px] text-slate-500 mt-1">{item.date}</div>
+                            </div>
+                            {item.data && (
+                              <button type="button" onClick={() => handleDeleteEarAcupuncturePhoto(item.date, item.key)} className="text-[10px] text-rose-500 hover:underline">削除</button>
+                            )}
+                          </div>
+                          {item.data ? (
+                            <div className="relative">
+                              <img src={item.data} alt={item.label} className="w-full h-40 object-contain rounded-lg border bg-white" />
+                            </div>
+                          ) : (
+                            <div className="h-40 flex items-center justify-center text-[10px] text-slate-400 border border-dashed rounded-lg bg-white">未登録</div>
+                          )}
+                          <label className="mt-2 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2 py-1.5 rounded cursor-pointer">
+                            {item.data ? '写真を差し替え' : '写真を追加'}
+                            <input type="file" accept="image/*" className="hidden" onChange={e => handleEarAcupuncturePhotoUpload(e, item.date, item.key)} />
+                          </label>
                         </div>
                       ))}
                     </div>
