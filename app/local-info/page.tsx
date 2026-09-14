@@ -106,73 +106,88 @@ export default function LocalInfoPage() {
   };
 
 const handleAdd = async () => {
-    if (!newTitle || !newLocation) {
-      alert('タイトルと場所を入力してください。');
-      return;
-    }
-    const { data: insertedRow, error } = await supabase
-      .from("local_info")
-      .insert({
-        school_or_team_name: newTitle,
-        event_name: newTitle,
-        category: newCategory,
-        sport: newSport,
-        event_date: newDate || null,
-        location: newLocation,
-        url: newUrl || null,
-        contact_name: newContactName,
-        contact_email: newContactEmail,
-        business_card_front: newCardFront,
-        business_card_back: newCardBack,
-        memo1: newMemo1,
-        memo2: newMemo2,
-        memo3: newMemo3,
-      })
-      .select()
-      .single();
+  if (!newTitle || !newLocation) {
+    alert('タイトルと場所を入力してください。');
+    return;
+  }
 
-    if (error || !insertedRow) {
-      console.error("local_info の登録に失敗しました:", error);
-      alert("情報の登録に失敗しました。");
-      return;
-    }
-
-    const newItem: TeamInfo = {
-      id: insertedRow.id,
-      title: newTitle,
+  const { data, error } = await supabase
+    .from('local_info')
+    .insert({
+      school_or_team_name: newTitle,
+      district: 'その他',
+      event_name: newTitle,
+      url: newUrl || null,
+      staff_name: newContactName || null,
+      memo: newMemo1 || null,
       category: newCategory,
       sport: newSport,
-      date: newDate,
+      event_date: newDate || null,
       location: newLocation,
-      url: newUrl,
-      contactName: newContactName,
-      contactEmail: newContactEmail,
-      businessCardFront: newCardFront,
-      businessCardBack: newCardBack,
+      contact_name: newContactName,
+      contact_email: newContactEmail,
+      business_card_front: newCardFront,
+      business_card_back: newCardBack,
       memo1: newMemo1,
       memo2: newMemo2,
       memo3: newMemo3
-    };
-    setTeamInfos([newItem, ...teamInfos]);
-    // フォームリセット
-    setNewTitle('');
-    setNewSport('');
-    setNewLocation('');
-    setNewUrl('');
-    setNewContactName('');
-    setNewContactEmail('');
-    setNewCardFront('');
-    setNewCardBack('');
-    setNewMemo1('');
-    setNewMemo2('');
-    setNewMemo3('');
-    alert('チーム・イベント情報を追加しました！');
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error(error);
+    alert(`Supabaseへの保存に失敗しました。\n${error.message}`);
+    return;
+  }
+
+  const newItem: TeamInfo = {
+    id: data.id,
+    title: data.event_name,
+    category: data.category,
+    sport: data.sport,
+    date: data.event_date || '',
+    location: data.location,
+    url: data.url || '',
+    contactName: data.contact_name || '',
+    contactEmail: data.contact_email || '',
+    businessCardFront: data.business_card_front || '',
+    businessCardBack: data.business_card_back || '',
+    memo1: data.memo1 || '',
+    memo2: data.memo2 || '',
+    memo3: data.memo3 || ''
   };
 
-  const handleDelete = (id: string) => {
+  setTeamInfos([newItem, ...teamInfos]);
+
+  setNewTitle('');
+  setNewSport('');
+  setNewLocation('');
+  setNewUrl('');
+  setNewContactName('');
+  setNewContactEmail('');
+  setNewCardFront('');
+  setNewCardBack('');
+  setNewMemo1('');
+  setNewMemo2('');
+  setNewMemo3('');
+
+  alert('チーム・イベント情報を追加しました！');
+};
+
+  const handleDelete = async (id: string) => {
     if (!confirm('この情報を削除しますか？')) return;
+
+    const { error } = await supabase.from('local_info').delete().eq('id', id);
+    if (error) {
+      console.error('local_info の削除に失敗しました:', error);
+      alert(`削除に失敗しました。\n${error.message}`);
+      return;
+    }
+
     setTeamInfos(prev => prev.filter(item => item.id !== id));
     if (editingId === id) setEditingId(null);
+    alert('情報を削除しました。');
   };
 
   const handleStartEdit = (item: TeamInfo) => {
@@ -192,33 +207,61 @@ const handleAdd = async () => {
     setEditMemo3(item.memo3);
   };
 
-  const handleSaveEdit = (id: string) => {
+  const handleSaveEdit = async (id: string) => {
     if (!editTitle || !editLocation) {
       alert('タイトルと場所を入力してください。');
       return;
     }
-    setTeamInfos(prev =>
-      prev.map(item =>
-        item.id === id
-          ? {
-              ...item,
-              title: editTitle,
-              category: editCategory,
-              sport: editSport,
-              date: editDate,
-              location: editLocation,
-              url: editUrl,
-              contactName: editContactName,
-              contactEmail: editContactEmail,
-              businessCardFront: editCardFront,
-              businessCardBack: editCardBack,
-              memo1: editMemo1,
-              memo2: editMemo2,
-              memo3: editMemo3
-            }
-          : item
-      )
-    );
+
+    const { data, error } = await supabase
+      .from('local_info')
+      .update({
+        school_or_team_name: editTitle,
+        district: 'その他',
+        event_name: editTitle,
+        url: editUrl || null,
+        staff_name: editContactName || null,
+        memo: editMemo1 || null,
+        category: editCategory,
+        sport: editSport,
+        event_date: editDate || null,
+        location: editLocation,
+        contact_name: editContactName,
+        contact_email: editContactEmail,
+        business_card_front: editCardFront,
+        business_card_back: editCardBack,
+        memo1: editMemo1,
+        memo2: editMemo2,
+        memo3: editMemo3
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('local_info の更新に失敗しました:', error);
+      alert(`更新に失敗しました。\n${error.message}`);
+      return;
+    }
+
+    const updatedItem: TeamInfo = {
+      id: data.id,
+      title: data.event_name ?? '',
+      category: data.category ?? '大会・イベント',
+      sport: data.sport ?? '',
+      date: data.event_date ?? '',
+      location: data.location ?? '',
+      url: data.url ?? '',
+      contactName: data.contact_name ?? '',
+      contactEmail: data.contact_email ?? '',
+      businessCardFront: data.business_card_front ?? '',
+      businessCardBack: data.business_card_back ?? '',
+      memo1: data.memo1 ?? data.memo ?? '',
+      memo2: data.memo2 ?? '',
+      memo3: data.memo3 ?? ''
+    };
+
+    setTeamInfos(prev => prev.map(item => item.id === id ? updatedItem : item));
     setEditingId(null);
     alert('情報を更新しました！');
   };
