@@ -12,8 +12,15 @@ type SaleItem = {
   category: '月謝・コース' | '回数券' | '物販・プロテイン' | '体験料';
   amount: number;
   paymentMethod: 'Square決済' | '現金' | '銀行振込';
-  staff: 'TAKA' | 'NANA';
+  staff: 'TAKA' | 'NANA' | '未設定';
   memo: string;
+  source?: 'manual' | 'square';
+  squareOrderId?: string;
+  squarePaymentId?: string;
+
+  productName?: string;
+  productNames?: string[];
+  squareCatalogObjectIds?: string[];
 };
 
 type TrialItem = {
@@ -24,6 +31,12 @@ type TrialItem = {
   staff: 'TAKA' | 'NANA';
   hasPurchasedTicket: boolean;
   memo: string;
+  productName?: string;
+  productNames?: string[];
+  squareCatalogObjectIds?: string[];
+  source?: 'manual' | 'square';
+  squareOrderId?: string;
+  squarePaymentId?: string;
 };
 
 type CampaignItem = {
@@ -35,6 +48,20 @@ type CampaignItem = {
   targetCount: number;
   targetSales: number;
 };
+
+const normalizeSquareSale = (item: any): SaleItem => ({
+  id: Number(item.id),
+  date: String(item.date),
+  clientName: String(item.clientName || 'Square取引'),
+  category: item.category as SaleItem['category'],
+  amount: Number(item.amount) || 0,
+  paymentMethod: 'Square決済',
+  staff: (item.staff || '未設定') as SaleItem['staff'],
+  memo: String(item.memo || ''),
+  source: 'square',
+  squareOrderId: item.squareOrderId ? String(item.squareOrderId) : undefined,
+  squarePaymentId: item.squarePaymentId ? String(item.squarePaymentId) : undefined,
+});
 
 export default function SalesPage() {
   // 売上ダミーデータ
@@ -48,6 +75,7 @@ export default function SalesPage() {
       paymentMethod: 'Square決済',
       staff: 'TAKA',
       memo: '10回券（共通）',
+      source: 'manual',
     },
     {
       id: 2,
@@ -58,6 +86,7 @@ export default function SalesPage() {
       paymentMethod: '現金',
       staff: 'NANA',
       memo: '初回体験トレーニング',
+      source: 'manual',
     },
     {
       id: 3,
@@ -68,6 +97,7 @@ export default function SalesPage() {
       paymentMethod: 'Square決済',
       staff: 'TAKA',
       memo: '5回券購入',
+      source: 'manual',
     },
   ]);
 
@@ -207,7 +237,7 @@ export default function SalesPage() {
       const savedTrials = JSON.parse(localStorage.getItem('golazo_trial_items') || 'null');
 
       if (Array.isArray(savedSales)) {
-        setSales(savedSales);
+        setSales(savedSales.map((item) => ({ ...item, source: item.source || 'manual' })));
       }
       if (Array.isArray(savedTrials)) {
         setTrials(savedTrials);
@@ -294,10 +324,10 @@ export default function SalesPage() {
   const [newSale, setNewSale] = useState({
     date: new Date().toISOString().split('T')[0],
     clientName: '',
-    category: '月謝・コース' as const,
+    category: '月謝・コース' as SaleItem['category'],
     amount: '',
-    paymentMethod: 'Square決済' as const,
-    staff: 'TAKA' as const,
+    paymentMethod: 'Square決済' as SaleItem['paymentMethod'],
+    staff: 'TAKA' as SaleItem['staff'],
     memo: '',
   });
 
@@ -305,7 +335,7 @@ export default function SalesPage() {
     date: new Date().toISOString().split('T')[0],
     clientName: '',
     age: '',
-    staff: 'TAKA' as const,
+    staff: 'TAKA' as TrialItem['staff'],
     hasPurchasedTicket: false,
     memo: '',
   });
@@ -365,15 +395,52 @@ export default function SalesPage() {
     ? Math.round((realYearlyAmount / currentYearlyTargetNumber) * 100)
     : 0;
 
-  const selectedProductSummary = selectedPeriodSales.reduce<Record<string, number>>((acc, item) => {
-    acc[item.category] = (acc[item.category] || 0) + 1;
-    return acc;
-  }, {});
+  const buildProductSummary = (items: SaleItem[]) => {
+    const summary: Record<string, { count: number; category: SaleItem['category'] }> = {};
 
-  const currentProductSummary = realCurrentMonthSales.reduce<Record<string, number>>((acc, item) => {
-    acc[item.category] = (acc[item.category] || 0) + 1;
+    items.forEach((item) => {
+      const names = item.productNames?.length
+        ? item.productNames
+        : (item.productName
+            ? [item.productName]
+            : (item.source === 'square' && item.memo.trim()
+                ? item.memo.split(' / ').map((name) => name.trim()).filter(Boolean)
+                : [item.category]));
+
+      names.forEach((name) => {
+        const productName = String(name || '').trim();
+        if (!productName) return;
+        if (!summary[productName]) {
+          summary[productName] = { count: 0, category: item.category };
+        }
+        summary[productName].count += 1;
+      });
+    });
+
+    return summary;
+  };
+
+  const selectedProductSummary = buildProductSummary(selectedPeriodSales);
+  const currentProductSummary = buildProductSummary(realCurrentMonthSales);
+  const productSummaryNames = Array.from(
+    new Set([...Object.keys(currentProductSummary), ...Object.keys(selectedProductSummary)]),
+  ).sort((a, b) => a.localeCompare(b, 'ja'));
+
+  const countProductNames = (items: SaleItem[]) => items.reduce<Record<string, number>>((acc, item) => {
+    const names = item.productNames?.length
+      ? item.productNames
+      : item.productName
+        ? [item.productName]
+        : (item.source === 'square' && item.memo.trim()
+          ? item.memo.split(' / ').map((name) => name.trim()).filter(Boolean)
+          : []);
+    for (const name of names) { const key = name.trim(); if (key) acc[key] = (acc[key] || 0) + 1; }
     return acc;
   }, {});
+  const selectedProductNameSummary = countProductNames(selectedPeriodSales);
+  const currentProductNameSummary = countProductNames(realCurrentMonthSales);
+  const productComparisonNames = Array.from(new Set([...Object.keys(currentProductNameSummary), ...Object.keys(selectedProductNameSummary)])).sort((a, b) => a.localeCompare(b, 'ja'));
+
 
   const currentCampaigns = campaigns.filter((camp) => camp.yearMonth === `${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`);
   const selectedCampaigns = campaigns.filter((camp) => camp.yearMonth === `${selectedYear}-${selectedMonth.padStart(2, '0')}`);
@@ -395,7 +462,20 @@ export default function SalesPage() {
 
   // 各種ハンドラー
   const handleMemoChange = (id: number, newMemo: string) => {
-    setSales((current) => current.map((item) => (item.id === id ? { ...item, memo: newMemo } : item)));
+    setSales((current) => {
+      const next = current.map((item) =>
+        item.id === id ? { ...item, memo: newMemo } : item
+      );
+
+      try {
+        localStorage.setItem('golazo_sales_items', JSON.stringify(next));
+      } catch (error) {
+        console.warn('売上データの保存に失敗しました:', error);
+      }
+
+      return next;
+    });
+
     try {
       const saved = JSON.parse(localStorage.getItem('golazo_sales_memos') || '{}');
       saved[String(id)] = newMemo;
@@ -485,13 +565,69 @@ export default function SalesPage() {
     setIsCampaignModalOpen(false);
   };
 
-  const handleSquareSync = () => {
+  const handleSquareSync = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const selectedYearNumber = Number(selectedYear);
+      const startYear = Math.min(currentYear, selectedYearNumber);
+      const endYear = Math.max(currentYear, selectedYearNumber);
+      const startDate = `${startYear}-01-01`;
+      const endDate = `${endYear}-12-31`;
+
+      const response = await fetch('/api/sync/square-sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Square同期に失敗しました。');
+      }
+
+      const squareSales = Array.isArray(data.sales) ? data.sales.map(normalizeSquareSale) : [];
+
+      let savedMemos: Record<string, string> = {};
+      try {
+        const parsed = JSON.parse(localStorage.getItem('golazo_sales_memos') || '{}');
+        if (parsed && typeof parsed === 'object') savedMemos = parsed;
+      } catch (error) {
+        console.warn('保存済み売上備考の読み込みに失敗しました:', error);
+      }
+
+      const squareSalesWithMemos = squareSales.map((item: SaleItem) =>
+        Object.prototype.hasOwnProperty.call(savedMemos, String(item.id))
+          ? { ...item, memo: String(savedMemos[String(item.id)]) }
+          : item
+      );
+
+      setSales((current) => {
+        const manualSales = current.filter((item) => item.source !== 'square');
+        const next = [...squareSalesWithMemos, ...manualSales];
+        localStorage.setItem('golazo_sales_items', JSON.stringify(next));
+        return next;
+      });
+
+      alert(
+        data.source === 'db-only'
+          ? `保存済みSquare売上を${squareSales.length}件表示しました。`
+          : `Squareから新規・更新分を確認し、保存済み売上${squareSales.length}件を表示しました。`
+      );
+    } catch (error) {
+      console.error('Square売上同期エラー:', error);
+      alert(`Square同期に失敗しました。\n${error instanceof Error ? error.message : '通信エラー'}`);
+    } finally {
       setIsSyncing(false);
-      alert('Square APIとの手動同期が完了しました。最新データが反映されました。');
-    }, 1200);
-  };
+    }
+  };;;
+
+  // ページ表示時にSquareから最新売上を自動同期します。
+  useEffect(() => {
+    void handleSquareSync();
+    // 初回表示時のみ実行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openSaleEditor = (sale: SaleItem) => {
     setEditingSaleId(sale.id);
@@ -608,7 +744,7 @@ export default function SalesPage() {
               disabled={isSyncing}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>{isSyncing ? '⏳' : '🔄'}</span> {isSyncing ? '同期中...' : 'Square手動連携'}
+              <span>{isSyncing ? '⏳' : '🔄'}</span> {isSyncing ? '同期中...' : 'Square売上同期'}
             </button>
             <button
               onClick={() => setIsTrialModalOpen(true)}
@@ -781,29 +917,49 @@ export default function SalesPage() {
           </div>
         )}
 
+
         {/* 販売商品比較 */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
           <div>
             <h3 className="text-sm font-bold text-slate-800">🏷️ 販売商品比較</h3>
-            <p className="text-xs text-slate-500 mt-1">今月と比較年月の販売件数を同じ項目で並べて比較します。</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Squareに登録されている実際の商品・サービス名を、今月と比較年月で並べて比較します。
+            </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-left border-collapse">
+            <table className="w-full min-w-[700px] text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
-                  <th className="p-3">商品カテゴリ</th>
+                  <th className="p-3">商品名（Square）</th>
                   <th className="p-3">今月（{realCurrentYear}年{Number(realCurrentMonth)}月）</th>
                   <th className="p-3">比較年月（{selectedYear}年{selectedMonth}月）</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {(['月謝・コース', '回数券', '物販・プロテイン', '体験料'] as const).map((category) => (
-                  <tr key={category}>
-                    <td className="p-3 font-semibold text-slate-600">{category}</td>
-                    <td className="p-3 font-bold text-[#5e9bc4]">{currentProductSummary[category] || 0}件</td>
-                    <td className="p-3 font-bold text-slate-800">{selectedProductSummary[category] || 0}件</td>
+                {productSummaryNames.length > 0 ? (
+                  productSummaryNames.map((productName) => (
+                    <tr key={productName} className="hover:bg-slate-50/70">
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-700">{productName}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          GOLAZO分類：{currentProductSummary[productName]?.category || selectedProductSummary[productName]?.category || '未分類'}
+                        </div>
+                      </td>
+                      <td className="p-3 font-bold text-[#5e9bc4]">
+                        {currentProductSummary[productName]?.count || 0}件
+                      </td>
+                      <td className="p-3 font-bold text-slate-800">
+                        {selectedProductSummary[productName]?.count || 0}件
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="p-6 text-center text-sm text-slate-400">
+                      Squareの商品・サービスデータがありません。
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -931,14 +1087,14 @@ export default function SalesPage() {
                       <td className="p-3 text-center whitespace-nowrap">
                         <button
                           onClick={() => openTrialEditor(trial)}
-                          className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold transition p-1 mr-1"
+                          className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold transition p-1 mr-1 disabled:opacity-30 disabled:cursor-not-allowed"
                           title="修正"
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => handleDeleteTrial(trial.id)}
-                          className="text-slate-400 hover:text-red-500 text-xs font-bold transition p-1"
+                          className="text-slate-400 hover:text-red-500 text-xs font-bold transition p-1 disabled:opacity-30 disabled:cursor-not-allowed"
                           title="削除"
                         >
                           🗑️
@@ -998,6 +1154,7 @@ export default function SalesPage() {
                 <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   <th className="p-4">購入日</th>
                   <th className="p-4">商品購入者名</th>
+                  <th className="p-4">商品・サービス名（Square）</th>
                   <th className="p-4">カテゴリ</th>
                   <th className="p-4">担当者</th>
                   <th className="p-4">金額</th>
@@ -1012,6 +1169,22 @@ export default function SalesPage() {
                     <tr key={item.id} className="hover:bg-slate-50/80 transition">
                       <td className="p-4 text-slate-600 text-xs font-medium">{item.date}</td>
                       <td className="p-4 font-bold text-slate-800">{item.clientName}</td>
+                      <td className="p-4 text-xs">
+                        {item.source === 'square' ? (
+                          <div className="min-w-[220px]">
+                            <div className="font-semibold text-slate-700">
+                              {item.productNames?.length
+                                ? item.productNames.join(' / ')
+                                : item.productName || item.memo || 'Square取引'}
+                            </div>
+                            <div className="mt-1 text-[10px] text-emerald-600 font-bold">
+                              Square商品
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="p-4">
                         <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                           {item.category}
@@ -1023,18 +1196,19 @@ export default function SalesPage() {
                         </span>
                       </td>
                       <td className="p-4 font-bold text-slate-800">¥{item.amount.toLocaleString()}</td>
-                      <td className="p-4 text-xs text-slate-600">{item.paymentMethod}</td>
+                      <td className="p-4 text-xs text-slate-600">{item.paymentMethod}{item.source === 'square' && <span className="ml-2 text-[10px] text-emerald-600 font-bold">Square自動</span>}</td>
                       <td className="p-4 text-xs">
-                        <input
-                          type="text"
+                        <textarea
+                          rows={2}
                           value={item.memo}
                           onChange={(e) => handleMemoChange(item.id, e.target.value)}
                           placeholder="メモを入力..."
-                          className="w-full px-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5e9bc4]"
+                          className="w-full min-w-[220px] md:min-w-[280px] px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs leading-5 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5e9bc4] resize-y"
                         />
                       </td>
                       <td className="p-4 text-center whitespace-nowrap">
                         <button
+                          disabled={item.source === 'square'}
                           onClick={() => openSaleEditor(item)}
                           className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold transition p-1 mr-1"
                           title="修正"
@@ -1042,6 +1216,7 @@ export default function SalesPage() {
                           ✏️
                         </button>
                         <button
+                          disabled={item.source === 'square'}
                           onClick={() => handleDeleteSale(item.id)}
                           className="text-slate-400 hover:text-red-500 text-xs font-bold transition p-1"
                           title="削除"
@@ -1053,7 +1228,7 @@ export default function SalesPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="p-8 text-center text-slate-400 text-sm">
                       該当する売上データが見つかりませんでした。
                     </td>
                   </tr>
@@ -1119,6 +1294,7 @@ export default function SalesPage() {
                   >
                     <option value="TAKA">TAKA</option>
                     <option value="NANA">NANA</option>
+                    <option value="未設定">未設定</option>
                   </select>
                 </div>
               </div>
