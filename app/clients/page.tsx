@@ -63,6 +63,9 @@ interface Parent {
   name: string;
   kana: string;
   phone: string;
+  email?: string;
+  birthday?: string;
+  squareUpdatedAt?: string;
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
 }
@@ -252,6 +255,15 @@ export default function ClientsPage() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false); // Square同期中のローディング状態
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
+  const [isParentChildModalOpen, setIsParentChildModalOpen] = useState(false);
+  const [isChildFormOpen, setIsChildFormOpen] = useState(false);
+  const [editingChildId, setEditingChildId] = useState<string | null>(null);
+  const [childFormParentId, setChildFormParentId] = useState('');
+  const [childFormName, setChildFormName] = useState('');
+  const [childFormKana, setChildFormKana] = useState('');
+  const [childFormBirthdate, setChildFormBirthdate] = useState('');
+  const [childFormMemo, setChildFormMemo] = useState('');
+
   // 顧客カルテのデータをブラウザに保存します。
   // 写真を含む受講生データはlocalStorageではなくIndexedDBへ保存します。
   useEffect(() => {
@@ -362,6 +374,51 @@ export default function ClientsPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
+  // Square顧客情報自動同期（Square顧客IDを主キー）
+  // ---------------------------------------------------------------------------
+  const syncSquareCustomers = async (showAlert = false) => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const response = await fetch('/api/sync/square-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Square顧客情報の同期に失敗しました。');
+      const squareCustomers = Array.isArray(data.customers) ? data.customers : [];
+      let added = 0;
+      let updated = 0;
+      setParents(prev => {
+        const next = [...prev];
+        const byId = new Map(next.filter(p => p.squareCustomerId).map(p => [String(p.squareCustomerId), p]));
+        squareCustomers.forEach((customer: any) => {
+          const squareId = String(customer.id || '').trim();
+          if (!squareId) return;
+          const fullName = String(customer.full_name || [customer.family_name, customer.given_name].filter(Boolean).join(' ')).trim();
+          const existing = byId.get(squareId);
+          if (existing) {
+            existing.name = fullName || existing.name;
+            existing.kana = String(customer.kana || '').trim() || existing.kana;
+            existing.phone = String(customer.phone_number || '').trim() || existing.phone;
+            existing.email = String(customer.email_address || '').trim() || existing.email;
+            existing.birthday = String(customer.birthday || '').trim() || existing.birthday;
+            existing.squareUpdatedAt = String(customer.updated_at || '').trim() || existing.squareUpdatedAt;
+            updated += 1;
+          } else {
+            const parent: Parent = { id: `square-${squareId}`, squareCustomerId: squareId, name: fullName || `Square顧客 ${squareId.slice(0, 8)}`, kana: String(customer.kana || '').trim(), phone: String(customer.phone_number || '').trim(), email: String(customer.email_address || '').trim() || undefined, birthday: String(customer.birthday || '').trim() || undefined, squareUpdatedAt: String(customer.updated_at || '').trim() || undefined, ticketRemaining: 0, ticketsHistory: [] };
+            next.push(parent); byId.set(squareId, parent); added += 1;
+          }
+        });
+        return next;
+      });
+      if (showAlert) alert(`Square顧客情報を同期しました。\n取得: ${squareCustomers.length}名\n新規追加: ${added}名\n既存更新: ${updated}名`);
+    } catch (error) {
+      console.error('Square顧客情報同期エラー:', error);
+      if (showAlert) alert(`Square顧客情報の同期に失敗しました。\n${error instanceof Error ? error.message : '通信エラー'}`);
+    } finally { setIsSyncing(false); }
+  };
+
+  useEffect(() => { if (isLoaded) void syncSquareCustomers(false); }, [isLoaded]);
+
+  // ---------------------------------------------------------------------------
   // Squareデータ同期ハンドラー
   // ---------------------------------------------------------------------------
   const handleSquareSync = async () => {
@@ -451,6 +508,16 @@ export default function ClientsPage() {
       }
     }
   };
+
+  const openAddChild = (parentId: string) => { setEditingChildId(null); setChildFormParentId(parentId); setChildFormName(''); setChildFormKana(''); setChildFormBirthdate(''); setChildFormMemo(''); setIsChildFormOpen(true); };
+  const openEditChild = (student: Student) => { setEditingChildId(student.id); setChildFormParentId(student.parentId); setChildFormName(student.name); setChildFormKana(student.kana); setChildFormBirthdate(student.birthdate); setChildFormMemo(student.memo); setIsChildFormOpen(true); };
+  const handleSaveChild = () => {
+    const name = childFormName.trim(); if (!name) return alert('子供のお名前を入力してください。'); if (!childFormParentId) return alert('保護者を選択してください。');
+    if (editingChildId) setStudents(prev => prev.map(s => s.id === editingChildId ? { ...s, parentId: childFormParentId, name, kana: childFormKana.trim(), birthdate: childFormBirthdate, memo: childFormMemo } : s));
+    else { const s: Student = { id: `s-${Date.now()}`, parentId: childFormParentId, name, kana: childFormKana.trim(), age: childFormBirthdate ? Math.max(0, new Date().getFullYear() - new Date(childFormBirthdate).getFullYear()) : 0, birthdate: childFormBirthdate, firstLessonDate: new Date().toISOString().split('T')[0], lastReservationDate: '', concern: '', target: '', memo: childFormMemo, physicalHistory: [], sessions: [] }; setStudents(prev => [...prev, s]); setSelectedStudentId(s.id); }
+    setIsChildFormOpen(false); alert(editingChildId ? '子供情報を更新しました。' : '子供を追加しました。');
+  };
+  const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの子供のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('子供を削除しました。'); };
 
   const handleAddSession = () => {
     if (!newSessionContent) return;
@@ -870,6 +937,8 @@ export default function ClientsPage() {
               />
             </div>
 
+            <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="w-full bg-white border border-sky-200 text-[#5e9bc4] hover:bg-sky-50 font-bold text-xs px-3 py-2.5 rounded-lg shadow-sm transition">👨‍👩‍👧‍👦 保護者・子供の紐付け管理</button>
+
             <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider px-1">受講生一覧 ({filteredStudents.length}名)</h3>
 
             <div className="space-y-2.5">
@@ -927,6 +996,8 @@ export default function ClientsPage() {
                     </span>
                   </div>
                 </div>
+
+                <button type="button" onClick={() => void syncSquareCustomers(true)} disabled={isSyncing} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50">🔄 {isSyncing ? 'Square顧客情報を同期中...' : 'Square顧客情報を同期'}</button>
 
                 {/* アラートバッジ群 */}
                 {currentAlerts.length > 0 && (
@@ -1632,6 +1703,8 @@ export default function ClientsPage() {
 
           </div>
         </div>
+        {isParentChildModalOpen && (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h3 className="font-bold text-slate-800">👨‍👩‍👧‍👦 保護者・子供の紐付け管理</h3><p className="text-[11px] text-slate-400 mt-1">Square顧客IDを基準に保護者を管理し、子供はGOLAZO側で追加・編集します。</p></div><div className="flex gap-2"><button type="button" onClick={() => void syncSquareCustomers(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold">🔄 Square同期</button><button type="button" onClick={() => setIsParentChildModalOpen(false)} className="text-slate-400 text-xl">×</button></div></div><div className="p-5 overflow-y-auto max-h-[75vh] space-y-3">{parents.map(parent => { const children=students.filter(s=>s.parentId===parent.id); return <div key={parent.id} className="border border-slate-200 rounded-xl p-4"><div className="flex justify-between items-center gap-3"><div><div className="font-bold text-slate-800">{parent.name} 様</div><div className="text-[10px] text-slate-400 font-mono mt-1">Square顧客ID: {parent.squareCustomerId || '未連携'}</div></div><button type="button" onClick={()=>openAddChild(parent.id)} className="bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold">＋ 子供を追加</button></div><div className="mt-3 space-y-2">{children.map(child=><div key={child.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center"><div><div className="font-bold text-xs">{child.name}</div><div className="text-[10px] text-slate-400">{child.kana || 'フリガナ未登録'} {child.birthdate && ` / ${child.birthdate}`}</div></div><div className="flex gap-2"><button type="button" onClick={()=>openEditChild(child)} className="text-xs text-sky-600">編集</button><button type="button" onClick={()=>handleDeleteChild(child.id)} className="text-xs text-rose-500">削除</button></div></div>)}{!children.length && <div className="text-[10px] text-slate-400">子供はまだ登録されていません。</div>}</div></div>})}</div></div></div>)}
+        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ 子供情報を編集' : '＋ 子供を追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">保護者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">子供のお名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
       </main>
     </div>
   );
