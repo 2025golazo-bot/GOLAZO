@@ -72,7 +72,7 @@ interface Parent {
 
 interface Student {
   id: string;
-  parentId: string; // 1:N 構造（保護者ID）
+  parentId: string; // 1:N 構造（代表者ID）
   name: string;
   kana: string;
   age: number;
@@ -152,7 +152,7 @@ const saveStudentsToIndexedDB = async (students: Student[]): Promise<void> => {
 };
 
 export default function ClientsPage() {
-  // 保護者データ
+  // 代表者データ
   const [parents, setParents] = useState<Parent[]>([
     {
       id: 'p-101',
@@ -321,11 +321,11 @@ export default function ClientsPage() {
       console.error('顧客カルテデータの保存に失敗しました:', error);
     });
 
-    // 保護者データは従来どおりlocalStorageへ保存
+    // 代表者データは従来どおりlocalStorageへ保存
     try {
       localStorage.setItem('golazo-clients-parents-v2', JSON.stringify(parents));
     } catch (error) {
-      console.error('保護者データの保存に失敗しました:', error);
+      console.error('代表者データの保存に失敗しました:', error);
     }
   }, [students, parents, isLoaded]);
 
@@ -423,7 +423,7 @@ export default function ClientsPage() {
   // ---------------------------------------------------------------------------
   const handleSquareSync = async () => {
     if (!currentParent.squareCustomerId) {
-      alert('この保護者にSquare顧客IDが設定されていません。');
+      alert('この代表者にSquare顧客IDが設定されていません。');
       return;
     }
 
@@ -512,12 +512,12 @@ export default function ClientsPage() {
   const openAddChild = (parentId: string) => { setEditingChildId(null); setChildFormParentId(parentId); setChildFormName(''); setChildFormKana(''); setChildFormBirthdate(''); setChildFormMemo(''); setIsChildFormOpen(true); };
   const openEditChild = (student: Student) => { setEditingChildId(student.id); setChildFormParentId(student.parentId); setChildFormName(student.name); setChildFormKana(student.kana); setChildFormBirthdate(student.birthdate); setChildFormMemo(student.memo); setIsChildFormOpen(true); };
   const handleSaveChild = () => {
-    const name = childFormName.trim(); if (!name) return alert('子供のお名前を入力してください。'); if (!childFormParentId) return alert('保護者を選択してください。');
+    const name = childFormName.trim(); if (!name) return alert('受講生のお名前を入力してください。'); if (!childFormParentId) return alert('代表者を選択してください。');
     if (editingChildId) setStudents(prev => prev.map(s => s.id === editingChildId ? { ...s, parentId: childFormParentId, name, kana: childFormKana.trim(), birthdate: childFormBirthdate, memo: childFormMemo } : s));
     else { const s: Student = { id: `s-${Date.now()}`, parentId: childFormParentId, name, kana: childFormKana.trim(), age: childFormBirthdate ? Math.max(0, new Date().getFullYear() - new Date(childFormBirthdate).getFullYear()) : 0, birthdate: childFormBirthdate, firstLessonDate: new Date().toISOString().split('T')[0], lastReservationDate: '', concern: '', target: '', memo: childFormMemo, physicalHistory: [], sessions: [] }; setStudents(prev => [...prev, s]); setSelectedStudentId(s.id); }
-    setIsChildFormOpen(false); alert(editingChildId ? '子供情報を更新しました。' : '子供を追加しました。');
+    setIsChildFormOpen(false); alert(editingChildId ? '受講生情報を更新しました。' : '受講生を追加しました。');
   };
-  const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの子供のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('子供を削除しました。'); };
+  const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの受講生のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('受講生を削除しました。'); };
 
   const handleAddSession = () => {
     if (!newSessionContent) return;
@@ -937,7 +937,7 @@ export default function ClientsPage() {
               />
             </div>
 
-            <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="w-full bg-white border border-sky-200 text-[#5e9bc4] hover:bg-sky-50 font-bold text-xs px-3 py-2.5 rounded-lg shadow-sm transition">👨‍👩‍👧‍👦 保護者・子供の紐付け管理</button>
+            <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="w-full bg-white border border-sky-200 text-[#5e9bc4] hover:bg-sky-50 font-bold text-xs px-3 py-2.5 rounded-lg shadow-sm transition">👥 グループ管理</button>
 
             <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider px-1">受講生一覧 ({filteredStudents.length}名)</h3>
 
@@ -959,7 +959,7 @@ export default function ClientsPage() {
                       <span className={`font-bold ${isSelected ? 'text-[#5e9bc4]' : 'text-slate-800'}`}>{student.name}</span>
                       <span className="text-xs font-semibold text-[#5e9bc4] bg-sky-100/60 px-2 py-0.5 rounded-full">{student.age}歳</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">保護者: {parent?.name}</p>
+                    <p className="text-[11px] text-slate-500 mt-1">代表者: {parent?.name}</p>
                     
                     {badges.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
@@ -978,6 +978,26 @@ export default function ClientsPage() {
 
           {/* 右カラム：メインコンテンツ */}
           <div className="md:col-span-3 space-y-5">
+            {/* グループカルテ概要 */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-slate-400">👥 グループカルテ</div>
+                  <div className="text-lg font-bold text-slate-800 mt-1">代表者：{currentParent.name} 様</div>
+                  <div className="text-[11px] text-slate-400 mt-1 font-mono">Square顧客ID: {currentParent.squareCustomerId || '未連携'}</div>
+                </div>
+                <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-2 rounded-lg">👥 グループを管理</button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {siblingStudents.map(member => (
+                  <button key={member.id} type="button" onClick={() => handleSelectStudent(member.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${member.id === currentStudent.id ? 'bg-[#5e9bc4] text-white border-[#5e9bc4]' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-200'}`}>
+                    {member.name}
+                  </button>
+                ))}
+                {siblingStudents.length === 0 && <span className="text-xs text-slate-400">受講生未登録</span>}
+              </div>
+            </div>
+
             {/* 顧客基本情報ヘッダー */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -989,7 +1009,7 @@ export default function ClientsPage() {
                   </h2>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
                     <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-semibold">
-                      保護者: {currentParent.name} 様 ({currentParent.phone})
+                      代表者: {currentParent.name} 様 ({currentParent.phone})
                     </span>
                     <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
                       <span>🎟️</span> 回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
@@ -1011,10 +1031,10 @@ export default function ClientsPage() {
                 )}
               </div>
 
-              {/* 兄弟リンク */}
+              {/* グループリンク */}
               {siblingStudents.length > 1 && (
                 <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
-                  <span className="text-xs text-amber-900 font-bold">👨‍👩‍👧‍👦 ご兄弟アカウント</span>
+                  <span className="text-xs text-amber-900 font-bold">👥 グループ</span>
                   <div className="flex gap-1.5">
                     {siblingStudents.map(sib => (
                       <button
@@ -1645,7 +1665,7 @@ export default function ClientsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">保護者電話番号</label>
+                    <label className="block text-slate-500 font-semibold mb-1">代表者電話番号</label>
                     <input
                       type="text"
                       value={editForm.phone}
@@ -1703,8 +1723,8 @@ export default function ClientsPage() {
 
           </div>
         </div>
-        {isParentChildModalOpen && (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h3 className="font-bold text-slate-800">👨‍👩‍👧‍👦 保護者・子供の紐付け管理</h3><p className="text-[11px] text-slate-400 mt-1">Square顧客IDを基準に保護者を管理し、子供はGOLAZO側で追加・編集します。</p></div><div className="flex gap-2"><button type="button" onClick={() => void syncSquareCustomers(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold">🔄 Square同期</button><button type="button" onClick={() => setIsParentChildModalOpen(false)} className="text-slate-400 text-xl">×</button></div></div><div className="p-5 overflow-y-auto max-h-[75vh] space-y-3">{parents.map(parent => { const children=students.filter(s=>s.parentId===parent.id); return <div key={parent.id} className="border border-slate-200 rounded-xl p-4"><div className="flex justify-between items-center gap-3"><div><div className="font-bold text-slate-800">{parent.name} 様</div><div className="text-[10px] text-slate-400 font-mono mt-1">Square顧客ID: {parent.squareCustomerId || '未連携'}</div></div><button type="button" onClick={()=>openAddChild(parent.id)} className="bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold">＋ 子供を追加</button></div><div className="mt-3 space-y-2">{children.map(child=><div key={child.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center"><div><div className="font-bold text-xs">{child.name}</div><div className="text-[10px] text-slate-400">{child.kana || 'フリガナ未登録'} {child.birthdate && ` / ${child.birthdate}`}</div></div><div className="flex gap-2"><button type="button" onClick={()=>openEditChild(child)} className="text-xs text-sky-600">編集</button><button type="button" onClick={()=>handleDeleteChild(child.id)} className="text-xs text-rose-500">削除</button></div></div>)}{!children.length && <div className="text-[10px] text-slate-400">子供はまだ登録されていません。</div>}</div></div>})}</div></div></div>)}
-        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ 子供情報を編集' : '＋ 子供を追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">保護者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">子供のお名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
+        {isParentChildModalOpen && (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h3 className="font-bold text-slate-800">👥 グループ管理</h3><p className="text-[11px] text-slate-400 mt-1">Squareのお客様情報を代表者として取り込み、GOLAZO側で受講生をグループとして紐付け・管理します。</p></div><div className="flex gap-2"><button type="button" onClick={() => void syncSquareCustomers(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold">🔄 Square同期</button><button type="button" onClick={() => setIsParentChildModalOpen(false)} className="text-slate-400 text-xl">×</button></div></div><div className="p-5 overflow-y-auto max-h-[75vh] space-y-3">{parents.map(parent => { const children=students.filter(s=>s.parentId===parent.id); return <div key={parent.id} className="border border-slate-200 rounded-xl p-4"><div className="flex justify-between items-center gap-3"><div><div className="font-bold text-slate-800">{parent.name} 様</div><div className="text-[10px] text-slate-400 font-mono mt-1">Square顧客ID: {parent.squareCustomerId || '未連携'}</div></div><button type="button" onClick={()=>openAddChild(parent.id)} className="bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold">＋ グループメンバーを追加</button></div><div className="mt-3 space-y-2">{children.map(child=><div key={child.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center"><div><div className="font-bold text-xs">{child.name}</div><div className="text-[10px] text-slate-400">{child.kana || 'フリガナ未登録'} {child.birthdate && ` / ${child.birthdate}`}</div></div><div className="flex gap-2"><button type="button" onClick={()=>openEditChild(child)} className="text-xs text-sky-600">編集</button><button type="button" onClick={()=>handleDeleteChild(child.id)} className="text-xs text-rose-500">削除</button></div></div>)}{!children.length && <div className="text-[10px] text-slate-400">受講生はまだ登録されていません。</div>}</div></div>})}</div></div></div>)}
+        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
       </main>
     </div>
   );
