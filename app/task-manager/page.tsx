@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import Header from '@/components/Header';
 
 type Assignee = 'TAKA' | 'NANA';
+type RepeatMode = 'none' | 'weekly' | 'monthly';
+type RepeatConfig = { days: number[]; endDate: string | null };
 
 type TaskItem = {
   id: string;
@@ -15,7 +17,9 @@ type TaskItem = {
   category: string; // SNS / 顧客フォロー / 事務 / その他
   priority: boolean; // 重要フラグ（赤強調・重要ボタン）
   completed: boolean;
-  repeat: 'none' | 'weekly' | 'monthly';
+  repeat: RepeatMode;
+  repeatConfig?: RepeatConfig;
+  repeatGroupId?: string;
   linkedMinutesId?: string;
 };
 
@@ -47,6 +51,29 @@ const CAMPAIGN_PRESETS = [
   '報告書作成'
 ];
 
+type MinutesTask = {
+  title: string;
+  assignee: Assignee;
+  dueDate: string;
+  priority: boolean;
+};
+
+type TaskTemplate = {
+  id: string;
+  category: string;
+  title: string;
+  assignee: Assignee;
+  priority: boolean;
+};
+
+const MINUTES_CATEGORIES = ['週MT', '月MT', 'キャンペーン', 'その他'];
+const DEFAULT_TEMPLATES: Record<string, MinutesTask[]> = {
+  'キャンペーン': CAMPAIGN_PRESETS.map(title => ({ title, assignee: 'TAKA', dueDate: '', priority: false })),
+  '週MT': [],
+  '月MT': [],
+  'その他': [],
+};
+
 export default function TaskManagerPage() {
   const [activeTab, setActiveTab] = useState<'task' | 'minutes' | 'calendar'>('task');
   const [selectedYearMonth, setSelectedYearMonth] = useState<string>(
@@ -65,7 +92,7 @@ export default function TaskManagerPage() {
     const loadTasks = async () => {
       const { data, error } = await supabase
         .from('tasks')
-        .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -85,6 +112,8 @@ export default function TaskManagerPage() {
         priority: Boolean(row.priority),
         completed: Boolean(row.completed),
         repeat: row.repeat === 'weekly' || row.repeat === 'monthly' ? row.repeat : 'none',
+        repeatConfig: row.repeat_config ?? undefined,
+        repeatGroupId: row.repeat_group_id ? String(row.repeat_group_id) : undefined,
         linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
       }));
 
@@ -115,7 +144,7 @@ export default function TaskManagerPage() {
         const { data: seededData, error: seedError } = await supabase
           .from('tasks')
           .insert(seedTasks)
-          .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+          .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
           .order('created_at', { ascending: false });
 
         if (seedError) {
@@ -150,6 +179,138 @@ export default function TaskManagerPage() {
     };
   }, [supabase]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadTemplates = async () => {
+      const { data, error } = await supabase
+        .from('task_templates')
+        .select('id, category, title, assignee, priority, created_at')
+        .order('created_at', { ascending: true });
+      if (error) {
+        console.warn('定型タスク読み込みエラー:', error.message);
+        return;
+      }
+      if (cancelled) return;
+      const loaded = (data ?? []).map(row => ({
+        id: String(row.id),
+        category: row.category ?? 'その他',
+        title: row.title ?? '',
+        assignee: row.assignee === 'NANA' ? 'NANA' as Assignee : 'TAKA' as Assignee,
+        priority: Boolean(row.priority),
+      }));
+      if (loaded.length > 0) {
+        setTaskTemplates(loaded);
+      } else {
+        const seed = CAMPAIGN_PRESETS.map(title => ({
+          category: 'キャンペーン', title, assignee: 'TAKA', priority: false
+        }));
+        const { data: seeded, error: seedError } = await supabase
+          .from('task_templates').insert(seed)
+          .select('id, category, title, assignee, priority');
+        if (!seedError && seeded) {
+          setTaskTemplates(seeded.map(row => ({
+            id: String(row.id), category: row.category ?? 'キャンペーン',
+            title: row.title ?? '', assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
+            priority: Boolean(row.priority)
+          })));
+        }
+      }
+    };
+    loadTemplates();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
+  useEffect(() => {
+    const ensureRecurringTasksForMonth = async () => {
+      if (tasks.length === 0) return;
+      const masters = tasks.filter(t => t.repeat !== 'none' && t.repeatGroupId && t.repeatConfig);
+      if (masters.length === 0) return;
+
+      const [year, month] = selectedYearMonth.split('-').map(Number);
+      const monthStart = new Date(year, month - 1, 1);
+      const monthEnd = new Date(year, month, 0);
+      const from = `${selectedYearMonth}-01`;
+      const to = `${selectedYearMonth}-${String(monthEnd.getDate()).padStart(2, '0')}`;
+
+      const { data: existingRows, error } = await supabase
+        .from('tasks')
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
+        .gte('due_date', from)
+        .lte('due_date', to);
+
+      if (error) {
+        console.warn('繰り返し予定の確認に失敗しました:', error.message);
+        return;
+      }
+
+      const existing = new Set((existingRows ?? []).map((row) =>
+        `${row.repeat_group_id ?? ''}:${row.due_date}`
+      ));
+      const payloads: Record<string, unknown>[] = [];
+
+      for (const master of masters) {
+        const config = master.repeatConfig;
+        if (!config || !master.repeatGroupId) continue;
+
+        for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().slice(0, 10);
+          if (dateStr < master.dueDate) continue;
+          if (config.endDate && dateStr > config.endDate) continue;
+          const matches = master.repeat === 'weekly'
+            ? config.days.includes(d.getDay())
+            : config.days.includes(d.getDate());
+          if (!matches || dateStr === master.dueDate) continue;
+
+          const key = `${master.repeatGroupId}:${dateStr}`;
+          if (existing.has(key)) continue;
+
+          payloads.push({
+            title: master.title,
+            assignee: master.assignee,
+            due_date: dateStr,
+            category: master.category,
+            priority: master.priority,
+            completed: false,
+            repeat: 'none',
+            repeat_config: config,
+            repeat_group_id: master.repeatGroupId,
+            linked_minutes_id: master.linkedMinutesId ?? null,
+          });
+          existing.add(key);
+        }
+      }
+
+      if (payloads.length === 0) return;
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('tasks')
+        .insert(payloads)
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at');
+
+      if (insertError) {
+        console.warn('繰り返し予定の自動追加に失敗しました:', insertError.message);
+        return;
+      }
+
+      const added: TaskItem[] = (inserted ?? []).map(row => ({
+        id: String(row.id),
+        title: row.title ?? '',
+        assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
+        dueDate: row.due_date ?? '',
+        category: row.category ?? 'その他',
+        priority: Boolean(row.priority),
+        completed: Boolean(row.completed),
+        repeat: 'none',
+        repeatConfig: row.repeat_config ?? undefined,
+        repeatGroupId: row.repeat_group_id ? String(row.repeat_group_id) : undefined,
+        linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
+      }));
+      setTasks(prev => [...added, ...prev]);
+    };
+
+    ensureRecurringTasksForMonth();
+  }, [selectedYearMonth, supabase, tasks]);
+
   const [taskSearch, setTaskSearch] = useState('');
   const [taskCategoryFilter, setTaskCategoryFilter] = useState('all');
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('all');
@@ -174,6 +335,38 @@ export default function TaskManagerPage() {
 
   const [minutesSearch, setMinutesSearch] = useState('');
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadMinutes = async () => {
+      const { data, error } = await supabase
+        .from('minutes')
+        .select('id, date, title, category, target_amount, target_count, sales_progress, target_achievement_rate, campaign_progress, tasks, notes, created_at')
+        .order('date', { ascending: false });
+      if (error) {
+        console.warn('議事録読み込みエラー:', error.message);
+        return;
+      }
+      if (cancelled) return;
+      const loaded: MinutesItem[] = (data ?? []).map(row => ({
+        id: Number(row.id), date: row.date ?? '', title: row.title ?? '',
+        category: row.category ?? 'その他',
+        targetAmount: row.target_amount == null ? undefined : Number(row.target_amount),
+        targetCount: row.target_count == null ? undefined : Number(row.target_count),
+        salesProgress: row.sales_progress ?? '',
+        targetAchievementRate: row.target_achievement_rate ?? '',
+        campaignProgress: row.campaign_progress ?? '',
+        tasks: Array.isArray(row.tasks) ? row.tasks.map((t: MinutesTask) => ({
+          title: t.title ?? '', assignee: t.assignee === 'NANA' ? 'NANA' : 'TAKA',
+          dueDate: t.dueDate ?? '', priority: Boolean(t.priority)
+        })) : [],
+        notes: row.notes ?? ''
+      }));
+      if (!cancelled && loaded.length > 0) setMinutesList(loaded);
+    };
+    loadMinutes();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
   // --- モーダル制御 ---
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
@@ -188,7 +381,10 @@ export default function TaskManagerPage() {
   const [tFormCategory, setTFormCategory] = useState('SNS');
   const [tFormOtherCategory, setTFormOtherCategory] = useState('');
   const [tFormPriority, setTFormPriority] = useState(false);
-  const [tFormRepeat, setTFormRepeat] = useState<'none' | 'weekly' | 'monthly'>('none');
+  const [tFormRepeat, setTFormRepeat] = useState<RepeatMode>('none');
+  const [tFormRepeatDays, setTFormRepeatDays] = useState<number[]>([]);
+  const [tFormRepeatEndDate, setTFormRepeatEndDate] = useState('');
+  const [tFormRepeatNoEnd, setTFormRepeatNoEnd] = useState(true);
 
   // 議事録用フォームステート
   const [mFormDate, setMFormDate] = useState(new Date().toISOString().split('T')[0]);
@@ -201,12 +397,14 @@ export default function TaskManagerPage() {
   const [mFormTargetAchievementRate, setMFormTargetAchievementRate] = useState('');
   const [mFormCampaignProgress, setMFormCampaignProgress] = useState('');
   const [mFormNotes, setMFormNotes] = useState('');
-  const [mFormTasks, setMFormTasks] = useState<{
-    title: string;
-    assignee: Assignee;
-    dueDate: string;
-    priority: boolean;
-  }[]>([]);
+  const [mFormTasks, setMFormTasks] = useState<MinutesTask[]>([]);
+  const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateCategory, setTemplateCategory] = useState('週MT');
+  const [templateTitle, setTemplateTitle] = useState('');
+  const [templateAssignee, setTemplateAssignee] = useState<Assignee>('TAKA');
+  const [templatePriority, setTemplatePriority] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // タスクハンドラー
@@ -220,6 +418,9 @@ export default function TaskManagerPage() {
     setTFormOtherCategory('');
     setTFormPriority(false);
     setTFormRepeat('none');
+    setTFormRepeatDays([]);
+    setTFormRepeatEndDate('');
+    setTFormRepeatNoEnd(true);
     setIsTaskModalOpen(true);
   };
 
@@ -237,6 +438,13 @@ export default function TaskManagerPage() {
     }
     setTFormPriority(task.priority);
     setTFormRepeat(task.repeat);
+    setTFormRepeatDays(task.repeatConfig?.days ?? (
+      task.repeat === 'weekly'
+        ? [new Date(`${task.dueDate}T00:00:00`).getDay()]
+        : task.repeat === 'monthly' ? [Number(task.dueDate.slice(8, 10))] : []
+    ));
+    setTFormRepeatEndDate(task.repeatConfig?.endDate ?? '');
+    setTFormRepeatNoEnd(!task.repeatConfig?.endDate);
     setIsTaskModalOpen(true);
   };
 
@@ -244,10 +452,26 @@ export default function TaskManagerPage() {
     e.preventDefault();
     if (!tFormTitle.trim()) return;
 
-    const finalCategory =
-      tFormCategory === 'その他'
-        ? (tFormOtherCategory.trim() || 'その他')
-        : tFormCategory;
+    const finalCategory = tFormCategory === 'その他'
+      ? (tFormOtherCategory.trim() || 'その他')
+      : tFormCategory;
+
+    if (tFormRepeat !== 'none' && tFormRepeatDays.length === 0) {
+      alert(tFormRepeat === 'weekly' ? '繰り返す曜日を1つ以上選択してください。' : '繰り返す日を1つ以上選択してください。');
+      return;
+    }
+    if (tFormRepeat !== 'none' && !tFormRepeatNoEnd && !tFormRepeatEndDate) {
+      alert('繰り返しの終了日を指定してください。');
+      return;
+    }
+
+    const repeatConfig: RepeatConfig = {
+      days: [...tFormRepeatDays].sort((a, b) => a - b),
+      endDate: tFormRepeat === 'none' || tFormRepeatNoEnd ? null : tFormRepeatEndDate,
+    };
+    const repeatGroupId = tFormRepeat !== 'none'
+      ? (editingTask?.repeatGroupId || crypto.randomUUID())
+      : null;
 
     const taskPayload = {
       title: tFormTitle.trim(),
@@ -256,25 +480,21 @@ export default function TaskManagerPage() {
       category: finalCategory,
       priority: tFormPriority,
       repeat: tFormRepeat,
+      repeat_config: repeatConfig,
+      repeat_group_id: repeatGroupId,
     };
 
     if (editingTask) {
-      // 既存タスクをSupabaseで上書き更新
       const { data, error } = await supabase
         .from('tasks')
         .update(taskPayload)
         .eq('id', editingTask.id)
-        .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
         .single();
 
-      if (error) {
+      if (error || !data) {
         console.error('タスク更新エラー:', error);
-        alert(`タスクの更新に失敗しました。\\n${error.message}`);
-        return;
-      }
-
-      if (!data) {
-        alert('タスクの更新結果を取得できませんでした。');
+        alert(`タスクの更新に失敗しました。\n${error?.message ?? ''}`);
         return;
       }
 
@@ -287,29 +507,21 @@ export default function TaskManagerPage() {
         priority: Boolean(data.priority),
         completed: Boolean(data.completed),
         repeat: data.repeat === 'weekly' || data.repeat === 'monthly' ? data.repeat : 'none',
+        repeatConfig: data.repeat_config ?? undefined,
+        repeatGroupId: data.repeat_group_id ? String(data.repeat_group_id) : undefined,
         linkedMinutesId: data.linked_minutes_id ? String(data.linked_minutes_id) : undefined,
       };
-
       setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t));
     } else {
-      // 新規タスクをSupabaseへ保存
       const { data, error } = await supabase
         .from('tasks')
-        .insert({
-          ...taskPayload,
-          completed: false,
-        })
-        .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+        .insert({ ...taskPayload, completed: false })
+        .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
         .single();
 
-      if (error) {
+      if (error || !data) {
         console.error('タスク登録エラー:', error);
-        alert(`タスクの保存に失敗しました。\\n${error.message}`);
-        return;
-      }
-
-      if (!data) {
-        alert('保存したタスクを取得できませんでした。');
+        alert(`タスクの保存に失敗しました。\n${error?.message ?? ''}`);
         return;
       }
 
@@ -322,30 +534,94 @@ export default function TaskManagerPage() {
         priority: Boolean(data.priority),
         completed: Boolean(data.completed),
         repeat: data.repeat === 'weekly' || data.repeat === 'monthly' ? data.repeat : 'none',
+        repeatConfig: data.repeat_config ?? undefined,
+        repeatGroupId: data.repeat_group_id ? String(data.repeat_group_id) : undefined,
         linkedMinutesId: data.linked_minutes_id ? String(data.linked_minutes_id) : undefined,
       };
-
       setTasks(prev => [newTaskItem, ...prev]);
+
+      // 期限なしは登録時に1年分を先行登録します。以降の月を表示した際に不足分を自動追加します。
+      // 将来の月を開いた際の自動補充は次段階で追加できます。
+      if (tFormRepeat !== 'none' && repeatGroupId) {
+        const start = new Date(`${tFormDueDate}T00:00:00`);
+        const end = repeatConfig.endDate
+          ? new Date(`${repeatConfig.endDate}T00:00:00`)
+          : new Date(start.getFullYear() + 1, start.getMonth(), start.getDate());
+        const occurrencePayloads: Record<string, unknown>[] = [];
+
+        for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().slice(0, 10);
+          if (dateStr === tFormDueDate) continue;
+          const matches = tFormRepeat === 'weekly'
+            ? repeatConfig.days.includes(d.getDay())
+            : repeatConfig.days.includes(d.getDate());
+          if (!matches) continue;
+          occurrencePayloads.push({
+            title: tFormTitle.trim(),
+            assignee: tFormAssignee,
+            due_date: dateStr,
+            category: finalCategory,
+            priority: tFormPriority,
+            completed: false,
+            repeat: 'none',
+            repeat_config: repeatConfig,
+            repeat_group_id: repeatGroupId,
+          });
+        }
+
+        if (occurrencePayloads.length > 0) {
+          const { data: occurrenceData, error: occurrenceError } = await supabase
+            .from('tasks')
+            .insert(occurrencePayloads)
+            .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at');
+
+          if (occurrenceError) {
+            console.error('繰り返しタスク登録エラー:', occurrenceError);
+            alert(`繰り返しタスクの一部登録に失敗しました。\n${occurrenceError.message}`);
+          } else {
+            const occurrenceTasks: TaskItem[] = (occurrenceData ?? []).map(row => ({
+              id: String(row.id),
+              title: row.title ?? '',
+              assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
+              dueDate: row.due_date ?? '',
+              category: row.category ?? 'その他',
+              priority: Boolean(row.priority),
+              completed: Boolean(row.completed),
+              repeat: 'none',
+              repeatConfig: row.repeat_config ?? undefined,
+              repeatGroupId: row.repeat_group_id ? String(row.repeat_group_id) : undefined,
+              linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
+            }));
+            setTasks(prev => [...occurrenceTasks, ...prev]);
+          }
+        }
+      }
     }
 
     setIsTaskModalOpen(false);
   };
 
   const handleDeleteTask = async (id: string) => {
-    if (!confirm('このタスクを削除してもよろしいですか？')) return;
+    const target = tasks.find(t => t.id === id);
+    if (!target) return;
+    const isSeries = Boolean(target.repeatGroupId);
+    if (!confirm(isSeries
+      ? 'この繰り返しタスクを削除しますか？\n同じ繰り返しグループの予定も削除されます。'
+      : 'このタスクを削除してもよろしいですか？')) return;
 
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', id);
+    const { error } = isSeries
+      ? await supabase.from('tasks').delete().eq('repeat_group_id', target.repeatGroupId)
+      : await supabase.from('tasks').delete().eq('id', id);
 
     if (error) {
       console.error('タスク削除エラー:', error);
-      alert(`タスクの削除に失敗しました。\\n${error.message}`);
+      alert(`タスクの削除に失敗しました。\n${error.message}`);
       return;
     }
 
-    setTasks(prev => prev.filter(t => t.id !== id));
+    setTasks(prev => isSeries
+      ? prev.filter(t => t.repeatGroupId !== target.repeatGroupId)
+      : prev.filter(t => t.id !== id));
   };
 
   const toggleComplete = async (id: string) => {
@@ -358,7 +634,7 @@ export default function TaskManagerPage() {
       .from('tasks')
       .update({ completed: nextCompleted })
       .eq('id', id)
-      .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+      .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
       .single();
 
     if (error) {
@@ -427,27 +703,89 @@ export default function TaskManagerPage() {
     setIsMinutesModalOpen(true);
   };
 
+  const getTemplatesForCategory = (category: string): MinutesTask[] => {
+    const dbTemplates = taskTemplates.filter(t => t.category === category);
+    const source = dbTemplates.length > 0 ? dbTemplates : (DEFAULT_TEMPLATES[category] ?? []);
+    return source.map(t => ({
+      title: t.title, assignee: t.assignee, dueDate: mFormDate, priority: t.priority
+    }));
+  };
+
   const handleCategoryChangeForMinutes = (cat: string) => {
     setMFormCategory(cat);
-    if (cat === 'キャンペーン' && mFormTasks.length === 0) {
-      const presetTasks = CAMPAIGN_PRESETS.map(title => ({
-        title,
-        assignee: 'TAKA' as Assignee,
-        dueDate: mFormDate,
-        priority: false
-      }));
-      setMFormTasks(presetTasks);
+    if (mFormTasks.length === 0) {
+      const presetTasks = getTemplatesForCategory(cat);
+      if (presetTasks.length > 0) setMFormTasks(presetTasks);
     }
   };
 
   const handleAddPresetToMinutes = () => {
-    const presetTasks = CAMPAIGN_PRESETS.map(title => ({
-      title,
-      assignee: 'TAKA' as Assignee,
-      dueDate: mFormDate,
-      priority: false
-    }));
-    setMFormTasks([...mFormTasks, ...presetTasks]);
+    const presetTasks = getTemplatesForCategory(mFormCategory);
+    if (presetTasks.length > 0) setMFormTasks([...mFormTasks, ...presetTasks]);
+  };
+
+  const handleOpenTemplateManager = () => {
+    setTemplateCategory(mFormCategory);
+    setTemplateTitle('');
+    setTemplateAssignee('TAKA');
+    setTemplatePriority(false);
+    setEditingTemplateId(null);
+    setIsTemplateModalOpen(true);
+  };
+
+  const handleEditTemplate = (template: TaskTemplate) => {
+    setTemplateCategory(template.category);
+    setTemplateTitle(template.title);
+    setTemplateAssignee(template.assignee);
+    setTemplatePriority(template.priority);
+    setEditingTemplateId(template.id);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateTitle.trim()) return;
+    const payload = {
+      category: templateCategory,
+      title: templateTitle.trim(),
+      assignee: templateAssignee,
+      priority: templatePriority,
+    };
+    if (editingTemplateId) {
+      const { data, error } = await supabase.from('task_templates').update(payload)
+        .eq('id', editingTemplateId).select('id, category, title, assignee, priority').single();
+      if (error || !data) {
+        alert(`定型タスクの更新に失敗しました。\n${error?.message ?? ''}`);
+        return;
+      }
+      setTaskTemplates(prev => prev.map(t => t.id === editingTemplateId ? {
+        id: String(data.id), category: data.category, title: data.title,
+        assignee: data.assignee === 'NANA' ? 'NANA' : 'TAKA', priority: Boolean(data.priority)
+      } : t));
+    } else {
+      const { data, error } = await supabase.from('task_templates').insert(payload)
+        .select('id, category, title, assignee, priority').single();
+      if (error || !data) {
+        alert(`定型タスクの登録に失敗しました。\n${error?.message ?? ''}`);
+        return;
+      }
+      setTaskTemplates(prev => [...prev, {
+        id: String(data.id), category: data.category, title: data.title,
+        assignee: data.assignee === 'NANA' ? 'NANA' : 'TAKA', priority: Boolean(data.priority)
+      }]);
+    }
+    setTemplateTitle('');
+    setTemplateAssignee('TAKA');
+    setTemplatePriority(false);
+    setEditingTemplateId(null);
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (!confirm('この定型タスクを削除しますか？')) return;
+    const { error } = await supabase.from('task_templates').delete().eq('id', id);
+    if (error) {
+      alert(`定型タスクの削除に失敗しました。\n${error.message}`);
+      return;
+    }
+    setTaskTemplates(prev => prev.filter(t => t.id !== id));
   };
 
   const handleAddBlankTaskToMinutes = () => {
@@ -462,65 +800,82 @@ export default function TaskManagerPage() {
     e.preventDefault();
     if (!mFormTitle.trim()) return;
 
-    const finalCategory = mFormCategory === 'その他' ? (mFormOtherCategory.trim() || 'その他') : mFormCategory;
+    const finalCategory = mFormCategory === 'その他'
+      ? (mFormOtherCategory.trim() || 'その他') : mFormCategory;
+    const minutesId = editingMinutes ? editingMinutes.id : Date.now();
 
-    const minutesData: MinutesItem = {
-      id: editingMinutes ? editingMinutes.id : Date.now(),
+    const payload = {
+      id: minutesId,
       date: mFormDate,
       title: mFormTitle.trim(),
       category: finalCategory,
-      targetAmount: mFormTargetAmount === '' ? undefined : Number(mFormTargetAmount),
-      targetCount: mFormTargetCount === '' ? undefined : Number(mFormTargetCount),
-      salesProgress: mFormSalesProgress.trim(),
-      targetAchievementRate: mFormTargetAchievementRate.trim(),
-      campaignProgress: mFormCampaignProgress.trim(),
+      target_amount: mFormTargetAmount === '' ? null : Number(mFormTargetAmount),
+      target_count: mFormTargetCount === '' ? null : Number(mFormTargetCount),
+      sales_progress: mFormSalesProgress.trim(),
+      target_achievement_rate: mFormTargetAchievementRate.trim(),
+      campaign_progress: mFormCampaignProgress.trim(),
       tasks: mFormTasks,
       notes: mFormNotes.trim(),
     };
 
+    const result = editingMinutes
+      ? await supabase.from('minutes').update(payload).eq('id', minutesId).select().single()
+      : await supabase.from('minutes').insert(payload).select().single();
+
+    if (result.error || !result.data) {
+      console.error('議事録保存エラー:', result.error);
+      alert(`議事録の保存に失敗しました。\n${result.error?.message ?? ''}`);
+      return;
+    }
+
+    const row = result.data;
+    const minutesData: MinutesItem = {
+      id: Number(row.id), date: row.date, title: row.title, category: row.category,
+      targetAmount: row.target_amount == null ? undefined : Number(row.target_amount),
+      targetCount: row.target_count == null ? undefined : Number(row.target_count),
+      salesProgress: row.sales_progress ?? '',
+      targetAchievementRate: row.target_achievement_rate ?? '',
+      campaignProgress: row.campaign_progress ?? '',
+      tasks: Array.isArray(row.tasks) ? row.tasks : mFormTasks,
+      notes: row.notes ?? '',
+    };
+
     if (editingMinutes) {
-      // 既存の議事録更新
-      setMinutesList(minutesList.map(m => m.id === editingMinutes.id ? minutesData : m));
+      setMinutesList(prev => prev.map(m => m.id === editingMinutes.id ? minutesData : m));
     } else {
-      // 新規議事録追加
-      setMinutesList([minutesData, ...minutesList]);
-      // 連動タスクをタスク管理へ追加し、Supabaseにも保存
-      const linkedTaskPayloads = mFormTasks
-        .filter(mt => mt.title.trim())
-        .map(mt => ({
-          title: mt.title.trim(),
-          assignee: mt.assignee,
-          due_date: mt.dueDate,
-          category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
-          priority: mt.priority,
-          completed: false,
-          repeat: 'none',
-          linked_minutes_id: String(minutesData.id),
-        }));
+      setMinutesList(prev => [minutesData, ...prev]);
+
+      const linkedTaskPayloads = mFormTasks.filter(mt => mt.title.trim()).map(mt => ({
+        title: mt.title.trim(),
+        assignee: mt.assignee,
+        due_date: mt.dueDate,
+        category: finalCategory === 'キャンペーン' ? 'SNS' : '事務',
+        priority: mt.priority,
+        completed: false,
+        repeat: 'none',
+        linked_minutes_id: String(minutesData.id),
+      }));
 
       if (linkedTaskPayloads.length > 0) {
-        const { data: linkedData, error: linkedError } = await supabase
-          .from('tasks')
+        const { data: linkedData, error: linkedError } = await supabase.from('tasks')
           .insert(linkedTaskPayloads)
-          .select('id, title, assignee, due_date, category, priority, completed, repeat, linked_minutes_id, created_at')
+          .select('id, title, assignee, due_date, category, priority, completed, repeat, repeat_config, repeat_group_id, linked_minutes_id, created_at')
           .order('created_at', { ascending: false });
 
         if (linkedError) {
           console.error('議事録連動タスク保存エラー:', linkedError);
-          alert(`連動タスクの保存に失敗しました。\\n${linkedError.message}`);
+          alert(`連動タスクの保存に失敗しました。\n${linkedError.message}`);
         } else {
-          const newlyCreatedTasks: TaskItem[] = (linkedData ?? []).map((row) => ({
-            id: String(row.id),
-            title: row.title ?? '',
+          const newlyCreatedTasks: TaskItem[] = (linkedData ?? []).map(row => ({
+            id: String(row.id), title: row.title ?? '',
             assignee: row.assignee === 'NANA' ? 'NANA' : 'TAKA',
-            dueDate: row.due_date ?? '',
-            category: row.category ?? 'その他',
-            priority: Boolean(row.priority),
-            completed: Boolean(row.completed),
+            dueDate: row.due_date ?? '', category: row.category ?? 'その他',
+            priority: Boolean(row.priority), completed: Boolean(row.completed),
             repeat: row.repeat === 'weekly' || row.repeat === 'monthly' ? row.repeat : 'none',
+            repeatConfig: row.repeat_config ?? undefined,
+            repeatGroupId: row.repeat_group_id ? String(row.repeat_group_id) : undefined,
             linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
           }));
-
           setTasks(prev => [...newlyCreatedTasks, ...prev]);
         }
       }
@@ -529,10 +884,14 @@ export default function TaskManagerPage() {
     setIsMinutesModalOpen(false);
   };
 
-  const handleDeleteMinutes = (id: number) => {
-    if (confirm('この議事録を削除しますか？')) {
-      setMinutesList(minutesList.filter(m => m.id !== id));
+  const handleDeleteMinutes = async (id: number) => {
+    if (!confirm('この議事録を削除しますか？')) return;
+    const { error } = await supabase.from('minutes').delete().eq('id', id);
+    if (error) {
+      alert(`議事録の削除に失敗しました。\n${error.message}`);
+      return;
     }
+    setMinutesList(prev => prev.filter(m => m.id !== id));
   };
 
   // ---------------------------------------------------------------------------
@@ -744,9 +1103,9 @@ export default function TaskManagerPage() {
                             </span>
                           )}
 
-                          {item.repeat !== 'none' && (
+                          {(item.repeat !== 'none' || item.repeatGroupId) && (
                             <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                              🔄 繰り返し ({item.repeat === 'weekly' ? '週' : '月'})
+                              🔄 繰り返し{item.repeat !== 'none' ? ` (${item.repeat === 'weekly' ? '週' : '月'})` : ''}
                             </span>
                           )}
 
@@ -1047,15 +1406,75 @@ export default function TaskManagerPage() {
                   <label className="block text-xs font-semibold text-slate-600 mb-1">繰り返し</label>
                   <select
                     value={tFormRepeat}
-                    onChange={(e) => setTFormRepeat(e.target.value as 'none' | 'weekly' | 'monthly')}
+                    onChange={(e) => {
+                      const mode = e.target.value as RepeatMode;
+                      setTFormRepeat(mode);
+                      if (mode === 'weekly' && tFormRepeatDays.length === 0) {
+                        setTFormRepeatDays([new Date(`${tFormDueDate}T00:00:00`).getDay()]);
+                      } else if (mode === 'monthly' && tFormRepeatDays.length === 0) {
+                        setTFormRepeatDays([Number(tFormDueDate.slice(8, 10))]);
+                      } else if (mode === 'none') {
+                        setTFormRepeatDays([]);
+                        setTFormRepeatEndDate('');
+                        setTFormRepeatNoEnd(true);
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   >
                     <option value="none">なし</option>
-                    <option value="weekly">毎週</option>
-                    <option value="monthly">毎月</option>
+                    <option value="weekly">毎週（曜日指定）</option>
+                    <option value="monthly">毎月（日付指定）</option>
                   </select>
                 </div>
               </div>
+
+              {tFormRepeat !== 'none' && (
+                <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-100 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-2">
+                      {tFormRepeat === 'weekly' ? '繰り返す曜日' : '繰り返す日'}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(tFormRepeat === 'weekly'
+                        ? ['日', '月', '火', '水', '木', '金', '土'].map((label, value) => ({ label, value }))
+                        : Array.from({ length: 31 }, (_, i) => ({ label: `${i + 1}日`, value: i + 1 }))
+                      ).map(({ label, value }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setTFormRepeatDays(prev =>
+                            prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value].sort((a, b) => a - b)
+                          )}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                            tFormRepeatDays.includes(value)
+                              ? 'bg-[#5e9bc4] text-white border-[#5e9bc4]'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <label className="text-xs font-semibold text-slate-600">期間</label>
+                    <label className="flex items-center gap-1.5 text-xs">
+                      <input type="radio" checked={tFormRepeatNoEnd} onChange={() => setTFormRepeatNoEnd(true)} />
+                      この先ずっと
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs">
+                      <input type="radio" checked={!tFormRepeatNoEnd} onChange={() => setTFormRepeatNoEnd(false)} />
+                      期限付き
+                    </label>
+                    {!tFormRepeatNoEnd && (
+                      <input type="date" min={tFormDueDate} value={tFormRepeatEndDate}
+                        onChange={(e) => setTFormRepeatEndDate(e.target.value)}
+                        className="px-2 py-1 rounded-lg border border-slate-200 text-xs bg-white" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500">曜日・日付を複数選択できます。「この先ずっと」は必要な月を表示すると、その月の予定を自動追加します。</p>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 pt-2">
                 <input
@@ -1218,7 +1637,14 @@ export default function TaskManagerPage() {
                       onClick={handleAddPresetToMinutes}
                       className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition"
                     >
-                      + キャンペーン定型プリセット読込
+                      + {mFormCategory}定型読込
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenTemplateManager}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition"
+                    >
+                      ⚙ 定型管理
                     </button>
                     <button
                       type="button"
@@ -1266,6 +1692,16 @@ export default function TaskManagerPage() {
                         }}
                         className="px-2 py-1 rounded-lg border border-slate-200 text-xs bg-white"
                       />
+                      <label className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0">
+                        <input type="checkbox" checked={t.priority}
+                          onChange={(e) => {
+                            const updated = [...mFormTasks];
+                            updated[idx].priority = e.target.checked;
+                            setMFormTasks(updated);
+                          }}
+                        />
+                        🔥
+                      </label>
                       <button
                         type="button"
                         onClick={() => handleRemoveTaskFromMinutes(idx)}
@@ -1308,6 +1744,67 @@ export default function TaskManagerPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isTemplateModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-lg text-slate-800">⚙ 議事録の定型タスク管理</h3>
+              <button onClick={() => setIsTemplateModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <p className="text-[11px] text-slate-500">ここで変更した定型タスクは、これから作成する新規議事録に反映されます。既存の議事録は変更しません。</p>
+
+            <select value={templateCategory} onChange={(e) => {
+              setTemplateCategory(e.target.value);
+              setEditingTemplateId(null);
+              setTemplateTitle('');
+              setTemplateAssignee('TAKA');
+              setTemplatePriority(false);
+            }} className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white">
+              {MINUTES_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            </select>
+
+            <div className="space-y-2">
+              {taskTemplates.filter(t => t.category === templateCategory).map(t => (
+                <div key={t.id} className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="flex-1 text-xs font-semibold text-slate-700">{t.title}</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white border border-slate-200">{t.assignee}</span>
+                  {t.priority && <span className="text-[10px] text-rose-600 font-bold">🔥</span>}
+                  <button type="button" onClick={() => handleEditTemplate(t)} className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-semibold">修正</button>
+                  <button type="button" onClick={() => handleDeleteTemplate(t.id)} className="px-2 py-1 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-semibold">削除</button>
+                </div>
+              ))}
+              {taskTemplates.filter(t => t.category === templateCategory).length === 0 &&
+                <p className="text-xs text-slate-400 text-center py-3">このカテゴリーの定型タスクはありません。</p>}
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 space-y-3">
+              <div className="text-xs font-bold text-slate-700">{editingTemplateId ? '定型タスクを修正' : '定型タスクを追加'}</div>
+              <input type="text" placeholder="タスク内容" value={templateTitle}
+                onChange={(e) => setTemplateTitle(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
+              <div className="grid grid-cols-2 gap-3">
+                <select value={templateAssignee} onChange={(e) => setTemplateAssignee(e.target.value as Assignee)}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white">
+                  <option value="TAKA">TAKA</option><option value="NANA">NANA</option>
+                </select>
+                <label className="flex items-center gap-2 px-3 py-2 text-xs font-semibold">
+                  <input type="checkbox" checked={templatePriority} onChange={(e) => setTemplatePriority(e.target.checked)} /> 🔥 重要
+                </label>
+              </div>
+              <div className="flex justify-end gap-2">
+                {editingTemplateId && <button type="button" onClick={() => {
+                  setEditingTemplateId(null); setTemplateTitle(''); setTemplateAssignee('TAKA'); setTemplatePriority(false);
+                }} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold">新規入力</button>}
+                <button type="button" onClick={handleSaveTemplate}
+                  className="px-4 py-2 bg-[#5e9bc4] hover:bg-[#4d85ab] text-white rounded-xl text-xs font-semibold">
+                  {editingTemplateId ? '更新する' : '登録する'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

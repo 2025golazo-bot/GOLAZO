@@ -77,6 +77,71 @@ interface Student {
   sessions: Session[];
 }
 
+
+const GOLAZO_DB_NAME = 'golazo-clients-db';
+const GOLAZO_DB_VERSION = 1;
+const GOLAZO_STUDENTS_STORE = 'students';
+
+const openGolazoClientDB = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const request = indexedDB.open(GOLAZO_DB_NAME, GOLAZO_DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(GOLAZO_STUDENTS_STORE)) {
+        db.createObjectStore(GOLAZO_STUDENTS_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+const loadStudentsFromIndexedDB = async (): Promise<Student[] | null> => {
+  try {
+    const db = await openGolazoClientDB();
+
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(GOLAZO_STUDENTS_STORE, 'readonly');
+      const request = transaction.objectStore(GOLAZO_STUDENTS_STORE).get('all');
+
+      request.onsuccess = () => resolve((request.result as Student[] | undefined) || null);
+      request.onerror = () => reject(request.error);
+
+      transaction.oncomplete = () => db.close();
+      transaction.onerror = () => db.close();
+      transaction.onabort = () => db.close();
+    });
+  } catch (error) {
+    console.error('IndexedDBから顧客データを読み込めませんでした:', error);
+    return null;
+  }
+};
+
+const saveStudentsToIndexedDB = async (students: Student[]): Promise<void> => {
+  const db = await openGolazoClientDB();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(GOLAZO_STUDENTS_STORE, 'readwrite');
+    transaction.objectStore(GOLAZO_STUDENTS_STORE).put(students, 'all');
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+
+    transaction.onabort = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+};
+
 export default function ClientsPage() {
   // 保護者データ
   const [parents, setParents] = useState<Parent[]>([
@@ -182,27 +247,67 @@ export default function ClientsPage() {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   // 顧客カルテのデータをブラウザに保存します。
+  // 写真を含む受講生データはlocalStorageではなくIndexedDBへ保存します。
   useEffect(() => {
-    try {
-      const savedStudents = localStorage.getItem('golazo-clients-students-v2');
-      const savedParents = localStorage.getItem('golazo-clients-parents-v2');
-      if (savedStudents) setStudents(JSON.parse(savedStudents));
-      if (savedParents) setParents(JSON.parse(savedParents));
-    } catch (error) {
-      console.error('顧客カルテデータの読み込みに失敗しました:', error);
-    } finally {
-      setIsLoaded(true);
-    }
+    let cancelled = false;
+
+    const loadData = async () => {
+      try {
+        const savedParents = localStorage.getItem('golazo-clients-parents-v2');
+        if (savedParents) {
+          setParents(JSON.parse(savedParents));
+        }
+
+        const indexedStudents = await loadStudentsFromIndexedDB();
+
+        if (cancelled) return;
+
+        if (indexedStudents) {
+          setStudents(indexedStudents);
+        } else {
+          // 旧localStorageデータがあれば初回だけIndexedDBへ移行
+          const savedStudents = localStorage.getItem('golazo-clients-students-v2');
+
+          if (savedStudents) {
+            const parsedStudents = JSON.parse(savedStudents) as Student[];
+            setStudents(parsedStudents);
+
+            try {
+              await saveStudentsToIndexedDB(parsedStudents);
+              localStorage.removeItem('golazo-clients-students-v2');
+              console.log('顧客データをIndexedDBへ移行しました');
+            } catch (migrationError) {
+              console.error('IndexedDBへの初回移行に失敗しました:', migrationError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('顧客カルテデータの読み込みに失敗しました:', error);
+      } finally {
+        if (!cancelled) setIsLoaded(true);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
+
+    // 受講生データ（写真を含む）はIndexedDBへ保存
+    saveStudentsToIndexedDB(students).catch(error => {
+      console.error('顧客カルテデータの保存に失敗しました:', error);
+    });
+
+    // 保護者データは従来どおりlocalStorageへ保存
     try {
-      localStorage.setItem('golazo-clients-students-v2', JSON.stringify(students));
       localStorage.setItem('golazo-clients-parents-v2', JSON.stringify(parents));
     } catch (error) {
-      console.error('顧客カルテデータの保存に失敗しました:', error);
-      alert('保存容量を超えた可能性があります。写真・PDFの枚数やサイズを減らしてください。');
+      console.error('保護者データの保存に失敗しました:', error);
     }
   }, [students, parents, isLoaded]);
 
@@ -343,6 +448,11 @@ export default function ClientsPage() {
 
   const handleAddSession = () => {
     if (!newSessionContent) return;
+
+    if (useTicket && currentParent.ticketRemaining <= 0) {
+      alert('🎫 回数券残数がありません。回数券を追加購入してから登録してください。');
+      return;
+    }
     const newSession: Session = {
       id: `ses-${Date.now()}`,
       date: newSessionDate,
@@ -606,6 +716,38 @@ export default function ClientsPage() {
 
         return { ...s, physicalHistory: updatedHistory };
       })
+    );
+  };
+
+  const handleSavePhysicalMeasurements = () => {
+    alert('測定内容を保存しました。');
+  };
+
+  const handleDeleteSelectedPhysicalMeasurement = () => {
+    if (!afterDate) return;
+
+    if (currentStudent.physicalHistory.length <= 1) {
+      alert('測定データが1件しかないため削除できません。');
+      return;
+    }
+
+    if (!confirm(
+      `測定日 ${afterDate} の測定データを削除しますか？\n体重・体脂肪率・筋肉量・測定結果写真なども削除されます。`
+    )) {
+      return;
+    }
+
+    setStudents(prev =>
+      prev.map(s =>
+        s.id === currentStudent.id
+          ? {
+              ...s,
+              physicalHistory: s.physicalHistory.filter(
+                m => m.date !== afterDate
+              )
+            }
+          : s
+      )
     );
   };
 
@@ -1044,151 +1186,215 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 測定結果ファイル：フィジカルチェックとケガゼロを分離 */}
+                  {/* 測定結果ファイル：Before / After比較 */}
                   <div className="space-y-4">
-                    <h4 className="font-bold text-slate-700 text-xs">📄 測定結果ファイル</h4>
+                    <h4 className="font-bold text-slate-700 text-xs">
+                      📄 測定結果ファイル（Before / After比較）
+                    </h4>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[
                         {
                           type: 'physicalCheck' as const,
                           title: 'フィジカルチェック',
-                          files: afterPhysical?.physicalCheckFiles || []
+                          beforeFiles: beforePhysical?.physicalCheckFiles || [],
+                          afterFiles: afterPhysical?.physicalCheckFiles || []
                         },
                         {
                           type: 'injuryZero' as const,
                           title: 'ケガゼロプロジェクト',
-                          files: afterPhysical?.injuryZeroFiles || []
+                          beforeFiles: beforePhysical?.injuryZeroFiles || [],
+                          afterFiles: afterPhysical?.injuryZeroFiles || []
                         }
                       ].map(section => (
-                        <div key={section.type} className="border rounded-xl p-4 bg-white">
-                          <div className="flex items-center justify-between mb-2 gap-2">
-                            <h5 className="font-bold text-xs text-slate-700">{section.title}</h5>
+                        <div
+                          key={section.type}
+                          className="border rounded-xl p-4 bg-white"
+                        >
+                          <div className="flex items-center justify-between mb-3 gap-2">
+                            <h5 className="font-bold text-xs text-slate-700">
+                              {section.title}
+                            </h5>
+
                             <label className="bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2.5 py-1.5 rounded cursor-pointer whitespace-nowrap">
-                              ＋ PDF / 写真を追加
+                              ＋ 写真を追加
                               <input
                                 type="file"
-                                accept="application/pdf,image/*"
+                                accept="image/*,application/pdf"
                                 multiple
                                 className="hidden"
-                                onChange={e => handleFileUpload(e, afterDate, section.type)}
+                                onChange={e =>
+                                  handleFileUpload(e, afterDate, section.type)
+                                }
                               />
                             </label>
                           </div>
-                          {section.files.length > 0 ? (
-                            <div className="space-y-2">
-                              {section.files.map(file => (
-                                <div key={file.id} className="flex items-center justify-between gap-2 bg-slate-50 border rounded-lg p-2">
-                                  <a
-                                    href={file.dataUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[11px] text-[#5e9bc4] font-bold hover:underline truncate"
-                                    title={file.name}
-                                  >
-                                    {file.type === 'application/pdf' ? '📄' : '🖼️'} {file.name}
-                                  </a>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteMeasurementFile(afterDate, section.type, file.id)}
-                                    className="text-[10px] text-rose-500 hover:underline whitespace-nowrap"
-                                  >
-                                    削除
-                                  </button>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Before */}
+                            <div className="border rounded-lg p-2 bg-slate-50">
+                              <div className="text-[10px] font-bold text-slate-500 mb-2">
+                                Before
+                                {beforeDate && (
+                                  <span className="block text-[9px] font-normal text-slate-400">
+                                    {beforeDate}
+                                  </span>
+                                )}
+                              </div>
+
+                              {section.beforeFiles.length > 0 ? (
+                                <div className="space-y-2">
+                                  {section.beforeFiles.map(file => (
+                                    <div
+                                      key={file.id}
+                                      className="border rounded-lg bg-white overflow-hidden"
+                                    >
+                                      {(
+                                        file.type?.startsWith('image/') ||
+                                        /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(file.name || '')
+                                      ) ? (
+                                        <a
+                                          href={file.dataUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title={file.name}
+                                        >
+                                          <img
+                                            src={file.dataUrl}
+                                            alt={file.name}
+                                            className="w-full h-36 object-contain bg-slate-100"
+                                          />
+                                        </a>
+                                      ) : (
+                                        <a
+                                          href={file.dataUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="block p-3 text-[10px] text-[#5e9bc4] font-bold hover:underline break-all"
+                                        >
+                                          📄 {file.name}
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
+                              ) : (
+                                <div className="h-36 flex items-center justify-center border border-dashed rounded-lg text-[10px] text-slate-400 bg-white">
+                                  未登録
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <p className="text-[10px] text-slate-400 py-3 text-center border border-dashed rounded-lg">
-                              測定結果のPDFまたは写真を登録してください
-                            </p>
-                          )}
+
+                            {/* After */}
+                            <div className="border rounded-lg p-2 bg-slate-50">
+                              <div className="text-[10px] font-bold text-slate-500 mb-2">
+                                After
+                                {afterDate && (
+                                  <span className="block text-[9px] font-normal text-slate-400">
+                                    {afterDate}
+                                  </span>
+                                )}
+                              </div>
+
+                              {section.afterFiles.length > 0 ? (
+                                <div className="space-y-2">
+                                  {section.afterFiles.map(file => (
+                                    <div
+                                      key={file.id}
+                                      className="border rounded-lg bg-white overflow-hidden"
+                                    >
+                                      {(
+                                        file.type?.startsWith('image/') ||
+                                        /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(file.name || '')
+                                      ) ? (
+                                        <a
+                                          href={file.dataUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title={file.name}
+                                        >
+                                          <img
+                                            src={file.dataUrl}
+                                            alt={file.name}
+                                            className="w-full h-36 object-contain bg-slate-100"
+                                          />
+                                        </a>
+                                      ) : (
+                                        <a
+                                          href={file.dataUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="block p-3 text-[10px] text-[#5e9bc4] font-bold hover:underline break-all"
+                                        >
+                                          📄 {file.name}
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="h-36 flex items-center justify-center border border-dashed rounded-lg text-[10px] text-slate-400 bg-white">
+                                  未登録
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <p className="text-[9px] text-slate-400 mt-2">
+                            Before / Afterの測定結果を左右に並べて比較できます。
+                          </p>
+
+                          <div className="mt-2 space-y-1">
+                            {section.afterFiles.map(file => (
+                              <div
+                                key={`delete-${file.id}`}
+                                className="flex justify-end"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteMeasurementFile(
+                                      afterDate,
+                                      section.type,
+                                      file.id
+                                    )
+                                  }
+                                  className="text-[10px] text-rose-500 hover:underline"
+                                >
+                                  {file.name} を削除
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
+
                     <p className="text-[10px] text-slate-400">
-                      ※ 測定結果そのものは別ファイルで作成し、GOLAZOにはPDFまたは写真を記録として添付します。
+                      ※ 選択したBefore測定日とAfter測定日の測定結果を左右に並べて比較します。
                     </p>
                   </div>
 
-                  {/* 測定履歴の修正・削除 */}
-                  <div className="border-t pt-4 space-y-3">
-                    <div>
-                      <h4 className="font-bold text-slate-700 text-xs">📝 測定履歴の修正・削除</h4>
-                      <p className="text-[10px] text-slate-400 mt-1">過去の測定日やメモを後から修正できます。数値は上の表から直接修正できます。</p>
-                    </div>
+                  {/* 測定内容の保存・削除 */}
+                  <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSavePhysicalMeasurements}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition"
+                    >
+                      💾 測定内容を保存
+                    </button>
 
-                    <div className="space-y-2">
-                      {[...currentStudent.physicalHistory].sort((a, b) => a.date.localeCompare(b.date)).map(measure => (
-                        <div key={measure.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                          {editingMeasureId === measure.id ? (
-                            <div className="space-y-2">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div>
-                                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">測定日</label>
-                                  <input
-                                    type="date"
-                                    value={editMeasureDate}
-                                    onChange={e => setEditMeasureDate(e.target.value)}
-                                    className="w-full border border-slate-300 rounded p-2 text-xs bg-white"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] text-slate-500 font-semibold mb-1">メモ</label>
-                                  <input
-                                    type="text"
-                                    value={editMeasureNote}
-                                    onChange={e => setEditMeasureNote(e.target.value)}
-                                    className="w-full border border-slate-300 rounded p-2 text-xs bg-white"
-                                    placeholder="例：3ヶ月定期測定"
-                                  />
-                                </div>
-                              </div>
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={handleCancelEditMeasure}
-                                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded text-[10px] font-bold"
-                                >
-                                  キャンセル
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveEditMeasure(measure.id)}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-[10px] font-bold"
-                                >
-                                  保存
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                              <div>
-                                <span className="font-bold text-xs text-slate-700">📅 {measure.date}</span>
-                                {measure.note && <span className="ml-2 text-[10px] text-slate-400">{measure.note}</span>}
-                              </div>
-                              <div className="flex gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditMeasure(measure)}
-                                  className="text-[10px] text-sky-600 hover:underline font-bold"
-                                >
-                                  ✏️ 編集
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteMeasureDate(measure.date)}
-                                  disabled={currentStudent.physicalHistory.length <= 1}
-                                  className="text-[10px] text-rose-500 hover:underline font-bold disabled:text-slate-300 disabled:no-underline"
-                                >
-                                  🗑️ 削除
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedPhysicalMeasurement}
+                      disabled={!afterDate || currentStudent.physicalHistory.length <= 1}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-4 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      🗑 この測定を削除
+                    </button>
                   </div>
+
                 </div>
 
               </div>
