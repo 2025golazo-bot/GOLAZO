@@ -797,8 +797,8 @@ export default function ClientsPage() {
                             <input
                               type="number"
                               step="0.1"
-                              value={beforePhysical?.weight || 0}
-                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', parseFloat(e.target.value))}
+                              value={beforePhysical?.weight === 0 ? '' : beforePhysical?.weight ?? ''}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', e.target.value === '' ? 0 : Number(e.target.value))}
                               className="w-20 border rounded p-1"
                             />
                           </td>
@@ -806,8 +806,8 @@ export default function ClientsPage() {
                             <input
                               type="number"
                               step="0.1"
-                              value={afterPhysical?.weight || 0}
-                              onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', parseFloat(e.target.value))}
+                              value={afterPhysical?.weight === 0 ? '' : afterPhysical?.weight ?? ''}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', e.target.value === '' ? 0 : Number(e.target.value))}
                               className="w-20 border rounded p-1"
                             />
                           </td>
@@ -819,8 +819,8 @@ export default function ClientsPage() {
                             <input
                               type="number"
                               step="0.1"
-                              value={beforePhysical?.fat || 0}
-                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', parseFloat(e.target.value))}
+                              value={beforePhysical?.fat === 0 ? '' : beforePhysical?.fat ?? ''}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', e.target.value === '' ? 0 : Number(e.target.value))}
                               className="w-20 border rounded p-1"
                             />
                           </td>
@@ -828,8 +828,8 @@ export default function ClientsPage() {
                             <input
                               type="number"
                               step="0.1"
-                              value={afterPhysical?.fat || 0}
-                              onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', parseFloat(e.target.value))}
+                              value={afterPhysical?.fat === 0 ? '' : afterPhysical?.fat ?? ''}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', e.target.value === '' ? 0 : Number(e.target.value))}
                               className="w-20 border rounded p-1"
                             />
                           </td>
@@ -841,8 +841,8 @@ export default function ClientsPage() {
                             <input
                               type="number"
                               step="0.1"
-                              value={beforePhysical?.muscle || 0}
-                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', parseFloat(e.target.value))}
+                              value={beforePhysical?.muscle === 0 ? '' : beforePhysical?.muscle ?? ''}
+                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', e.target.value === '' ? 0 : Number(e.target.value))}
                               className="w-20 border rounded p-1"
                             />
                           </td>
@@ -850,8 +850,8 @@ export default function ClientsPage() {
                             <input
                               type="number"
                               step="0.1"
-                              value={afterPhysical?.muscle || 0}
-                              onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', parseFloat(e.target.value))}
+                              value={afterPhysical?.muscle === 0 ? '' : afterPhysical?.muscle ?? ''}
+                              onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', e.target.value === '' ? 0 : Number(e.target.value))}
                               className="w-20 border rounded p-1"
                             />
                           </td>
