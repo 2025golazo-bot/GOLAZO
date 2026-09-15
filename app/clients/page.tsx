@@ -610,7 +610,7 @@ export default function ClientsPage() {
 
       if (showAlert) {
         alert(
-          `Square顧客情報を受講生一覧へ同期しました。\n取得: ${customers.length}名\n新規受講生登録: ${createdStudents}件\n既存受講生更新: ${updatedStudents}件`
+          `Square顧客情報を受講生一覧へ同期しました。\n取得: ${customers.length}名\n受講生一覧へ反映しました。`
         );
       }
     } catch (error) {
