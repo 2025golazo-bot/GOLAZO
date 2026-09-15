@@ -543,10 +543,13 @@ export default function ClientsPage() {
       setStudents(prevStudents => {
         const nextStudents = [...prevStudents];
         const bySquareId = new Map<string, number>();
+        const byStudentName = new Map<string, number>();
         const byParentId = new Map<string, number>();
 
         nextStudents.forEach((student, index) => {
           if (student.squareCustomerId) bySquareId.set(String(student.squareCustomerId), index);
+          const normalizedName = String(student.name || '').replace(/\s+/g, '');
+          if (normalizedName) byStudentName.set(normalizedName, index);
           byParentId.set(student.parentId, index);
         });
 
@@ -561,7 +564,10 @@ export default function ClientsPage() {
           const kana = String(customer?.kana || '').trim();
           const birthday = String(customer?.birthday || '').trim();
           const parentId = `p-square-${squareId}`;
-          const existingIndex = bySquareId.get(squareId);
+          const normalizedSquareName = String(fullName || '').replace(/\s+/g, '');
+          const existingIndex =
+            bySquareId.get(squareId) ??
+            byStudentName.get(normalizedSquareName);
 
           if (existingIndex !== undefined) {
             const existing = nextStudents[existingIndex];
@@ -576,6 +582,8 @@ export default function ClientsPage() {
                 ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
                 : 0),
             };
+            bySquareId.set(squareId, existingIndex);
+            if (normalizedSquareName) byStudentName.set(normalizedSquareName, existingIndex);
             updatedStudents += 1;
             continue;
           }
@@ -1429,7 +1437,7 @@ export default function ClientsPage() {
                   {currentParent.groupLinked ? (
                     <>
                       <div className="text-lg font-bold text-slate-800 mt-1">代表者：{currentParent.name} 様（決済者）</div>
-                      <div className="text-[11px] text-slate-400 mt-1 font-mono">Square顧客ID: {currentParent.squareCustomerId || '未連携'}</div>
+                      <div className="text-[11px] text-slate-400 mt-1 font-mono">Square顧客ID: {currentStudent.squareCustomerId || '未連携'}</div>
                     </>
                   ) : (
                     <>
@@ -2166,10 +2174,10 @@ export default function ClientsPage() {
                     <label className="block text-slate-500 font-semibold mb-1">Square 顧客ID</label>
                     <input
                       type="text"
-                      value={currentParent.squareCustomerId || ''}
+                      value={currentStudent.squareCustomerId || ''}
                       onChange={e => {
                         const newId = e.target.value;
-                        setParents(prev => prev.map(p => p.id === currentParent.id ? { ...p, squareCustomerId: newId } : p));
+                        setStudents(prev => prev.map(s => s.id === currentStudent.id ? { ...s, squareCustomerId: newId } : s));
                       }}
                       placeholder="cus_xxxxxx"
                       className="w-full border border-slate-300 rounded-lg p-2.5 outline-none font-mono text-slate-700 bg-slate-50"
