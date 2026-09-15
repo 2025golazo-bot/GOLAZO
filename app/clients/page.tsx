@@ -68,11 +68,13 @@ interface Parent {
   squareUpdatedAt?: string;
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
+  groupLinked?: boolean;
 }
 
 interface Student {
   id: string;
-  parentId: string; // 1:N 構造（代表者ID）
+  parentId: string;
+  squareCustomerId?: string; // Square顧客ID（受講生一覧への同期用） // 1:N 構造（代表者ID）
   name: string;
   kana: string;
   age: number;
@@ -157,6 +159,7 @@ export default function ClientsPage() {
     {
       id: 'p-101',
       squareCustomerId: 'CUS_TEST_001', // Square連携用ID
+      groupLinked: true,
       name: '藤田 奈々',
       kana: 'フジタ ナナ',
       phone: '090-1111-2222',
@@ -168,6 +171,7 @@ export default function ClientsPage() {
     {
       id: 'p-102',
       squareCustomerId: 'CUS_TEST_002', // Square連携用ID
+      groupLinked: true,
       name: '山田 太郎',
       kana: 'ヤマダ タロウ',
       phone: '090-1234-5678',
@@ -254,6 +258,14 @@ export default function ClientsPage() {
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
   const [isSyncing, setIsSyncing] = useState<boolean>(false); // Square同期中のローディング状態
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [squareCustomers, setSquareCustomers] = useState<any[]>([]);
+  const [squareCustomerSearch, setSquareCustomerSearch] = useState('');
+  const [isGroupLinkModalOpen, setIsGroupLinkModalOpen] = useState(false);
+  const [groupLinkMode, setGroupLinkMode] = useState<'new' | 'existing'>('new');
+  const [groupRepName, setGroupRepName] = useState('');
+  const [groupRepPhone, setGroupRepPhone] = useState('');
+  const [groupRepSquareId, setGroupRepSquareId] = useState('');
+  const [groupLinkParentId, setGroupLinkParentId] = useState('');
 
   const [isParentChildModalOpen, setIsParentChildModalOpen] = useState(false);
   const [isChildFormOpen, setIsChildFormOpen] = useState(false);
@@ -331,7 +343,7 @@ export default function ClientsPage() {
 
   const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
   const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
-  const siblingStudents = students.filter(s => s.parentId === currentParent.id);
+  const siblingStudents = currentParent.groupLinked ? students.filter(s => s.parentId === currentParent.id) : [currentStudent];
 
   // 比較用データステート
   const physicalDates = currentStudent.physicalHistory.map(m => m.date);
@@ -380,49 +392,188 @@ export default function ClientsPage() {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      const response = await fetch('/api/sync/square-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const response = await fetch('/api/sync/square-customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Square顧客情報の同期に失敗しました。');
-      const squareCustomers = Array.isArray(data.customers) ? data.customers : [];
-      let added = 0;
-      let updated = 0;
-      setParents(prev => {
-        const next = [...prev];
-        const byId = new Map(next.filter(p => p.squareCustomerId).map(p => [String(p.squareCustomerId), p]));
-        squareCustomers.forEach((customer: any) => {
-          const squareId = String(customer.id || '').trim();
-          if (!squareId) return;
-          const fullName = String(customer.full_name || [customer.family_name, customer.given_name].filter(Boolean).join(' ')).trim();
-          const existing = byId.get(squareId);
-          if (existing) {
-            existing.name = fullName || existing.name;
-            existing.kana = String(customer.kana || '').trim() || existing.kana;
-            existing.phone = String(customer.phone_number || '').trim() || existing.phone;
-            existing.email = String(customer.email_address || '').trim() || existing.email;
-            existing.birthday = String(customer.birthday || '').trim() || existing.birthday;
-            existing.squareUpdatedAt = String(customer.updated_at || '').trim() || existing.squareUpdatedAt;
-            updated += 1;
-          } else {
-            const parent: Parent = { id: `square-${squareId}`, squareCustomerId: squareId, name: fullName || `Square顧客 ${squareId.slice(0, 8)}`, kana: String(customer.kana || '').trim(), phone: String(customer.phone_number || '').trim(), email: String(customer.email_address || '').trim() || undefined, birthday: String(customer.birthday || '').trim() || undefined, squareUpdatedAt: String(customer.updated_at || '').trim() || undefined, ticketRemaining: 0, ticketsHistory: [] };
-            next.push(parent); byId.set(squareId, parent); added += 1;
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Square顧客情報の同期に失敗しました。');
+      }
+
+      // APIの戻り値は customers 配列を正とし、万一別キーでも配列なら受け取る
+      const customers = Array.isArray(data.customers)
+        ? data.customers
+        : Array.isArray(data.data)
+          ? data.data
+          : [];
+      setSquareCustomers(customers);
+
+      // 1回のsetStateで全Square顧客を受講生一覧へ反映します。
+      // 顧客ごとにsetStateを繰り返さないため、Reactのバッチ処理に左右されません。
+      let createdStudents = 0;
+      let updatedStudents = 0;
+      let createdParents = 0;
+      let updatedParents = 0;
+
+      const today = new Date().toISOString().split('T')[0];
+
+      setParents(prevParents => {
+        const nextParents = [...prevParents];
+        const bySquareId = new Map<string, Parent>();
+        nextParents.forEach(parent => {
+          if (parent.squareCustomerId) {
+            bySquareId.set(String(parent.squareCustomerId), parent);
           }
         });
-        return next;
+
+        for (const customer of customers) {
+          const squareId = String(customer?.id || '').trim();
+          if (!squareId) continue;
+
+          const fullName = String(
+            customer?.full_name ||
+            [customer?.family_name, customer?.given_name].filter(Boolean).join(' ')
+          ).trim();
+          const kana = String(customer?.kana || '').trim();
+          const phone = String(customer?.phone_number || '').trim();
+          const email = String(customer?.email_address || '').trim();
+          const birthday = String(customer?.birthday || '').trim();
+          const updatedAt = String(customer?.updated_at || '').trim();
+
+          const existing = bySquareId.get(squareId);
+          if (existing) {
+            const next = {
+              ...existing,
+              name: fullName || existing.name,
+              kana: kana || existing.kana,
+              phone: phone || existing.phone,
+              email: email || existing.email,
+              birthday: birthday || existing.birthday,
+              squareUpdatedAt: updatedAt || existing.squareUpdatedAt,
+            };
+            const index = nextParents.findIndex(p => p.id === existing.id);
+            if (index >= 0) nextParents[index] = next;
+            updatedParents += 1;
+          } else {
+            const parent: Parent = {
+              id: `p-square-${squareId}`,
+              squareCustomerId: squareId,
+              name: fullName || `Square顧客 ${squareId.slice(0, 8)}`,
+              kana,
+              phone,
+              email: email || undefined,
+              birthday: birthday || undefined,
+              squareUpdatedAt: updatedAt || undefined,
+              ticketRemaining: 0,
+              ticketsHistory: [],
+              groupLinked: false,
+            };
+            nextParents.push(parent);
+            bySquareId.set(squareId, parent);
+            createdParents += 1;
+          }
+        }
+        return nextParents;
       });
-      if (showAlert) alert(`Square顧客情報を同期しました。\n取得: ${squareCustomers.length}名\n新規追加: ${added}名\n既存更新: ${updated}名`);
+
+      setStudents(prevStudents => {
+        const nextStudents = [...prevStudents];
+        const bySquareId = new Map<string, number>();
+        const byParentId = new Map<string, number>();
+
+        nextStudents.forEach((student, index) => {
+          if (student.squareCustomerId) bySquareId.set(String(student.squareCustomerId), index);
+          byParentId.set(student.parentId, index);
+        });
+
+        for (const customer of customers) {
+          const squareId = String(customer?.id || '').trim();
+          if (!squareId) continue;
+
+          const fullName = String(
+            customer?.full_name ||
+            [customer?.family_name, customer?.given_name].filter(Boolean).join(' ')
+          ).trim();
+          const kana = String(customer?.kana || '').trim();
+          const birthday = String(customer?.birthday || '').trim();
+          const parentId = `p-square-${squareId}`;
+          const existingIndex = bySquareId.get(squareId);
+
+          if (existingIndex !== undefined) {
+            const existing = nextStudents[existingIndex];
+            nextStudents[existingIndex] = {
+              ...existing,
+              name: fullName || existing.name,
+              kana: kana || existing.kana,
+              squareCustomerId: squareId,
+              // Square同期で既存のカルテ情報は上書きしません。
+              birthdate: existing.birthdate || birthday,
+              age: existing.age || (birthday
+                ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
+                : 0),
+            };
+            updatedStudents += 1;
+            continue;
+          }
+
+          // 既存の手動受講生に同じSquare顧客IDがない場合のみ新規登録。
+          const newStudent: Student = {
+            id: `s-square-${squareId}`,
+            parentId,
+            squareCustomerId: squareId,
+            name: fullName || `Square顧客 ${squareId.slice(0, 8)}`,
+            kana,
+            age: birthday
+              ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
+              : 0,
+            birthdate: birthday,
+            firstLessonDate: '',
+            lastReservationDate: '',
+            concern: '',
+            target: '',
+            memo: '',
+            physicalHistory: [],
+            sessions: [],
+          };
+          bySquareId.set(squareId, nextStudents.length);
+          byParentId.set(parentId, nextStudents.length);
+          nextStudents.push(newStudent);
+          createdStudents += 1;
+        }
+
+        return nextStudents;
+      });
+
+      if (showAlert) {
+        alert(
+          `Square顧客情報を受講生一覧へ同期しました。\n取得: ${customers.length}名\n新規受講生登録: ${createdStudents}件\n既存受講生更新: ${updatedStudents}件`
+        );
+      }
     } catch (error) {
       console.error('Square顧客情報同期エラー:', error);
-      if (showAlert) alert(`Square顧客情報の同期に失敗しました。\n${error instanceof Error ? error.message : '通信エラー'}`);
-    } finally { setIsSyncing(false); }
+      if (showAlert) {
+        alert(
+          `Square顧客情報の同期に失敗しました。\n${
+            error instanceof Error ? error.message : '通信エラー'
+          }`
+        );
+      }
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  useEffect(() => { if (isLoaded) void syncSquareCustomers(false); }, [isLoaded]);
+  useEffect(() => {
+    if (isLoaded) void syncSquareCustomers(false);
+  }, [isLoaded]);
 
   // ---------------------------------------------------------------------------
   // Squareデータ同期ハンドラー
   // ---------------------------------------------------------------------------
   const handleSquareSync = async () => {
-    if (!currentParent.squareCustomerId) {
+    const squareCustomerId = currentParent.squareCustomerId || currentStudent.squareCustomerId;
+    if (!squareCustomerId) {
       alert('この代表者にSquare顧客IDが設定されていません。');
       return;
     }
@@ -432,7 +583,7 @@ export default function ClientsPage() {
       const response = await fetch('/api/sync/square', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ squareCustomerId: currentParent.squareCustomerId }),
+        body: JSON.stringify({ squareCustomerId }),
       });
 
       const data = await response.json();
@@ -507,6 +658,64 @@ export default function ClientsPage() {
         setAfterDate(target.physicalHistory[target.physicalHistory.length - 1].date);
       }
     }
+  };
+
+  const openGroupLink = () => {
+    setGroupLinkMode(currentParent.groupLinked ? 'existing' : 'new');
+    setGroupRepName(currentParent.name || '');
+    setGroupRepPhone(currentParent.phone || '');
+    setGroupRepSquareId(currentParent.squareCustomerId || '');
+    const linkedParent = parents.find(p => p.groupLinked && p.id === currentStudent.parentId);
+    setGroupLinkParentId(linkedParent?.id || '');
+    setIsGroupLinkModalOpen(true);
+  };
+
+  const handleSaveGroupLink = () => {
+    if (groupLinkMode === 'existing') {
+      if (!groupLinkParentId) {
+        alert('既存グループを選択してください。');
+        return;
+      }
+      setStudents(prev =>
+        prev.map(student =>
+          student.id === currentStudent.id
+            ? { ...student, parentId: groupLinkParentId }
+            : student
+        )
+      );
+      setIsGroupLinkModalOpen(false);
+      alert('受講生をグループに紐付けました。');
+      return;
+    }
+
+    const name = groupRepName.trim();
+    if (!name) {
+      alert('代表者名を入力してください。');
+      return;
+    }
+
+    const newParentId = `p-group-${Date.now()}`;
+    const newParent: Parent = {
+      id: newParentId,
+      squareCustomerId: groupRepSquareId.trim() || undefined,
+      name,
+      kana: '',
+      phone: groupRepPhone.trim(),
+      ticketRemaining: 0,
+      ticketsHistory: [],
+      groupLinked: true
+    };
+
+    setParents(prev => [...prev, newParent]);
+    setStudents(prev =>
+      prev.map(student =>
+        student.id === currentStudent.id
+          ? { ...student, parentId: newParentId }
+          : student
+      )
+    );
+    setIsGroupLinkModalOpen(false);
+    alert('新しいグループを作成し、受講生を紐付けました。');
   };
 
   const openAddChild = (parentId: string) => { setEditingChildId(null); setChildFormParentId(parentId); setChildFormName(''); setChildFormKana(''); setChildFormBirthdate(''); setChildFormMemo(''); setIsChildFormOpen(true); };
@@ -983,13 +1192,25 @@ export default function ClientsPage() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <div className="text-xs font-bold text-slate-400">👥 グループカルテ</div>
-                  <div className="text-lg font-bold text-slate-800 mt-1">代表者：{currentParent.name} 様</div>
-                  <div className="text-[11px] text-slate-400 mt-1 font-mono">Square顧客ID: {currentParent.squareCustomerId || '未連携'}</div>
+                  {currentParent.groupLinked ? (
+                    <>
+                      <div className="text-lg font-bold text-slate-800 mt-1">代表者：{currentParent.name} 様（決済者）</div>
+                      <div className="text-[11px] text-slate-400 mt-1 font-mono">Square顧客ID: {currentParent.squareCustomerId || '未連携'}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-lg font-bold text-slate-800 mt-1">グループ未紐付け</div>
+                      <div className="text-[11px] text-slate-400 mt-1">この受講生をグループへ紐付けできます。</div>
+                    </>
+                  )}
                 </div>
-                <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-2 rounded-lg">👥 グループを管理</button>
+                <div className="flex gap-2">
+                  <button type="button" onClick={openGroupLink} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-2 rounded-lg">👥 グループに紐付け</button>
+                  {currentParent.groupLinked && <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-2 rounded-lg">👥 グループを管理</button>}
+                </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                {siblingStudents.map(member => (
+    {siblingStudents.map(member => (
                   <button key={member.id} type="button" onClick={() => handleSelectStudent(member.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${member.id === currentStudent.id ? 'bg-[#5e9bc4] text-white border-[#5e9bc4]' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-200'}`}>
                     {member.name}
                   </button>
@@ -1009,7 +1230,7 @@ export default function ClientsPage() {
                   </h2>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
                     <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-semibold">
-                      代表者: {currentParent.name} 様 ({currentParent.phone})
+                      {currentParent.groupLinked ? `代表者: ${currentParent.name} 様 (${currentParent.phone})` : 'グループ未紐付け'}
                     </span>
                     <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
                       <span>🎟️</span> 回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
@@ -1032,7 +1253,7 @@ export default function ClientsPage() {
               </div>
 
               {/* グループリンク */}
-              {siblingStudents.length > 1 && (
+              {currentParent.groupLinked && siblingStudents.length > 1 && (
                 <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
                   <span className="text-xs text-amber-900 font-bold">👥 グループ</span>
                   <div className="flex gap-1.5">
@@ -1723,7 +1944,63 @@ export default function ClientsPage() {
 
           </div>
         </div>
-        {isParentChildModalOpen && (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h3 className="font-bold text-slate-800">👥 グループ管理</h3><p className="text-[11px] text-slate-400 mt-1">Squareのお客様情報を代表者として取り込み、GOLAZO側で受講生をグループとして紐付け・管理します。</p></div><div className="flex gap-2"><button type="button" onClick={() => void syncSquareCustomers(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold">🔄 Square同期</button><button type="button" onClick={() => setIsParentChildModalOpen(false)} className="text-slate-400 text-xl">×</button></div></div><div className="p-5 overflow-y-auto max-h-[75vh] space-y-3">{parents.map(parent => { const children=students.filter(s=>s.parentId===parent.id); return <div key={parent.id} className="border border-slate-200 rounded-xl p-4"><div className="flex justify-between items-center gap-3"><div><div className="font-bold text-slate-800">{parent.name} 様</div><div className="text-[10px] text-slate-400 font-mono mt-1">Square顧客ID: {parent.squareCustomerId || '未連携'}</div></div><button type="button" onClick={()=>openAddChild(parent.id)} className="bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold">＋ グループメンバーを追加</button></div><div className="mt-3 space-y-2">{children.map(child=><div key={child.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center"><div><div className="font-bold text-xs">{child.name}</div><div className="text-[10px] text-slate-400">{child.kana || 'フリガナ未登録'} {child.birthdate && ` / ${child.birthdate}`}</div></div><div className="flex gap-2"><button type="button" onClick={()=>openEditChild(child)} className="text-xs text-sky-600">編集</button><button type="button" onClick={()=>handleDeleteChild(child.id)} className="text-xs text-rose-500">削除</button></div></div>)}{!children.length && <div className="text-[10px] text-slate-400">受講生はまだ登録されていません。</div>}</div></div>})}</div></div></div>)}
+        {isParentChildModalOpen && (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h3 className="font-bold text-slate-800">👥 グループ管理</h3><p className="text-[11px] text-slate-400 mt-1">Squareに登録されたお客様は受講生一覧へ同期します。受講生カルテから、必要な方だけグループへ紐付けます。</p></div><div className="flex gap-2"><button type="button" onClick={() => void syncSquareCustomers(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold">🔄 Square同期</button><button type="button" onClick={() => setIsParentChildModalOpen(false)} className="text-slate-400 text-xl">×</button></div></div><div className="p-5 overflow-y-auto max-h-[75vh] space-y-5">
+<div className="border border-sky-200 bg-sky-50/50 rounded-xl p-4">
+  <div className="font-bold text-sm text-slate-800">👤 Square顧客 → GOLAZO受講生</div>
+  <p className="text-[11px] text-slate-500 mt-1">
+    Squareに登録されたお客様は、Square同期時にそのままGOLAZOの受講生一覧へ登録・更新されます。
+    Squareのお客様を個別に選択する必要はありません。
+  </p>
+  <p className="text-[11px] text-slate-500 mt-2">
+    受講生カルテから「👥 グループに紐付け」を使い、必要な方だけグループとして管理します。
+  </p>
+</div>
+<div className="font-bold text-sm text-slate-700">登録済みグループ</div>
+{parents.filter(parent => parent.groupLinked).map(parent => { const children=students.filter(s=>s.parentId===parent.id); return <div key={parent.id} className="border border-slate-200 rounded-xl p-4"><div className="flex justify-between items-center gap-3"><div><div className="font-bold text-slate-800">{parent.name} 様</div><div className="text-[10px] text-slate-400 font-mono mt-1">Square顧客ID: {parent.squareCustomerId || '未連携'}</div></div><button type="button" onClick={()=>openAddChild(parent.id)} className="bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold">＋ グループメンバーを追加</button></div><div className="mt-3 space-y-2">{children.map(child=><div key={child.id} className="bg-slate-50 rounded-lg p-3 flex justify-between items-center"><div><div className="font-bold text-xs">{child.name}</div><div className="text-[10px] text-slate-400">{child.kana || 'フリガナ未登録'} {child.birthdate && ` / ${child.birthdate}`}</div></div><div className="flex gap-2"><button type="button" onClick={()=>openEditChild(child)} className="text-xs text-sky-600">編集</button><button type="button" onClick={()=>handleDeleteChild(child.id)} className="text-xs text-rose-500">削除</button></div></div>)}{!children.length && <div className="text-[10px] text-slate-400">受講生はまだ登録されていません。</div>}</div></div>})}</div></div></div>)}
+        {isGroupLinkModalOpen && (
+          <div className="fixed inset-0 z-[55] bg-black/40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5">
+              <h3 className="font-bold text-sm border-b pb-3">👥 グループに紐付け</h3>
+              <div className="flex gap-2 pt-4">
+                <button type="button" onClick={() => setGroupLinkMode('new')} className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border ${groupLinkMode === 'new' ? 'bg-sky-50 border-sky-300 text-[#5e9bc4]' : 'bg-white border-slate-200 text-slate-500'}`}>新しいグループを作成</button>
+                <button type="button" onClick={() => setGroupLinkMode('existing')} className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border ${groupLinkMode === 'existing' ? 'bg-sky-50 border-sky-300 text-[#5e9bc4]' : 'bg-white border-slate-200 text-slate-500'}`}>既存グループへ追加</button>
+              </div>
+              <div className="space-y-3 pt-4 text-xs">
+                {groupLinkMode === 'new' ? (
+                  <>
+                    <div>
+                      <label className="block text-slate-500 font-semibold mb-1">代表者名（決済者）</label>
+                      <input value={groupRepName} onChange={e => setGroupRepName(e.target.value)} className="w-full border rounded-lg p-2.5" placeholder="例：藤田 奈々" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-semibold mb-1">電話番号</label>
+                      <input value={groupRepPhone} onChange={e => setGroupRepPhone(e.target.value)} className="w-full border rounded-lg p-2.5" placeholder="任意" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-semibold mb-1">Square顧客ID</label>
+                      <input value={groupRepSquareId} onChange={e => setGroupRepSquareId(e.target.value)} className="w-full border rounded-lg p-2.5 font-mono" placeholder="任意" />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">既存グループ</label>
+                    <select value={groupLinkParentId} onChange={e => setGroupLinkParentId(e.target.value)} className="w-full border rounded-lg p-2.5">
+                      <option value="">選択してください</option>
+                      {parents.filter(p => p.groupLinked).map(p => (
+                        <option key={p.id} value={p.id}>{p.name} 様（決済者）</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <button type="button" onClick={() => setIsGroupLinkModalOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button>
+                <button type="button" onClick={handleSaveGroupLink} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
       </main>
     </div>
