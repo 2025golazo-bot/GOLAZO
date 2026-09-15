@@ -76,7 +76,17 @@ const categorize = (names: string[]): StoredSquareSale['category'] => {
   return '月謝・コース';
 };
 
-const toDateOnly = (value?: string) => (value ? value.slice(0, 10) : '');
+const toDateOnly = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
 
 const moneyToMajorUnits = (amount: number | string | undefined, currency?: string) => {
   const value = Number(amount || 0);
@@ -384,6 +394,7 @@ export async function POST(request: NextRequest) {
       let ordersError = '';
       let paymentsError = '';
 
+
       try {
         orders = await fetchAllOrders(locationId, startAt, endAt);
       } catch (error) {
@@ -397,6 +408,7 @@ export async function POST(request: NextRequest) {
         paymentsError = error instanceof Error ? error.message : 'Square Payments API error';
         console.warn('Square Payments API unavailable:', paymentsError);
       }
+
 
       if (orders.length > 0) {
         const paymentByOrder = new Map<string, SquarePayment>();
