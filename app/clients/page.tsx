@@ -644,7 +644,7 @@ export default function ClientsPage() {
   // ---------------------------------------------------------------------------
   const handleSquareSync = async () => {
     const squareCustomerId =
-      currentParent.squareCustomerId || currentStudent.squareCustomerId;
+      currentStudent.squareCustomerId || currentParent.squareCustomerId;
 
     if (!squareCustomerId) {
       alert('この代表者にSquare顧客IDが設定されていません。');
@@ -774,7 +774,12 @@ export default function ClientsPage() {
                 (sum, purchase) => sum + (purchase.ticketCount || 0),
                 0
               )
-            : 0;
+            : newTicketOrders
+                .filter(purchase => purchase.date === endDate)
+                .reduce(
+                  (sum, purchase) => sum + (purchase.ticketCount || 0),
+                  0
+                );
 
           const newAppliedOrderIds = Array.from(
             new Set([
@@ -2047,7 +2052,7 @@ export default function ClientsPage() {
                         <span>💳</span> Square 購入・決済履歴
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        Squareアカウント（顧客ID: {currentParent.squareCustomerId || '未連携'}）と紐づく全購入履歴です
+                        この顧客に紐づく購入・決済履歴を表示しています
                       </p>
                     </div>
 
