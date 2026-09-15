@@ -57,6 +57,19 @@ interface TicketHistory {
   amount?: number;
 }
 
+interface SquarePurchaseHistory {
+  id: string;
+  date: string;
+  title: string;
+  category: '回数券' | 'セッション' | '物販' | 'その他';
+  quantity: number;
+  amount: number;
+  squarePaymentId: string;
+  squareOrderId?: string;
+  receiptUrl?: string;
+  ticketCount?: number;
+}
+
 interface Parent {
   id: string;
   squareCustomerId?: string; // Square 連携用ID
@@ -68,6 +81,10 @@ interface Parent {
   squareUpdatedAt?: string;
   ticketRemaining: number;
   ticketsHistory: TicketHistory[];
+  squarePurchaseHistory?: SquarePurchaseHistory[];
+  squareTicketAppliedOrderIds?: string[];
+  squareTicketSyncInitialized?: boolean;
+  squareTicketSyncCustomerId?: string;
   groupLinked?: boolean;
 }
 
@@ -382,6 +399,38 @@ export default function ClientsPage() {
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
   const [useTicket, setUseTicket] = useState<boolean>(true);
+  const [isEditingTicketRemaining, setIsEditingTicketRemaining] = useState(false);
+  const [ticketRemainingInput, setTicketRemainingInput] = useState('');
+
+  const startEditTicketRemaining = () => {
+    setTicketRemainingInput(String(currentParent.ticketRemaining));
+    setIsEditingTicketRemaining(true);
+  };
+
+  const cancelEditTicketRemaining = () => {
+    setIsEditingTicketRemaining(false);
+    setTicketRemainingInput('');
+  };
+
+  const saveTicketRemaining = () => {
+    const value = Number(ticketRemainingInput);
+
+    if (!Number.isInteger(value) || value < 0) {
+      alert('回数券残数は0以上の整数で入力してください。');
+      return;
+    }
+
+    setParents(prev =>
+      prev.map(parent =>
+        parent.id === currentParent.id
+          ? { ...parent, ticketRemaining: value }
+          : parent
+      )
+    );
+
+    setIsEditingTicketRemaining(false);
+    setTicketRemainingInput('');
+  };
 
   // 編集用ステート
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -586,30 +635,201 @@ export default function ClientsPage() {
   // Squareデータ同期ハンドラー
   // ---------------------------------------------------------------------------
   const handleSquareSync = async () => {
-    const squareCustomerId = currentParent.squareCustomerId || currentStudent.squareCustomerId;
+    const squareCustomerId =
+      currentParent.squareCustomerId || currentStudent.squareCustomerId;
+
     if (!squareCustomerId) {
       alert('この代表者にSquare顧客IDが設定されていません。');
       return;
     }
 
     setIsSyncing(true);
+
     try {
-      const response = await fetch('/api/sync/square', {
+      const today = new Date();
+      const endDate = today.toISOString().slice(0, 10);
+      const start = new Date(today);
+      start.setMonth(start.getMonth() - 12);
+      const startDate = start.toISOString().slice(0, 10);
+
+      const response = await fetch('/api/sync/square-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ squareCustomerId }),
+        body: JSON.stringify({ startDate, endDate }),
       });
 
       const data = await response.json();
 
-      if (data.success) {
-        setParents(prev =>
-          prev.map(p => (p.id === currentParent.id ? { ...p, ticketsHistory: data.ticketsHistory } : p))
-        );
-        alert('Squareから最新の購入履歴を同期しました！');
-      } else {
-        alert(`同期に失敗しました: ${data.error}`);
+      if (!response.ok || !data.success) {
+        alert(`同期に失敗しました: ${data.error || 'Square同期エラー'}`);
+        return;
       }
+
+      const customerSales = (data.sales || []).filter(
+        (sale: {
+          customerId?: string;
+        }) => sale.customerId === squareCustomerId
+      );
+
+      const purchaseHistory: SquarePurchaseHistory[] = customerSales.map(
+        (sale: {
+          id: number | string;
+          date: string;
+          category: string;
+          amount: number;
+          squareOrderId?: string;
+          squarePaymentId?: string;
+          productName?: string;
+          productNames?: string[];
+        }) => {
+          const productTitle =
+            sale.productNames?.filter(Boolean).join(' / ') ||
+            sale.productName ||
+            'Square購入';
+
+          const normalizedTitle = productTitle.replace(/\s+/g, '');
+          const normalizedTicketTitle = normalizedTitle.normalize('NFKC');
+
+          const ticketMatch =
+            normalizedTicketTitle.match(/(\d+)回券/) ||
+            normalizedTicketTitle.match(/回数券(\d+)回/) ||
+            normalizedTicketTitle.match(/(\d+)回チケット/);
+
+          const ticketCount = ticketMatch
+            ? Number(ticketMatch[1])
+            : 0;
+
+          let category: SquarePurchaseHistory['category'];
+
+          if (ticketCount > 0 || sale.category === '回数券') {
+            category = '回数券';
+          } else if (
+            normalizedTitle.includes('パーソナル') ||
+            normalizedTitle.includes('トレーニング') ||
+            normalizedTitle.includes('セッション') ||
+            normalizedTitle.includes('レッスン')
+          ) {
+            category = 'セッション';
+          } else if (
+            normalizedTitle.includes('プロテイン') ||
+            normalizedTitle.includes('サプリ') ||
+            normalizedTitle.includes('ウェア') ||
+            normalizedTitle.includes('グッズ') ||
+            normalizedTitle.includes('物販')
+          ) {
+            category = '物販';
+          } else {
+            category = 'その他';
+          }
+
+          return {
+            id: String(sale.squareOrderId || sale.id),
+            date: sale.date,
+            title: productTitle,
+            category,
+            quantity: 1,
+            amount: Number(sale.amount) || 0,
+            squarePaymentId: sale.squarePaymentId || '',
+            squareOrderId: sale.squareOrderId,
+            ticketCount: ticketCount > 0 ? ticketCount : undefined,
+          };
+        }
+      );
+
+      setParents(prev =>
+        prev.map(p => {
+          if (p.id !== currentParent.id) return p;
+
+          const sameSquareCustomer =
+            p.squareTicketSyncCustomerId === squareCustomerId;
+          const appliedOrderIds = sameSquareCustomer
+            ? p.squareTicketAppliedOrderIds || []
+            : [];
+          const initialized =
+            sameSquareCustomer && p.squareTicketSyncInitialized === true;
+
+          const ticketPurchases = purchaseHistory.filter(
+            purchase =>
+              purchase.category === '回数券' &&
+              (purchase.ticketCount || 0) > 0 &&
+              Boolean(purchase.squareOrderId)
+          );
+
+          const newTicketOrders = ticketPurchases.filter(
+            purchase =>
+              purchase.squareOrderId &&
+              !appliedOrderIds.includes(purchase.squareOrderId)
+          );
+
+          const addedTicketCount = initialized
+            ? newTicketOrders.reduce(
+                (sum, purchase) => sum + (purchase.ticketCount || 0),
+                0
+              )
+            : 0;
+
+          const newAppliedOrderIds = Array.from(
+            new Set([
+              ...appliedOrderIds,
+              ...ticketPurchases
+                .map(purchase => purchase.squareOrderId)
+                .filter(
+                  (id: string | undefined): id is string => Boolean(id)
+                ),
+            ])
+          );
+
+          return {
+            ...p,
+            squarePurchaseHistory: purchaseHistory,
+            ticketsHistory: ticketPurchases.map(purchase => ({
+              id: purchase.id,
+              date: purchase.date,
+              title: purchase.title,
+              count: purchase.ticketCount || 0,
+              expire: '購入日から6ヶ月',
+              squarePaymentId: purchase.squarePaymentId,
+              squareOrderId: purchase.squareOrderId,
+              amount: purchase.amount,
+            })),
+            ticketRemaining: p.ticketRemaining + addedTicketCount,
+            squareTicketAppliedOrderIds: newAppliedOrderIds,
+            squareTicketSyncInitialized: true,
+        squareTicketSyncCustomerId: squareCustomerId,
+          };
+        })
+      );
+
+      const ticketCount = purchaseHistory.reduce(
+        (sum, purchase) => sum + (purchase.ticketCount || 0),
+        0
+      );
+
+      const newTicketCount = purchaseHistory
+        .filter(
+          purchase =>
+            purchase.category === '回数券' &&
+            purchase.squareOrderId &&
+            !(currentParent.squareTicketAppliedOrderIds || []).includes(
+              purchase.squareOrderId
+            )
+        )
+        .reduce(
+          (sum, purchase) => sum + (purchase.ticketCount || 0),
+          0
+        );
+
+      const isFirstSync =
+        currentParent.squareTicketSyncInitialized !== true;
+
+      alert(
+        `Squareから購入・決済履歴を同期しました！\n` +
+        `購入履歴: ${purchaseHistory.length}件\n` +
+        `回数券合計: ${ticketCount}回\n` +
+        (isFirstSync
+          ? '初回同期のため、既存回数券は残数に加算していません。'
+          : `今回追加した回数券: ${newTicketCount}回`)
+      );
     } catch (err) {
       console.error(err);
       alert('Square同期中に通信エラーが発生しました。');
@@ -1247,7 +1467,46 @@ export default function ClientsPage() {
                       {currentParent.groupLinked ? `代表者: ${currentParent.name} 様 (${currentParent.phone})` : 'グループ未紐付け'}
                     </span>
                     <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                      <span>🎟️</span> 回数券 残数: <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
+                      <span>🎟️</span> 回数券 残数:
+                      {isEditingTicketRemaining ? (
+                        <>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={ticketRemainingInput}
+                            onChange={e => setTicketRemainingInput(e.target.value)}
+                            className="w-16 bg-white border border-sky-300 rounded px-1.5 py-0.5 text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            autoFocus
+                          />
+                          <span>回</span>
+                          <button
+                            type="button"
+                            onClick={saveTicketRemaining}
+                            className="bg-[#5e9bc4] text-white px-2 py-0.5 rounded-md hover:bg-[#4d85ab]"
+                          >
+                            保存
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditTicketRemaining}
+                            className="bg-white text-slate-600 border border-slate-300 px-2 py-0.5 rounded-md hover:bg-slate-50"
+                          >
+                            キャンセル
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <strong className="text-sm">{currentParent.ticketRemaining}</strong> 回
+                          <button
+                            type="button"
+                            onClick={startEditTicketRemaining}
+                            className="ml-1 bg-white text-[#5e9bc4] border border-sky-200 px-2 py-0.5 rounded-md hover:bg-sky-50"
+                          >
+                            ✏️変更
+                          </button>
+                        </>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1770,20 +2029,20 @@ export default function ClientsPage() {
               </div>
             )}
 
-            {/* TAB 2: チケット購入履歴 & Square */}
+            {/* TAB 2: Square購入・決済履歴 */}
             {activeTab === 'tickets' && (
               <div className="space-y-6">
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
                     <div>
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                        <span>🎟️</span> Square 決済・回数券購入履歴
+                        <span>💳</span> Square 購入・決済履歴
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        Squareアカウント（顧客ID: {currentParent.squareCustomerId || '未連携'}）と紐づく購入履歴です
+                        Squareアカウント（顧客ID: {currentParent.squareCustomerId || '未連携'}）と紐づく全購入履歴です
                       </p>
                     </div>
-                    {/* Square同期ボタン */}
+
                     <button
                       onClick={handleSquareSync}
                       disabled={isSyncing}
@@ -1794,43 +2053,77 @@ export default function ClientsPage() {
                   </div>
 
                   <div className="space-y-3">
-                    {currentParent.ticketsHistory.length > 0 ? (
-                      currentParent.ticketsHistory.map(ticket => (
-                        <div key={ticket.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                            <div>
-                              <span className="font-bold text-slate-800 text-sm">{ticket.title}</span>
-                              <span className="ml-2 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">
-                                付与回数: {ticket.count}回
-                              </span>
-                            </div>
-                            <div className="text-slate-500 font-medium">
-                              購入日: {ticket.date} （有効期限: {ticket.expire}）
-                            </div>
-                          </div>
+                    {(currentParent.squarePurchaseHistory || []).length > 0 ? (
+                      [...(currentParent.squarePurchaseHistory || [])]
+                        .sort((a, b) => b.date.localeCompare(a.date))
+                        .map(purchase => (
+                          <div
+                            key={purchase.id}
+                            className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2"
+                          >
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                              <div>
+                                <span className="font-bold text-slate-800 text-sm">
+                                  {purchase.title}
+                                </span>
 
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 border-t border-slate-200 gap-2">
-                            <div className="text-slate-500 font-mono text-[11px]">
-                              Square決済ID: <span className="text-slate-700">{ticket.squarePaymentId}</span>
-                              {ticket.amount && <span className="ml-3 font-bold text-slate-700">¥{ticket.amount.toLocaleString()}</span>}
+                                <span className="ml-2 bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                                  {purchase.category}
+                                </span>
+
+                                {purchase.category === '回数券' &&
+                                  purchase.ticketCount &&
+                                  purchase.ticketCount > 0 && (
+                                    <span className="ml-2 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                                      付与回数: {purchase.ticketCount}回
+                                    </span>
+                                  )}
+                              </div>
+
+                              <div className="text-slate-500 font-medium">
+                                購入日: {purchase.date}
+                              </div>
                             </div>
-                            {ticket.receiptUrl ? (
-                              <a
-                                href={ticket.receiptUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#5e9bc4] hover:underline font-bold flex items-center gap-1"
-                              >
-                                <span>📄</span> Square領収書を見る
-                              </a>
-                            ) : (
-                              <span className="text-slate-400 text-[11px]">レシートURLなし</span>
-                            )}
+
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 border-t border-slate-200 gap-2">
+                              <div className="text-slate-500 font-mono text-[11px]">
+                                Square決済ID:{' '}
+                                <span className="text-slate-700">
+                                  {purchase.squarePaymentId}
+                                </span>
+
+                                <span className="ml-3 font-bold text-slate-700">
+                                  ¥{purchase.amount.toLocaleString()}
+                                </span>
+
+                                {purchase.quantity > 1 && (
+                                  <span className="ml-3 text-slate-500">
+                                    数量: {purchase.quantity}
+                                  </span>
+                                )}
+                              </div>
+
+                              {purchase.receiptUrl ? (
+                                <a
+                                  href={purchase.receiptUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#5e9bc4] hover:underline font-bold flex items-center gap-1"
+                                >
+                                  <span>📄</span> Square領収書を見る
+                                </a>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">
+                                  レシートURLなし
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        ))
                     ) : (
-                      <p className="text-xs text-slate-400 text-center py-6">チケット購入履歴はありません。「Squareデータ同期」ボタンを押してデータを取得してください。</p>
+                      <p className="text-xs text-slate-400 text-center py-6">
+                        Square購入履歴はありません。「Squareデータ同期」ボタンを押してデータを取得してください。
+                      </p>
                     )}
                   </div>
                 </div>

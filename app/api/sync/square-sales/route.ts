@@ -29,6 +29,7 @@ type StoredSquareSale = {
   id: string;
   square_order_id?: string | null;
   square_payment_id?: string | null;
+  customer_id?: string | null;
   date: string;
   client_name: string;
   category: '月謝・コース' | '回数券' | '物販・プロテイン' | '体験料';
@@ -218,7 +219,7 @@ async function loadStoredSales(startDate: string, endDate: string): Promise<Stor
   if (!url || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return [];
 
   const params = new URLSearchParams({
-    select: 'id,square_order_id,square_payment_id,date,client_name,category,amount,payment_method,staff,memo,product_name,product_names,square_catalog_object_ids,source,team_member_id',
+    select: 'id,square_order_id,square_payment_id,customer_id,date,client_name,category,amount,payment_method,staff,memo,product_name,product_names,square_catalog_object_ids,source,team_member_id',
     date: `gte.${startDate}`,
     order: 'date.desc',
     limit: '10000',
@@ -265,6 +266,7 @@ async function upsertStoredSales(sales: StoredSquareSale[]) {
     id: String(sale.id),
     square_order_id: sale.square_order_id || null,
     square_payment_id: sale.square_payment_id || null,
+    customer_id: sale.customer_id || null,
     date: sale.date,
     client_name: sale.client_name,
     category: sale.category,
@@ -319,6 +321,7 @@ async function updateStoredSalesWithoutOverwritingMemos(sales: StoredSquareSale[
         body: JSON.stringify({
           square_order_id: sale.square_order_id || null,
           square_payment_id: sale.square_payment_id || null,
+          customer_id: sale.customer_id || null,
           date: sale.date,
           client_name: sale.client_name,
           category: sale.category,
@@ -404,7 +407,14 @@ export async function POST(request: NextRequest) {
         }
 
         const customerIds = Array.from(
-          new Set(orders.map((order) => order.customer_id).filter(Boolean) as string[]),
+          new Set(
+            orders
+              .map((order) => {
+                const payment = paymentByOrder.get(order.id || '');
+                return order.customer_id || payment?.customer_id || null;
+              })
+              .filter(Boolean) as string[],
+          ),
         );
         const customerNames = await fetchCustomerNames(customerIds);
 
@@ -412,6 +422,7 @@ export async function POST(request: NextRequest) {
           .filter((order) => order.id && Number(order.total_money?.amount || 0) > 0)
           .map((order) => {
             const payment = paymentByOrder.get(order.id!);
+            const customerId = order.customer_id || payment?.customer_id || null;
             const productNames = (order.line_items || [])
               .map((item) => item.name || item.variation_name || '')
               .filter(Boolean);
@@ -419,8 +430,8 @@ export async function POST(request: NextRequest) {
               .map((item) => item.catalog_object_id || '')
               .filter(Boolean);
 
-            const customerName = order.customer_id
-              ? customerNames.get(order.customer_id) || `Square顧客 (${order.customer_id.slice(0, 8)}…)`
+            const customerName = customerId
+              ? customerNames.get(customerId) || `Square顧客 (${customerId.slice(0, 8)}…)`
               : 'Square取引';
 
             return {
@@ -443,6 +454,7 @@ export async function POST(request: NextRequest) {
               source: 'square',
               square_order_id: order.id!,
               squareOrderId: order.id!,
+              customer_id: customerId,
               square_payment_id: payment?.id || null,
               squarePaymentId: payment?.id || null,
               team_member_id: payment?.team_member_id || null,
@@ -498,6 +510,7 @@ export async function POST(request: NextRequest) {
             source: 'square',
             square_payment_id: payment.id!,
             squarePaymentId: payment.id!,
+            customer_id: payment.customer_id || null,
             team_member_id: payment.team_member_id || null,
             teamMemberId: payment.team_member_id || null,
           } as unknown as StoredSquareSale;
@@ -552,6 +565,7 @@ export async function POST(request: NextRequest) {
         source: 'square',
         squareOrderId: item.square_order_id || undefined,
         squarePaymentId: item.square_payment_id || undefined,
+        customerId: item.customer_id || undefined,
         teamMemberId: item.team_member_id || undefined,
       })),
       count: storedSales.length,
