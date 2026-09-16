@@ -82,15 +82,15 @@ function toRow(customer: SquareCustomer) {
 
 async function supabaseFetch(path: string, init: RequestInit = {}) {
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const secretKey = process.env.SUPABASE_SECRET_KEY || '';
 
-  if (!baseUrl || !anonKey) throw new Error('Supabase環境変数が設定されていません。');
+  if (!baseUrl || !secretKey) throw new Error('Supabase環境変数が設定されていません。');
 
   return fetch(`${baseUrl}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
+      apikey: secretKey,
+      Authorization: `Bearer ${secretKey}`,
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=representation',
       ...(init.headers || {}),

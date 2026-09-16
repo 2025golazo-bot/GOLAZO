@@ -54,8 +54,8 @@ const jsonHeaders = () => ({
 });
 
 const supabaseHeaders = () => ({
-  apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-  Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+  apikey: process.env.SUPABASE_SECRET_KEY || '',
+  Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY || ''}`,
   'Content-Type': 'application/json',
 });
 
@@ -226,7 +226,7 @@ async function fetchCustomerNames(customerIds: string[]) {
 
 async function loadStoredSales(startDate: string, endDate: string): Promise<StoredSquareSale[]> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return [];
+  if (!url || !process.env.SUPABASE_SECRET_KEY) return [];
 
   const params = new URLSearchParams({
     select: 'id,square_order_id,square_payment_id,customer_id,date,client_name,category,amount,payment_method,staff,memo,product_name,product_names,square_catalog_object_ids,source,team_member_id',
@@ -250,7 +250,7 @@ async function loadStoredSales(startDate: string, endDate: string): Promise<Stor
 
 async function getLatestStoredDate(): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
+  if (!url || !process.env.SUPABASE_SECRET_KEY) return null;
 
   const params = new URLSearchParams({
     select: 'date',
@@ -268,9 +268,32 @@ async function getLatestStoredDate(): Promise<string | null> {
   return Array.isArray(rows) && rows[0]?.date ? String(rows[0].date) : null;
 }
 
+async function getOldestStoredDate(): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url || !process.env.SUPABASE_SECRET_KEY) return null;
+
+  const params = new URLSearchParams({
+    select: 'date',
+    order: 'date.asc',
+    limit: '1',
+  });
+
+  const response = await fetch(`${url}/rest/v1/square_sales?${params.toString()}`, {
+    headers: supabaseHeaders(),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) return null;
+
+  const rows = await response.json();
+  return Array.isArray(rows) && rows[0]?.date
+    ? String(rows[0].date)
+    : null;
+}
+
 async function upsertStoredSales(sales: StoredSquareSale[]) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || sales.length === 0) return;
+  if (!url || !process.env.SUPABASE_SECRET_KEY || sales.length === 0) return;
 
   const rows = sales.map((sale) => ({
     id: String(sale.id),
@@ -315,7 +338,7 @@ async function upsertStoredSales(sales: StoredSquareSale[]) {
 
 async function updateStoredSalesWithoutOverwritingMemos(sales: StoredSquareSale[]) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || sales.length === 0) return;
+  if (!url || !process.env.SUPABASE_SECRET_KEY || sales.length === 0) return;
 
   // 既存行は商品名・顧客名などSquare側の最新情報だけ更新し、
   // memoは更新しません。新規行だけupsertStoredSalesで登録されます。
@@ -372,16 +395,25 @@ export async function POST(request: NextRequest) {
     const requestedEndDate = String(body.endDate || requestedStartDate);
 
     const latestStoredDate = await getLatestStoredDate();
+    const oldestStoredDate = await getOldestStoredDate();
     const today = new Date().toISOString().slice(0, 10);
 
-    let syncStartDate = requestedStartDate;
-    let shouldSyncSquare = !latestStoredDate;
+    // 12か月分の履歴がまだ揃っていない場合は、
+    // 過去12か月をSquareから再取得して不足分を補完する
+    const needsHistoricalSync =
+      !oldestStoredDate || oldestStoredDate > requestedStartDate;
 
-    if (latestStoredDate && requestedEndDate >= today) {
+    let syncStartDate = requestedStartDate;
+    let shouldSyncSquare = needsHistoricalSync;
+
+    // 12か月分の履歴が揃っている場合は、
+    // 最新データ周辺の7日間だけ差分取得する
+    if (!needsHistoricalSync && latestStoredDate && requestedEndDate >= today) {
       const overlap = new Date(`${latestStoredDate}T00:00:00+09:00`);
       overlap.setDate(overlap.getDate() - 7);
       const overlapDate = overlap.toISOString().slice(0, 10);
-      syncStartDate = overlapDate > requestedStartDate ? overlapDate : requestedStartDate;
+      syncStartDate =
+        overlapDate > requestedStartDate ? overlapDate : requestedStartDate;
       shouldSyncSquare = true;
     }
 
