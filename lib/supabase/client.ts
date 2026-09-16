@@ -1,9 +1,8 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from "@supabase/ssr";
 
-// 環境変数が未設定のビルド時でもクラッシュしないようにフォールバックを設定
-const supabaseUrl = 'https://amgbfmaxvfrsjzfcpcll.supabase.co';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:54321";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
 
 export function createClient() {
-  return createSupabaseClient(supabaseUrl, supabaseKey);
+  return createBrowserClient(supabaseUrl, supabaseKey);
 }
