@@ -82,7 +82,10 @@ function toRow(customer: SquareCustomer) {
 
 async function supabaseFetch(path: string, init: RequestInit = {}) {
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const secretKey = process.env.SUPABASE_SECRET_KEY || '';
+  const secretKey =
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  '';
 
   if (!baseUrl || !secretKey) throw new Error('Supabase環境変数が設定されていません。');
 

@@ -53,9 +53,14 @@ const jsonHeaders = () => ({
   'Content-Type': 'application/json',
 });
 
+const supabaseSecretKey =
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  '';
+
 const supabaseHeaders = () => ({
-  apikey: process.env.SUPABASE_SECRET_KEY || '',
-  Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY || ''}`,
+  apikey: supabaseSecretKey,
+  Authorization: `Bearer ${supabaseSecretKey}`,
   'Content-Type': 'application/json',
 });
 
@@ -226,7 +231,7 @@ async function fetchCustomerNames(customerIds: string[]) {
 
 async function loadStoredSales(startDate: string, endDate: string): Promise<StoredSquareSale[]> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.SUPABASE_SECRET_KEY) return [];
+  if (!url || !supabaseSecretKey) return [];
 
   const params = new URLSearchParams({
     select: 'id,square_order_id,square_payment_id,customer_id,date,client_name,category,amount,payment_method,staff,memo,product_name,product_names,square_catalog_object_ids,source,team_member_id',
@@ -250,7 +255,7 @@ async function loadStoredSales(startDate: string, endDate: string): Promise<Stor
 
 async function getLatestStoredDate(): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.SUPABASE_SECRET_KEY) return null;
+  if (!url || !supabaseSecretKey) return null;
 
   const params = new URLSearchParams({
     select: 'date',
@@ -270,7 +275,7 @@ async function getLatestStoredDate(): Promise<string | null> {
 
 async function getOldestStoredDate(): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.SUPABASE_SECRET_KEY) return null;
+  if (!url || !supabaseSecretKey) return null;
 
   const params = new URLSearchParams({
     select: 'date',
@@ -293,7 +298,7 @@ async function getOldestStoredDate(): Promise<string | null> {
 
 async function upsertStoredSales(sales: StoredSquareSale[]) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.SUPABASE_SECRET_KEY || sales.length === 0) return;
+  if (!url || !supabaseSecretKey || sales.length === 0) return;
 
   const rows = sales.map((sale) => ({
     id: String(sale.id),
@@ -338,7 +343,7 @@ async function upsertStoredSales(sales: StoredSquareSale[]) {
 
 async function updateStoredSalesWithoutOverwritingMemos(sales: StoredSquareSale[]) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url || !process.env.SUPABASE_SECRET_KEY || sales.length === 0) return;
+  if (!url || !supabaseSecretKey || sales.length === 0) return;
 
   // 既存行は商品名・顧客名などSquare側の最新情報だけ更新し、
   // memoは更新しません。新規行だけupsertStoredSalesで登録されます。
