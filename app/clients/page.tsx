@@ -1,5 +1,5 @@
 'use client';
-
+import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import Header from '@/components/Header';
 
@@ -92,6 +92,7 @@ interface Student {
   id: string;
   parentId: string;
   squareCustomerId?: string; // Square顧客ID（受講生一覧への同期用） // 1:N 構造（代表者ID）
+  isRepresentative?: boolean; // 代表者本人のカルテ
   name: string;
   kana: string;
   age: number;
@@ -269,9 +270,13 @@ export default function ClientsPage() {
     }
   ]);
 
+  const router = useRouter();
+
   // UI状態
   const [selectedStudentId, setSelectedStudentId] = useState<string>('s-001');
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [alertFilter, setAlertFilter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
   const [isSyncing, setIsSyncing] = useState<boolean>(false); // Square同期中のローディング状態
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -358,8 +363,61 @@ export default function ClientsPage() {
     }
   }, [students, parents, isLoaded]);
 
-  const currentStudent = students.find(s => s.id === selectedStudentId) || students[0];
-  const currentParent = parents.find(p => p.id === currentStudent.parentId) || parents[0];
+  // URLの ?student=顧客ID が指定されている場合、その顧客のカルテを表示
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const studentIdFromUrl = new URLSearchParams(window.location.search).get('student');
+    if (!studentIdFromUrl) return;
+
+    const targetStudent = students.find(student => student.id === studentIdFromUrl);
+    if (!targetStudent) return;
+
+    setSelectedStudentId(targetStudent.id);
+    setSelectedParentId(targetStudent.parentId || null);
+
+    // 検索結果から顧客を選択したら、カルテまで自動スクロール
+    requestAnimationFrame(() => {
+      document.getElementById('client-carte')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
+  }, [isLoaded, students]);
+
+  const EMPTY_STUDENT: Student = {
+    id: '',
+    parentId: '',
+    name: '',
+    kana: '',
+    age: 0,
+    birthdate: '',
+    firstLessonDate: '',
+    lastReservationDate: '',
+    concern: '',
+    target: '',
+    memo: '',
+    physicalHistory: [],
+    sessions: [],
+  };
+
+  const EMPTY_PARENT: Parent = {
+    id: '',
+    name: '',
+    kana: '',
+    phone: '',
+    ticketRemaining: 0,
+    ticketsHistory: [],
+    groupLinked: false,
+  };
+
+  const currentStudent =
+    students.find(s => s.id === selectedStudentId) || students[0] || EMPTY_STUDENT;
+
+  const currentParent =
+    parents.find(p => p.id === currentStudent.parentId) || parents[0] || EMPTY_PARENT;
+  const selectedParent = selectedParentId ? parents.find(p => p.id === selectedParentId) : null;
+  const isParentOnlySelected = !!selectedParent;
   const siblingStudents = currentParent.groupLinked ? students.filter(s => s.parentId === currentParent.id) : [currentStudent];
 
   // 比較用データステート
@@ -540,82 +598,9 @@ export default function ClientsPage() {
         return nextParents;
       });
 
-      setStudents(prevStudents => {
-        const nextStudents = [...prevStudents];
-        const bySquareId = new Map<string, number>();
-        const byStudentName = new Map<string, number>();
-        const byParentId = new Map<string, number>();
-
-        nextStudents.forEach((student, index) => {
-          if (student.squareCustomerId) bySquareId.set(String(student.squareCustomerId), index);
-          const normalizedName = String(student.name || '').replace(/\s+/g, '');
-          if (normalizedName) byStudentName.set(normalizedName, index);
-          byParentId.set(student.parentId, index);
-        });
-
-        for (const customer of customers) {
-          const squareId = String(customer?.id || '').trim();
-          if (!squareId) continue;
-
-          const fullName = String(
-            customer?.full_name ||
-            [customer?.family_name, customer?.given_name].filter(Boolean).join(' ')
-          ).trim();
-          const kana = String(customer?.kana || '').trim();
-          const birthday = String(customer?.birthday || '').trim();
-          const parentId = `p-square-${squareId}`;
-          const normalizedSquareName = String(fullName || '').replace(/\s+/g, '');
-          const existingIndex =
-            bySquareId.get(squareId) ??
-            byStudentName.get(normalizedSquareName);
-
-          if (existingIndex !== undefined) {
-            const existing = nextStudents[existingIndex];
-            nextStudents[existingIndex] = {
-              ...existing,
-              name: fullName || existing.name,
-              kana: kana || existing.kana,
-              squareCustomerId: squareId,
-              // Square同期で既存のカルテ情報は上書きしません。
-              birthdate: existing.birthdate || birthday,
-              age: existing.age || (birthday
-                ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
-                : 0),
-            };
-            bySquareId.set(squareId, existingIndex);
-            if (normalizedSquareName) byStudentName.set(normalizedSquareName, existingIndex);
-            updatedStudents += 1;
-            continue;
-          }
-
-          // 既存の手動受講生に同じSquare顧客IDがない場合のみ新規登録。
-          const newStudent: Student = {
-            id: `s-square-${squareId}`,
-            parentId,
-            squareCustomerId: squareId,
-            name: fullName || `Square顧客 ${squareId.slice(0, 8)}`,
-            kana,
-            age: birthday
-              ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
-              : 0,
-            birthdate: birthday,
-            firstLessonDate: '',
-            lastReservationDate: '',
-            concern: '',
-            target: '',
-            memo: '',
-            physicalHistory: [],
-            sessions: [],
-          };
-          bySquareId.set(squareId, nextStudents.length);
-          byParentId.set(parentId, nextStudents.length);
-          nextStudents.push(newStudent);
-          createdStudents += 1;
-        }
-
-        return nextStudents;
-      });
-
+      // Square顧客は代表者（Parent）として管理し、
+      // Square同期では代表者本人をStudentとして新規作成しません。
+      // 既存のStudentデータは削除・変更しません。
       if (showAlert) {
         alert(
           `Square顧客情報を受講生一覧へ同期しました。\n取得: ${customers.length}名\n受講生一覧へ反映しました。`
@@ -643,17 +628,14 @@ export default function ClientsPage() {
   // Squareデータ同期ハンドラー
   // ---------------------------------------------------------------------------
   const handleSquareSync = async () => {
-    const squareCustomerId =
-      currentStudent.squareCustomerId || currentParent.squareCustomerId;
-
-    if (!squareCustomerId) {
-      alert('この代表者にSquare顧客IDが設定されていません。');
-      return;
-    }
-
     setIsSyncing(true);
 
     try {
+      // ① Square顧客情報を全体更新
+      await syncSquareCustomers(false);
+
+      // ② Square売上データを取得
+      //    square-sales API側で既存データとの差分・更新を処理する
       const today = new Date();
       const endDate = today.toISOString().slice(0, 10);
       const start = new Date(today);
@@ -673,15 +655,18 @@ export default function ClientsPage() {
         return;
       }
 
-      const customerSales = (data.sales || []).filter(
-        (sale: {
-          customerId?: string;
-        }) => sale.customerId === squareCustomerId
-      );
+      const sales = Array.isArray(data.sales) ? data.sales : [];
 
-      const purchaseHistory: SquarePurchaseHistory[] = customerSales.map(
+      // Square顧客ID → 購入履歴
+      const purchasesByCustomer = new Map<
+        string,
+        SquarePurchaseHistory[]
+      >();
+
+      sales.forEach(
         (sale: {
           id: number | string;
+          customerId?: string;
           date: string;
           category: string;
           amount: number;
@@ -690,13 +675,18 @@ export default function ClientsPage() {
           productName?: string;
           productNames?: string[];
         }) => {
+          const squareCustomerId = String(sale.customerId || '').trim();
+
+          if (!squareCustomerId) return;
+
           const productTitle =
             sale.productNames?.filter(Boolean).join(' / ') ||
             sale.productName ||
             'Square購入';
 
           const normalizedTitle = productTitle.replace(/\s+/g, '');
-          const normalizedTicketTitle = normalizedTitle.normalize('NFKC');
+          const normalizedTicketTitle =
+            normalizedTitle.normalize('NFKC');
 
           const ticketMatch =
             normalizedTicketTitle.match(/(\d+)回券/) ||
@@ -730,7 +720,7 @@ export default function ClientsPage() {
             category = 'その他';
           }
 
-          return {
+          const purchase: SquarePurchaseHistory = {
             id: String(sale.squareOrderId || sale.id),
             date: sale.date,
             title: productTitle,
@@ -739,22 +729,41 @@ export default function ClientsPage() {
             amount: Number(sale.amount) || 0,
             squarePaymentId: sale.squarePaymentId || '',
             squareOrderId: sale.squareOrderId,
-            ticketCount: ticketCount > 0 ? ticketCount : undefined,
+            ticketCount:
+              ticketCount > 0 ? ticketCount : undefined,
           };
+
+          const current =
+            purchasesByCustomer.get(squareCustomerId) || [];
+
+          current.push(purchase);
+          purchasesByCustomer.set(squareCustomerId, current);
         }
       );
 
+      // ③ 全代表者の購入履歴を一括更新
+      let updatedCustomers = 0;
+      let addedTicketCountTotal = 0;
+
       setParents(prev =>
-        prev.map(p => {
-          if (p.id !== currentParent.id) return p;
+        prev.map(parent => {
+          const squareCustomerId =
+            String(parent.squareCustomerId || '').trim();
+
+          if (!squareCustomerId) return parent;
+
+          const purchaseHistory =
+            purchasesByCustomer.get(squareCustomerId);
+
+          if (!purchaseHistory) return parent;
 
           const sameSquareCustomer =
-            p.squareTicketSyncCustomerId === squareCustomerId;
+            parent.squareTicketSyncCustomerId ===
+            squareCustomerId;
+
           const appliedOrderIds = sameSquareCustomer
-            ? p.squareTicketAppliedOrderIds || []
+            ? parent.squareTicketAppliedOrderIds || []
             : [];
-          const initialized =
-            sameSquareCustomer && p.squareTicketSyncInitialized === true;
 
           const ticketPurchases = purchaseHistory.filter(
             purchase =>
@@ -763,23 +772,18 @@ export default function ClientsPage() {
               Boolean(purchase.squareOrderId)
           );
 
+          // まだ回数券残数に加算していない注文だけを対象にする
           const newTicketOrders = ticketPurchases.filter(
             purchase =>
               purchase.squareOrderId &&
               !appliedOrderIds.includes(purchase.squareOrderId)
           );
 
-          const addedTicketCount = initialized
-            ? newTicketOrders.reduce(
-                (sum, purchase) => sum + (purchase.ticketCount || 0),
-                0
-              )
-            : newTicketOrders
-                .filter(purchase => purchase.date === endDate)
-                .reduce(
-                  (sum, purchase) => sum + (purchase.ticketCount || 0),
-                  0
-                );
+          const addedTicketCount = newTicketOrders.reduce(
+            (sum, purchase) =>
+              sum + (purchase.ticketCount || 0),
+            0
+          );
 
           const newAppliedOrderIds = Array.from(
             new Set([
@@ -787,13 +791,17 @@ export default function ClientsPage() {
               ...ticketPurchases
                 .map(purchase => purchase.squareOrderId)
                 .filter(
-                  (id: string | undefined): id is string => Boolean(id)
+                  (id: string | undefined): id is string =>
+                    Boolean(id)
                 ),
             ])
           );
 
+          updatedCustomers += 1;
+          addedTicketCountTotal += addedTicketCount;
+
           return {
-            ...p,
+            ...parent,
             squarePurchaseHistory: purchaseHistory,
             ticketsHistory: ticketPurchases.map(purchase => ({
               id: purchase.id,
@@ -805,47 +813,25 @@ export default function ClientsPage() {
               squareOrderId: purchase.squareOrderId,
               amount: purchase.amount,
             })),
-            ticketRemaining: p.ticketRemaining + addedTicketCount,
-            squareTicketAppliedOrderIds: newAppliedOrderIds,
+            ticketRemaining:
+              parent.ticketRemaining + addedTicketCount,
+            squareTicketAppliedOrderIds:
+              newAppliedOrderIds,
             squareTicketSyncInitialized: true,
-        squareTicketSyncCustomerId: squareCustomerId,
+            squareTicketSyncCustomerId:
+              squareCustomerId,
           };
         })
       );
 
-      const ticketCount = purchaseHistory.reduce(
-        (sum, purchase) => sum + (purchase.ticketCount || 0),
-        0
-      );
-
-      const newTicketCount = purchaseHistory
-        .filter(
-          purchase =>
-            purchase.category === '回数券' &&
-            purchase.squareOrderId &&
-            !(currentParent.squareTicketAppliedOrderIds || []).includes(
-              purchase.squareOrderId
-            )
-        )
-        .reduce(
-          (sum, purchase) => sum + (purchase.ticketCount || 0),
-          0
-        );
-
-      const isFirstSync =
-        currentParent.squareTicketSyncInitialized !== true;
-
       alert(
-        `Squareから購入・決済履歴を同期しました！\n` +
-        `購入履歴: ${purchaseHistory.length}件\n` +
-        `回数券合計: ${ticketCount}回\n` +
-        (isFirstSync
-          ? '初回同期のため、既存回数券は残数に加算していません。'
-          : `今回追加した回数券: ${newTicketCount}回`)
+        `Square情報の更新が完了しました！\n` +
+        `更新した顧客: ${updatedCustomers}人\n` +
+        `今回追加した回数券: ${addedTicketCountTotal}回`
       );
     } catch (err) {
-      console.error(err);
-      alert('Square同期中に通信エラーが発生しました。');
+      console.error('Square一括同期エラー:', err);
+      alert('Square情報の更新中に通信エラーが発生しました。');
     } finally {
       setIsSyncing(false);
     }
@@ -889,6 +875,7 @@ export default function ClientsPage() {
   // ハンドラー類
   // ---------------------------------------------------------------------------
   const handleSelectStudent = (id: string) => {
+    setSelectedParentId(null);
     setSelectedStudentId(id);
     const target = students.find(s => s.id === id);
     if (target) {
@@ -970,9 +957,33 @@ export default function ClientsPage() {
   const handleSaveChild = () => {
     const name = childFormName.trim(); if (!name) return alert('受講生のお名前を入力してください。'); if (!childFormParentId) return alert('代表者を選択してください。');
     if (editingChildId) setStudents(prev => prev.map(s => s.id === editingChildId ? { ...s, parentId: childFormParentId, name, kana: childFormKana.trim(), birthdate: childFormBirthdate, memo: childFormMemo } : s));
-    else { const s: Student = { id: `s-${Date.now()}`, parentId: childFormParentId, name, kana: childFormKana.trim(), age: childFormBirthdate ? Math.max(0, new Date().getFullYear() - new Date(childFormBirthdate).getFullYear()) : 0, birthdate: childFormBirthdate, firstLessonDate: new Date().toISOString().split('T')[0], lastReservationDate: '', concern: '', target: '', memo: childFormMemo, physicalHistory: [], sessions: [] }; setStudents(prev => [...prev, s]); setSelectedStudentId(s.id); }
+    else { const s: Student = { id: `s-${Date.now()}`, parentId: childFormParentId, name, kana: childFormKana.trim(), age: childFormBirthdate ? Math.max(0, new Date().getFullYear() - new Date(childFormBirthdate).getFullYear()) : 0, birthdate: childFormBirthdate, firstLessonDate: new Date().toISOString().split('T')[0], lastReservationDate: '', concern: '', target: '', memo: childFormMemo, physicalHistory: [], sessions: [] }; setStudents(prev => [...prev, s]); setSelectedStudentId(s.id); setSelectedParentId(null); }
     setIsChildFormOpen(false); alert(editingChildId ? '受講生情報を更新しました。' : '受講生を追加しました。');
   };
+  const handleDeleteParent = (parentId: string) => {
+    const target = parents.find(p => p.id === parentId);
+    if (!target) return;
+
+    const memberCount = students.filter(s => s.parentId === parentId).length;
+    const memberMessage = memberCount > 0
+      ? `\nこの顧客に紐づくグループメンバー${memberCount}名も削除されます。`
+      : '';
+
+    if (!confirm(`「${target.name}」様を削除しますか？${memberMessage}\n\nGOLAZO内の顧客・カルテデータが削除されます。\nSquare上の顧客情報は削除されません。`)) {
+      return;
+    }
+
+    setStudents(prev => prev.filter(student => student.parentId !== parentId));
+    setParents(prev => prev.filter(parent => parent.id !== parentId));
+
+    if (selectedParentId === parentId) {
+      setSelectedParentId(null);
+      setSelectedStudentId('');
+    }
+
+    alert('顧客を削除しました。');
+  };
+
   const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの受講生のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('受講生を削除しました。'); };
 
   const handleAddSession = () => {
@@ -1363,6 +1374,167 @@ export default function ClientsPage() {
     );
   });
 
+  const filteredClientStudents = students.filter(student => {
+    const parent = parents.find(p => p.id === student.parentId);
+    if (!parent) return false;
+
+    const query = searchKeyword.trim().toLowerCase();
+
+    const matchesSearch =
+      query === '' ||
+      student.name.toLowerCase().includes(query) ||
+      student.kana.toLowerCase().includes(query) ||
+      parent.name.toLowerCase().includes(query) ||
+      parent.kana.toLowerCase().includes(query);
+
+    const alerts = getAlertBadges(student, parent);
+
+    const matchesAlert =
+      alertFilter === 'all' ||
+      (alertFilter === 'alert' && alerts.length > 0) ||
+      alerts.some(alert => {
+        if (alertFilter === 'no-reservation-30') {
+          return alert.text.startsWith('🚨 1ヶ月未予約');
+        }
+        if (alertFilter === 'no-reservation-14') {
+          return alert.text.startsWith('⚠️ 最終予約から2週間未予約');
+        }
+        if (alertFilter === 'measurement') {
+          return alert.text === '⚠️ 3ヶ月測定の時期です';
+        }
+        if (alertFilter === 'ticket') {
+          return alert.text.startsWith('🎫 回数券残り');
+        }
+        return false;
+      });
+
+    return matchesSearch && matchesAlert;
+  });
+
+  const filteredClientParents = parents.filter(parent => {
+    const query = searchKeyword.trim().toLowerCase();
+
+    const hasMember = students.some(student => student.parentId === parent.id);
+
+    const matchesSearch =
+      query === '' ||
+      parent.name.toLowerCase().includes(query) ||
+      parent.kana.toLowerCase().includes(query);
+
+    const matchesAlert =
+      alertFilter === 'all' ||
+      (alertFilter === 'ticket' && parent.ticketRemaining <= 1) ||
+      (alertFilter === 'alert' && parent.ticketRemaining <= 1);
+
+    return matchesSearch && matchesAlert;
+  });
+
+  const shouldShowParentResults =
+    searchKeyword.trim() !== '' || alertFilter !== 'all';
+
+  const handleSelectParent = (parentId: string) => {
+    const parent = parents.find(p => p.id === parentId);
+    if (!parent) return;
+
+    const parentMembers = students.filter(s => s.parentId === parentId);
+    const query = searchKeyword.trim().toLowerCase();
+
+    const matchedMember = query
+      ? parentMembers.find(member =>
+          !member.isRepresentative &&
+          (
+            member.name.toLowerCase().includes(query) ||
+            member.kana.toLowerCase().includes(query)
+          )
+        )
+      : undefined;
+
+    if (matchedMember) {
+      setSelectedStudentId(matchedMember.id);
+      setSelectedParentId(null);
+
+      requestAnimationFrame(() => {
+        document.getElementById('client-carte')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      });
+      return;
+    }
+
+    // Square代表者本人のカルテを優先して表示
+    let representative = parentMembers.find(student => student.isRepresentative);
+
+    // 既存データでisRepresentativeが付いていない場合、
+    // 代表者名・カナが一致するStudentを代表者本人として再利用する。
+    if (!representative) {
+      representative = parentMembers.find(student =>
+        student.name === parent.name &&
+        (student.kana || '') === (parent.kana || '')
+      );
+
+      if (representative) {
+        const representativeId = representative.id;
+        setStudents(prev =>
+          prev.map(student =>
+            student.id === representativeId
+              ? {
+                  ...student,
+                  isRepresentative: true,
+                  squareCustomerId: parent.squareCustomerId || student.squareCustomerId
+                }
+              : student
+          )
+        );
+      }
+    }
+
+    if (representative) {
+      setSelectedStudentId(representative.id);
+      setSelectedParentId(null);
+
+      requestAnimationFrame(() => {
+        document.getElementById('client-carte')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      });
+      return;
+    }
+
+    // 代表者本人用Studentがまだ存在しない場合のみ新規作成
+    const newStudent: Student = {
+      id: `s-${Date.now()}`,
+      parentId: parent.id,
+      squareCustomerId: parent.squareCustomerId,
+      isRepresentative: true,
+      name: parent.name,
+      kana: parent.kana || '',
+      age: parent.birthday
+        ? Math.max(0, new Date().getFullYear() - new Date(parent.birthday).getFullYear())
+        : 0,
+      birthdate: parent.birthday || '',
+      firstLessonDate: new Date().toISOString().split('T')[0],
+      lastReservationDate: '',
+      concern: '',
+      target: '',
+      memo: '',
+      physicalHistory: [],
+      sessions: []
+    };
+
+    setStudents(prev => [...prev, newStudent]);
+    setSelectedStudentId(newStudent.id);
+    setSelectedParentId(null);
+
+    requestAnimationFrame(() => {
+      document.getElementById('client-carte')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
+  };
+
   const calcDiff = (afterVal: number, beforeVal: number, unit: string, isImprovementWhenIncrease: boolean = true) => {
     if (afterVal === undefined || beforeVal === undefined) return null;
     const diff = Number((afterVal - beforeVal).toFixed(1));
@@ -1378,108 +1550,255 @@ export default function ClientsPage() {
       <Header />
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-
-          {/* 左カラム：受講生選択 */}
-          <div className="md:col-span-1 space-y-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
-              <label className="text-xs font-bold text-slate-600 flex items-center gap-1"><span>🔍</span> キーワード検索</label>
-              <input
-                type="text"
-                placeholder="名前、悩み、メモで検索..."
-                value={searchKeyword}
-                onChange={e => setSearchKeyword(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-[#5e9bc4] outline-none"
-              />
-            </div>
-
-            <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="w-full bg-white border border-sky-200 text-[#5e9bc4] hover:bg-sky-50 font-bold text-xs px-3 py-2.5 rounded-lg shadow-sm transition">👥 グループ管理</button>
-
-            <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider px-1">受講生一覧 ({filteredStudents.length}名)</h3>
-
-            <div className="space-y-2.5">
-              {filteredStudents.map(student => {
-                const parent = parents.find(p => p.id === student.parentId);
-                const isSelected = selectedStudentId === student.id;
-                const badges = getAlertBadges(student, parent || parents[0]);
-
-                return (
-                  <div
-                    key={student.id}
-                    onClick={() => handleSelectStudent(student.id)}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all shadow-sm ${
-                      isSelected ? 'bg-sky-50/80 border-[#5e9bc4] ring-2 ring-[#5e9bc4]/20' : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className={`font-bold ${isSelected ? 'text-[#5e9bc4]' : 'text-slate-800'}`}>{student.name}</span>
-                      <span className="text-xs font-semibold text-[#5e9bc4] bg-sky-100/60 px-2 py-0.5 rounded-full">{student.age}歳</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1">代表者: {parent?.name}</p>
-                    
-                    {badges.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {badges.map((b, i) => (
-                          <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${b.type === 'danger' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
-                            {b.text}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+            <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
+              <span>🔍</span> キーワード検索
+            </label>
+            <input
+              type="text"
+              placeholder="代表者名、メンバー名で検索..."
+              value={searchKeyword}
+              onChange={e => setSearchKeyword(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-[#5e9bc4] outline-none"
+            />
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+            <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
+              <span>🔽</span> 条件で絞り込み
+            </label>
+            <select
+              value={alertFilter}
+              onChange={e => setAlertFilter(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-[#5e9bc4] outline-none bg-white"
+            >
+              <option value="">選択してください</option>
+              <option value="all">👥 全顧客を表示</option>
+              <option value="alert">🚨 アラートあり</option>
+              <option value="no-reservation-30">🚨 1ヶ月未予約</option>
+              <option value="no-reservation-14">⚠️ 2週間未予約</option>
+              <option value="measurement">⚠️ 3ヶ月測定の時期</option>
+              <option value="ticket">🎫 回数券残り1回以下</option>
+            </select>
           </div>
 
-          {/* 右カラム：メインコンテンツ */}
-          <div className="md:col-span-3 space-y-5">
-            {/* グループカルテ概要 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                  <div className="text-xs font-bold text-slate-400">👥 グループカルテ</div>
-                  {currentParent.groupLinked ? (
-                    <>
-                      <div className="text-lg font-bold text-slate-800 mt-1">代表者：{currentParent.name} 様（決済者）</div>
-                      <div className="text-[11px] text-slate-400 mt-1 font-mono">Square顧客ID: {currentStudent.squareCustomerId || '未連携'}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-lg font-bold text-slate-800 mt-1">グループ未紐付け</div>
-                      <div className="text-[11px] text-slate-400 mt-1">この受講生をグループへ紐付けできます。</div>
-                    </>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={openGroupLink} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-2 rounded-lg">👥 グループに紐付け</button>
-                  {currentParent.groupLinked && <button type="button" onClick={() => setIsParentChildModalOpen(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-2 rounded-lg">👥 グループを管理</button>}
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-    {siblingStudents.map(member => (
-                  <button key={member.id} type="button" onClick={() => handleSelectStudent(member.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${member.id === currentStudent.id ? 'bg-[#5e9bc4] text-white border-[#5e9bc4]' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-200'}`}>
-                    {member.name}
-                  </button>
-                ))}
-                {siblingStudents.length === 0 && <span className="text-xs text-slate-400">受講生未登録</span>}
-              </div>
-            </div>
+        </div>
 
+        {shouldShowParentResults && (
+          <div className="space-y-3">
+            <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider px-1">
+              検索結果 ({filteredClientStudents.length + filteredClientParents.length}名)
+            </h3>
+
+            {filteredClientStudents.length === 0 && filteredClientParents.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-5 text-center text-sm text-slate-500">
+                条件に一致する受講者はいません。
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {filteredClientStudents.map(student => {
+                  const parent = parents.find(p => p.id === student.parentId);
+                  if (!parent) return null;
+
+                  const isSelected = student.id === selectedStudentId;
+                  const badges = getAlertBadges(student, parent);
+
+                  return (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStudentId(student.id);
+                        setSelectedParentId(student.parentId || null);
+
+                        requestAnimationFrame(() => {
+                          document.getElementById('client-carte')?.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                          });
+                        });
+                      }}
+                      className={`w-full text-left p-4 rounded-xl border cursor-pointer transition-all shadow-sm ${
+                        isSelected
+                          ? 'bg-sky-50/80 border-[#5e9bc4] ring-2 ring-[#5e9bc4]/20'
+                          : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <span className={`font-bold ${
+                          isSelected ? 'text-[#5e9bc4]' : 'text-slate-800'
+                        }`}>
+                          {student.name}
+                        </span>
+
+                        {isSelected && (
+                          <span className="text-[10px] font-bold bg-[#5e9bc4] text-white px-2 py-0.5 rounded-full">
+                            表示中
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        代表者：{parent.name}
+                      </p>
+
+                      {badges.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {badges.map((b, i) => (
+                            <span
+                              key={i}
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                b.type === 'danger'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {b.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-5">
+
+        {filteredClientParents.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {filteredClientParents.map(parent => (
+              <div
+                key={`parent-${parent.id}`}
+                onClick={() => handleSelectParent(parent.id)}
+                className="w-full text-left p-4 rounded-xl border bg-white border-slate-200 shadow-sm cursor-pointer hover:border-[#5e9bc4] hover:bg-sky-50/30 transition"
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <span className="font-bold text-slate-800">
+                    👤 {parent.name}
+                  </span>
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                    メンバー未登録
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Square代表者
+                </p>
+                <p className="text-[10px] text-slate-400 font-mono mt-1">
+                  Square顧客ID: {parent.squareCustomerId || '未連携'}
+                </p>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openAddChild(parent.id);
+                  }}
+                  className="mt-3 w-full bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-[#4d85ab]"
+                >
+                  ＋ グループメンバーを追加
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDeleteParent(parent.id);
+                  }}
+                  className="mt-2 w-full bg-rose-50 text-rose-500 border border-rose-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-rose-100"
+                >
+                  🗑 顧客を削除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+          {/* メインコンテンツ：カルテ全面表示 */}
+          <div id="client-carte" className="space-y-5">
+            {isParentOnlySelected && selectedParent && (
+              <div className="bg-white p-5 rounded-xl border border-sky-200 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-[#5e9bc4]">👤 Square代表者カルテ</p>
+                    <h2 className="text-2xl font-bold text-slate-800 mt-1">
+                      {selectedParent.name}
+                    </h2>
+                    {selectedParent.kana && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {selectedParent.kana}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openAddChild(selectedParent.id)}
+                    className="bg-[#5e9bc4] text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-[#4d85ab] shrink-0"
+                  >
+                    ＋ グループメンバーを追加
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-sky-50 border border-sky-100 rounded-lg p-3">
+                    <p className="text-[11px] text-slate-500 font-semibold">
+                      回数券残数
+                    </p>
+                    <p className="text-xl font-bold text-[#5e9bc4] mt-1">
+                      🎫 {selectedParent.ticketRemaining}回
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <p className="text-[11px] text-slate-500 font-semibold">
+                      Square顧客ID
+                    </p>
+                    <p className="text-xs font-mono text-slate-600 mt-1 break-all">
+                      {selectedParent.squareCustomerId || '未連携'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <p className="text-xs text-slate-400 font-semibold mb-2">
+                    グループメンバー
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    現在、グループメンバーは登録されていません。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsParentChildModalOpen(true)}
+                className="bg-white border border-sky-200 text-[#5e9bc4] hover:bg-sky-50 font-bold text-xs px-3 py-2.5 rounded-lg shadow-sm transition"
+              >
+                👥 グループ管理
+              </button>
+            </div>
+            <div className={isParentOnlySelected ? "hidden" : ""}>
             {/* 顧客基本情報ヘッダー */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+
+              {/* 上段：受講者情報 ＋ アラート */}
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] gap-4 items-start">
+
+                {/* 受講者情報 */}
                 <div>
-                  <span className="text-xs text-slate-400 font-semibold">{currentStudent.kana}</span>
-                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3 mt-0.5">
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                     {currentStudent.name}
-                    <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">{currentStudent.age}歳</span>
-                  </h2>
-                  <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
-                    <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-semibold">
-                      {currentParent.groupLinked ? `代表者: ${currentParent.name} 様 (${currentParent.phone})` : 'グループ未紐付け'}
+                    <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                      {currentStudent.age}歳
                     </span>
-                    <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                  </h2>
+
+                  <div className="mt-2">
+                    <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1.5 rounded-full flex items-center gap-1 w-fit text-xs">
                       <span>🎟️</span> 回数券 残数:
                       {isEditingTicketRemaining ? (
                         <>
@@ -1524,37 +1843,105 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                <button type="button" onClick={() => void syncSquareCustomers(true)} disabled={isSyncing} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50">🔄 {isSyncing ? 'Square顧客情報を同期中...' : 'Square顧客情報を同期'}</button>
-
-                {/* アラートバッジ群 */}
+                {/* アラート */}
                 {currentAlerts.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    {currentAlerts.map((alt, idx) => (
-                      <div key={idx} className={`text-xs font-bold px-3 py-1 rounded-lg border flex items-center gap-1.5 ${alt.type === 'danger' ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-                        <span>{alt.text}</span>
-                      </div>
-                    ))}
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+                    <div className="text-xs text-slate-400 font-semibold mb-1.5">
+                      ⚠️ 注意・確認事項
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {currentAlerts.map((alt, idx) => (
+                        <div
+                          key={idx}
+                          className={`text-xs font-bold px-3 py-2 rounded-lg border flex items-center gap-1.5 ${
+                            alt.type === 'danger'
+                              ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse'
+                              : 'bg-amber-50 border-amber-200 text-amber-800'
+                          }`}
+                        >
+                          <span>{alt.text}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+
               </div>
 
-              {/* グループリンク */}
-              {currentParent.groupLinked && siblingStudents.length > 1 && (
-                <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between">
-                  <span className="text-xs text-amber-900 font-bold">👥 グループ</span>
-                  <div className="flex gap-1.5">
-                    {siblingStudents.map(sib => (
-                      <button
-                        key={sib.id}
-                        onClick={() => handleSelectStudent(sib.id)}
-                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${sib.id === currentStudent.id ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'}`}
-                      >
-                        {sib.name}
-                      </button>
-                    ))}
+              {/* 下段：代表者 ＋ グループ */}
+              <div className="border-t border-slate-100 pt-3">
+                <div className="grid grid-cols-1 lg:grid-cols-[160px_1fr] gap-3 items-start">
+
+                  {/* 代表者 */}
+                  <div>
+                    <div className="text-xs text-slate-400 font-semibold mb-1">
+                      代表者
+                    </div>
+                    <div className="font-bold text-slate-700 text-sm">
+                      {currentParent.name} 様
+                    </div>
                   </div>
+
+                  {/* グループ */}
+                  <div>
+                    <div className="text-xs text-slate-400 font-semibold mb-1.5">
+                      グループメンバー
+                    </div>
+
+                    {currentParent.groupLinked && siblingStudents.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {siblingStudents.map(member => (
+                          <button
+                            key={member.id}
+                            type="button"
+                            onClick={() => handleSelectStudent(member.id)}
+                            className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold border transition ${
+                              member.id === currentStudent.id
+                                ? 'bg-[#5e9bc4] text-white border-[#5e9bc4]'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-200'
+                            }`}
+                          >
+                            {member.kana ? `${member.kana} ` : ''}{member.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={openGroupLink}
+                        className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold px-3 py-1.5 rounded-md transition text-xs"
+                      >
+                        👥 グループに紐付け
+                      </button>
+
+                      {currentParent.groupLinked && (
+                        <button
+                          type="button"
+                          onClick={() => setIsParentChildModalOpen(true)}
+                          className="bg-white text-[#5e9bc4] border border-sky-200 hover:bg-sky-50 font-bold px-3 py-1.5 rounded-md transition text-xs"
+                        >
+                          👥 グループを管理
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                 </div>
-              )}
+              </div>
+
+              {/* Square情報を一括更新 */}
+              <div className="border-t border-slate-100 pt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleSquareSync()}
+                  disabled={isSyncing}
+                  className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+                >
+                  🔄 {isSyncing ? 'Square情報を更新中...' : 'Square情報を更新'}
+                </button>
+              </div>
 
               {/* タブ */}
               <div className="flex border-b border-slate-200 pt-2 gap-6 text-xs font-bold">
@@ -1831,39 +2218,208 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* 耳ツボ写真：施術前後・左右を個別保存 */}
+                  {/* 耳ツボ写真：左右ごとに施術前・施術後を保存し、比較日でBefore / After比較 */}
                   <div className="space-y-3">
-                    <h4 className="font-bold text-slate-700 text-xs">👂 耳ツボ写真（施術前・施術後／右・左）</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <h4 className="font-bold text-slate-700 text-xs">
+                      👂 耳ツボ写真（右・左／施術前・施術後）
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                       {[
-                        { key: 'beforeRight' as const, label: '施術前・右', date: beforeDate, data: beforePhysical?.earAcupuncturePhotos?.beforeRight },
-                        { key: 'afterRight' as const, label: '施術後・右', date: afterDate, data: afterPhysical?.earAcupuncturePhotos?.afterRight },
-                        { key: 'beforeLeft' as const, label: '施術前・左', date: beforeDate, data: beforePhysical?.earAcupuncturePhotos?.beforeLeft },
-                        { key: 'afterLeft' as const, label: '施術後・左', date: afterDate, data: afterPhysical?.earAcupuncturePhotos?.afterLeft }
-                      ].map(item => (
-                        <div key={item.key} className="border rounded-xl p-3 bg-slate-50">
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <div>
-                              <div className={`inline-block text-[10px] font-bold px-2 py-1 rounded ${item.key.startsWith('after') ? 'bg-[#5e9bc4] text-white' : 'bg-slate-200 text-slate-600'}`}>{item.label}</div>
-                              <div className="text-[10px] text-slate-500 mt-1">{item.date}</div>
-                            </div>
-                            {item.data && (
-                              <button type="button" onClick={() => handleDeleteEarAcupuncturePhoto(item.date, item.key)} className="text-[10px] text-rose-500 hover:underline">削除</button>
-                            )}
+                        {
+                          side: '右',
+                          beforeKey: 'beforeRight' as const,
+                          afterKey: 'afterRight' as const
+                        },
+                        {
+                          side: '左',
+                          beforeKey: 'beforeLeft' as const,
+                          afterKey: 'afterLeft' as const
+                        }
+                      ].map(side => (
+
+                        <div key={side.side} className="border rounded-xl p-3 bg-slate-50">
+
+                          <div className="font-bold text-slate-700 text-xs mb-3">
+                            👂 {side.side}耳
                           </div>
-                          {item.data ? (
-                            <div className="relative">
-                              <img src={item.data} alt={item.label} className="w-full h-40 object-contain rounded-lg border bg-white" />
+
+                          <div className="grid grid-cols-2 gap-2">
+
+                            {/* Before：比較開始日 */}
+                            <div className="border rounded-lg p-2 bg-white">
+                              <div className="text-[9px] font-bold text-slate-500 mb-1">
+                                Before・施術前
+                              </div>
+                              <div className="text-[9px] text-slate-400 mb-1">
+                                {beforeDate}
+                              </div>
+
+                              {beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] ? (
+                                <img
+                                  src={beforePhysical.earAcupuncturePhotos[side.beforeKey] || ''}
+                                  alt={`Before ${side.side}耳 施術前`}
+                                  className="w-full h-28 object-contain rounded border bg-white"
+                                />
+                              ) : (
+                                <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
+                                  未登録
+                                </div>
+                              )}
+
+                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
+                                {beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] ? '写真を差し替え' : '写真を追加'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleEarAcupuncturePhotoUpload(e, beforeDate, side.beforeKey)}
+                                />
+                              </label>
+
+                              {beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEarAcupuncturePhoto(beforeDate, side.beforeKey)}
+                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
+                                >
+                                  削除
+                                </button>
+                              )}
                             </div>
-                          ) : (
-                            <div className="h-40 flex items-center justify-center text-[10px] text-slate-400 border border-dashed rounded-lg bg-white">未登録</div>
-                          )}
-                          <label className="mt-2 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2 py-1.5 rounded cursor-pointer">
-                            {item.data ? '写真を差し替え' : '写真を追加'}
-                            <input type="file" accept="image/*" className="hidden" onChange={e => handleEarAcupuncturePhotoUpload(e, item.date, item.key)} />
-                          </label>
+
+                            {/* Before：施術後 */}
+                            <div className="border rounded-lg p-2 bg-white">
+                              <div className="text-[9px] font-bold text-slate-500 mb-1">
+                                Before・施術後
+                              </div>
+                              <div className="text-[9px] text-slate-400 mb-1">
+                                {beforeDate}
+                              </div>
+
+                              {beforePhysical?.earAcupuncturePhotos?.[side.afterKey] ? (
+                                <img
+                                  src={beforePhysical.earAcupuncturePhotos[side.afterKey] || ''}
+                                  alt={`Before ${side.side}耳 施術後`}
+                                  className="w-full h-28 object-contain rounded border bg-white"
+                                />
+                              ) : (
+                                <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
+                                  未登録
+                                </div>
+                              )}
+
+                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
+                                {beforePhysical?.earAcupuncturePhotos?.[side.afterKey] ? '写真を差し替え' : '写真を追加'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleEarAcupuncturePhotoUpload(e, beforeDate, side.afterKey)}
+                                />
+                              </label>
+
+                              {beforePhysical?.earAcupuncturePhotos?.[side.afterKey] && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEarAcupuncturePhoto(beforeDate, side.afterKey)}
+                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
+                                >
+                                  削除
+                                </button>
+                              )}
+                            </div>
+
+                            {/* After：施術前 */}
+                            <div className="border rounded-lg p-2 bg-white">
+                              <div className="text-[9px] font-bold text-[#5e9bc4] mb-1">
+                                After・施術前
+                              </div>
+                              <div className="text-[9px] text-slate-400 mb-1">
+                                {afterDate}
+                              </div>
+
+                              {afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] ? (
+                                <img
+                                  src={afterPhysical.earAcupuncturePhotos[side.beforeKey] || ''}
+                                  alt={`After ${side.side}耳 施術前`}
+                                  className="w-full h-28 object-contain rounded border bg-white"
+                                />
+                              ) : (
+                                <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
+                                  未登録
+                                </div>
+                              )}
+
+                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
+                                {afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] ? '写真を差し替え' : '写真を追加'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleEarAcupuncturePhotoUpload(e, afterDate, side.beforeKey)}
+                                />
+                              </label>
+
+                              {afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEarAcupuncturePhoto(afterDate, side.beforeKey)}
+                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
+                                >
+                                  削除
+                                </button>
+                              )}
+                            </div>
+
+                            {/* After：施術後 */}
+                            <div className="border rounded-lg p-2 bg-white">
+                              <div className="text-[9px] font-bold text-[#5e9bc4] mb-1">
+                                After・施術後
+                              </div>
+                              <div className="text-[9px] text-slate-400 mb-1">
+                                {afterDate}
+                              </div>
+
+                              {afterPhysical?.earAcupuncturePhotos?.[side.afterKey] ? (
+                                <img
+                                  src={afterPhysical.earAcupuncturePhotos[side.afterKey] || ''}
+                                  alt={`After ${side.side}耳 施術後`}
+                                  className="w-full h-28 object-contain rounded border bg-white"
+                                />
+                              ) : (
+                                <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
+                                  未登録
+                                </div>
+                              )}
+
+                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
+                                {afterPhysical?.earAcupuncturePhotos?.[side.afterKey] ? '写真を差し替え' : '写真を追加'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleEarAcupuncturePhotoUpload(e, afterDate, side.afterKey)}
+                                />
+                              </label>
+
+                              {afterPhysical?.earAcupuncturePhotos?.[side.afterKey] && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEarAcupuncturePhoto(afterDate, side.afterKey)}
+                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
+                                >
+                                  削除
+                                </button>
+                              )}
+                            </div>
+
+                          </div>
                         </div>
+
                       ))}
+
                     </div>
                   </div>
 
@@ -2056,13 +2612,7 @@ export default function ClientsPage() {
                       </p>
                     </div>
 
-                    <button
-                      onClick={handleSquareSync}
-                      disabled={isSyncing}
-                      className="bg-sky-50 text-[#5e9bc4] border border-sky-200 hover:bg-sky-100 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 disabled:opacity-50 shadow-sm"
-                    >
-                      <span>🔄</span> {isSyncing ? '同期中...' : 'Squareデータ同期'}
-                    </button>
+
                   </div>
 
                   <div className="space-y-3">
@@ -2143,6 +2693,7 @@ export default function ClientsPage() {
               </div>
             )}
 
+
             {/* TAB 3: 基本情報編集・削除 */}
             {activeTab === 'edit_info' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
@@ -2163,15 +2714,6 @@ export default function ClientsPage() {
                       type="text"
                       value={editForm.kana}
                       onChange={e => setEditForm({ ...editForm, kana: e.target.value })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">代表者電話番号</label>
-                    <input
-                      type="text"
-                      value={editForm.phone}
-                      onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
                       className="w-full border border-slate-300 rounded-lg p-2.5 outline-none"
                     />
                   </div>
@@ -2223,6 +2765,7 @@ export default function ClientsPage() {
               </div>
             )}
 
+            </div>
           </div>
         </div>
         {isParentChildModalOpen && (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"><div className="p-5 border-b flex justify-between items-center"><div><h3 className="font-bold text-slate-800">👥 グループ管理</h3><p className="text-[11px] text-slate-400 mt-1">Squareに登録されたお客様は受講生一覧へ同期します。受講生カルテから、必要な方だけグループへ紐付けます。</p></div><div className="flex gap-2"><button type="button" onClick={() => void syncSquareCustomers(true)} className="bg-sky-50 text-[#5e9bc4] border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold">🔄 Square同期</button><button type="button" onClick={() => setIsParentChildModalOpen(false)} className="text-slate-400 text-xl">×</button></div></div><div className="p-5 overflow-y-auto max-h-[75vh] space-y-5">
@@ -2252,10 +2795,6 @@ export default function ClientsPage() {
                     <div>
                       <label className="block text-slate-500 font-semibold mb-1">代表者名（決済者）</label>
                       <input value={groupRepName} onChange={e => setGroupRepName(e.target.value)} className="w-full border rounded-lg p-2.5" placeholder="例：藤田 奈々" />
-                    </div>
-                    <div>
-                      <label className="block text-slate-500 font-semibold mb-1">電話番号</label>
-                      <input value={groupRepPhone} onChange={e => setGroupRepPhone(e.target.value)} className="w-full border rounded-lg p-2.5" placeholder="任意" />
                     </div>
                     <div>
                       <label className="block text-slate-500 font-semibold mb-1">Square顧客ID</label>

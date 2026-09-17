@@ -12,7 +12,7 @@ interface ImageUploadInputProps {
 
 export default function ImageUploadInput({
   label,
-  bucket = "gym-media",
+  bucket = "client-photos",
   folder,
   onUploaded,
 }: ImageUploadInputProps) {
@@ -35,10 +35,15 @@ export default function ImageUploadInput({
       upsert: false,
     });
 
-    if (!error) {
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      onUploaded(data.publicUrl);
+    if (error) {
+      console.error("写真アップロードエラー:", error);
+      alert(`写真のアップロードに失敗しました。\\n${error.message}`);
+      setUploading(false);
+      return;
     }
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    onUploaded(data.publicUrl);
     setUploading(false);
   }
 

@@ -47,6 +47,8 @@ type CampaignItem = {
   contribution: number;
   targetCount: number;
   targetSales: number;
+  campaignStartDate?: string;
+  campaignEndDate?: string;
 };
 
 const normalizeSquareSale = (item: any): SaleItem => ({
@@ -64,42 +66,8 @@ const normalizeSquareSale = (item: any): SaleItem => ({
 });
 
 export default function SalesPage() {
-  // 売上ダミーデータ
-  const [sales, setSales] = useState<SaleItem[]>([
-    {
-      id: 1,
-      date: '2026-10-05',
-      clientName: '藤田 奈々 様',
-      category: '月謝・コース',
-      amount: 60000,
-      paymentMethod: 'Square決済',
-      staff: 'TAKA',
-      memo: '10回券（共通）',
-      source: 'manual',
-    },
-    {
-      id: 2,
-      date: '2026-10-06',
-      clientName: '佐藤 健太 様',
-      category: '体験料',
-      amount: 3000,
-      paymentMethod: '現金',
-      staff: 'NANA',
-      memo: '初回体験トレーニング',
-      source: 'manual',
-    },
-    {
-      id: 3,
-      date: '2026-09-15',
-      clientName: '鈴木 花子 様',
-      category: '回数券',
-      amount: 35000,
-      paymentMethod: 'Square決済',
-      staff: 'TAKA',
-      memo: '5回券購入',
-      source: 'manual',
-    },
-  ]);
+  // 売上データ
+  const [sales, setSales] = useState<SaleItem[]>([]);
 
   // 体験者ダミーデータ
   const [trials, setTrials] = useState<TrialItem[]>([
@@ -130,6 +98,8 @@ export default function SalesPage() {
     { id: 3, yearMonth: '2025-09', title: '秋の入会キャンペーン', appliedCount: 3, contribution: 90000, targetCount: 8, targetSales: 200000 },
     { id: 4, yearMonth: '2025-09', title: 'プロテインセット割', appliedCount: 8, contribution: 32000, targetCount: 15, targetSales: 60000 },
   ]);
+  // タスク・議事録から連携されたキャンペーン
+  const [linkedCampaigns, setLinkedCampaigns] = useState<CampaignItem[]>([]);
 
   // 目標売上（手動設定用 State）
   const [monthlyTarget, setMonthlyTarget] = useState<string>('1000000');
@@ -144,8 +114,24 @@ export default function SalesPage() {
   // フィルター・表示期間の状態（過去の売上確認用）
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
-  const [selectedMonth, setSelectedMonth] = useState<string>('10');
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+
+  useEffect(() => {
+    const now = new Date();
+    const savedYear = localStorage.getItem('golazo-sales-selected-year');
+    const savedMonth = localStorage.getItem('golazo-sales-selected-month');
+
+    setSelectedYear(savedYear || String(now.getFullYear()));
+    setSelectedMonth(savedMonth || String(now.getMonth() + 1));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedYear || !selectedMonth) return;
+
+    localStorage.setItem('golazo-sales-selected-year', selectedYear);
+    localStorage.setItem('golazo-sales-selected-month', selectedMonth);
+  }, [selectedYear, selectedMonth]);
   
   // 選択中の年月と「現在」の年月の目標をSupabaseから読み込みます。
   useEffect(() => {
@@ -255,6 +241,61 @@ export default function SalesPage() {
       console.warn('保存済みキャンペーンの読み込みに失敗しました:', error);
     }
   }, []);
+
+  // タスク・議事録の「カレンダーに連携する」がONのキャンペーンを読み込みます。
+  useEffect(() => {
+    const loadLinkedCampaigns = async () => {
+      const { data, error } = await supabase
+        .from('minutes')
+        .select('id, date, campaign_start_date, campaign_end_date, campaign_calendar_enabled, title, category, target_amount, target_count')
+        .eq('category', 'キャンペーン')
+        .eq('campaign_calendar_enabled', true);
+
+      if (error) {
+        console.warn('連携キャンペーンの読み込みに失敗しました:', error.message);
+        return;
+      }
+
+      const result: CampaignItem[] = [];
+
+      (data || []).forEach((row: any) => {
+        const start = String(row.campaign_start_date || row.date || '');
+        const end = String(row.campaign_end_date || row.campaign_start_date || row.date || '');
+
+        if (!start || !end) return;
+
+        const startDate = new Date(`${start}T00:00:00`);
+        const endDate = new Date(`${end}T00:00:00`);
+
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return;
+
+        const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        const lastMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+
+        while (cursor <= lastMonth) {
+          const yearMonth = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+
+          result.push({
+            id: 1000000000 + Number(row.id) * 1000 + cursor.getMonth(),
+            yearMonth,
+            title: String(row.title || 'キャンペーン'),
+            appliedCount: 0,
+            contribution: 0,
+            targetCount: Number(row.target_count) || 0,
+            targetSales: Number(row.target_amount) || 0,
+            campaignStartDate: start,
+            campaignEndDate: end,
+          });
+
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+      });
+
+      setLinkedCampaigns(result);
+    };
+
+    loadLinkedCampaigns();
+  }, [supabase]);
 
   // 備考欄は現在Square連携前のローカル管理データのため、
   // 編集内容だけをブラウザに保存して再読み込み後も維持します。
@@ -442,12 +483,37 @@ export default function SalesPage() {
   const productComparisonNames = Array.from(new Set([...Object.keys(currentProductNameSummary), ...Object.keys(selectedProductNameSummary)])).sort((a, b) => a.localeCompare(b, 'ja'));
 
 
-  const currentCampaigns = campaigns.filter((camp) => camp.yearMonth === `${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`);
-  const selectedCampaigns = campaigns.filter((camp) => camp.yearMonth === `${selectedYear}-${selectedMonth.padStart(2, '0')}`);
+  // 手動登録＋タスク・議事録からの連携キャンペーンを統合します。
+  // 同じ年月・同じタイトルの場合は、Sales側の手動登録を優先します。
+  const allCampaigns = [
+    ...campaigns,
+    ...linkedCampaigns.filter(
+      (linked) =>
+        !campaigns.some(
+          (manual) =>
+            manual.yearMonth === linked.yearMonth &&
+            manual.title === linked.title
+        )
+    ),
+  ];
+
+  const currentCampaigns = allCampaigns.filter((camp) => camp.yearMonth === `${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`);
+  const selectedCampaigns = allCampaigns.filter((camp) => camp.yearMonth === `${selectedYear}-${selectedMonth.padStart(2, '0')}`);
 
   // 一覧テーブル用フィルター
   const filteredSales = sales.filter((item) => {
-    const matchesSearch = item.clientName.includes(searchTerm) || item.memo.includes(searchTerm);
+    const keyword = searchTerm.trim().toLowerCase();
+    const searchableText = [
+      item.clientName,
+      item.memo,
+      item.productName,
+      ...(item.productNames || []),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    const matchesSearch = !keyword || searchableText.includes(keyword);
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesPeriod = item.date.startsWith(`${selectedYear}-${selectedMonth.padStart(2, '0')}`);
     return matchesSearch && matchesCategory && matchesPeriod;
@@ -563,6 +629,19 @@ export default function SalesPage() {
       return next;
     });
     setIsCampaignModalOpen(false);
+  };
+
+  const handleDeleteCampaign = (id: number) => {
+    const target = campaigns.find((campaign) => campaign.id === id);
+    if (!target) return;
+
+    if (!window.confirm(`「${target.title}」を削除しますか？`)) return;
+
+    setCampaigns((current) => {
+      const next = current.filter((campaign) => campaign.id !== id);
+      localStorage.setItem('golazo_campaign_items', JSON.stringify(next));
+      return next;
+    });
   };
 
   const handleSquareSync = async () => {
@@ -998,7 +1077,22 @@ export default function SalesPage() {
                           <>
                             <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{current.targetCount}件</span> ／ 実績：<span className="font-bold">{current.appliedCount}件</span></div>
                             <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{current.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{current.contribution.toLocaleString()}</span></div>
-                            <button onClick={() => openCampaignEditor(current)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
+                            {current.campaignStartDate && current.campaignEndDate && (
+                              <div className="text-xs text-slate-600">
+                                実施期間：<span className="font-bold">{current.campaignStartDate.replace(/-/g, '/')} ～ {current.campaignEndDate.replace(/-/g, '/')}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => openCampaignEditor(current)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
+                              {campaigns.some((campaign) => campaign.id === current.id) && (
+                                <button
+                                  onClick={() => handleDeleteCampaign(current.id)}
+                                  className="text-red-500 hover:text-red-700 text-xs font-bold"
+                                >
+                                  🗑️ 削除
+                                </button>
+                              )}
+                            </div>
                           </>
                         ) : <span className="text-slate-400 text-xs">該当なし</span>}
                       </div>
@@ -1008,7 +1102,22 @@ export default function SalesPage() {
                           <>
                             <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{selected.targetCount}件</span> ／ 実績：<span className="font-bold">{selected.appliedCount}件</span></div>
                             <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{selected.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{selected.contribution.toLocaleString()}</span></div>
-                            <button onClick={() => openCampaignEditor(selected)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
+                            {selected.campaignStartDate && selected.campaignEndDate && (
+                              <div className="text-xs text-slate-600">
+                                実施期間：<span className="font-bold">{selected.campaignStartDate.replace(/-/g, '/')} ～ {selected.campaignEndDate.replace(/-/g, '/')}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => openCampaignEditor(selected)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
+                              {campaigns.some((campaign) => campaign.id === selected.id) && (
+                                <button
+                                  onClick={() => handleDeleteCampaign(selected.id)}
+                                  className="text-red-500 hover:text-red-700 text-xs font-bold"
+                                >
+                                  🗑️ 削除
+                                </button>
+                              )}
+                            </div>
                           </>
                         ) : <span className="text-slate-400 text-xs">該当なし</span>}
                       </div>

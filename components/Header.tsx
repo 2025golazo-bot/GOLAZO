@@ -1,14 +1,19 @@
-// components/Header.tsx
 'use client';
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
 
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
 
-  // リンクが現在地かどうかを判定するヘルパー
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
   const isActive = (path: string) => pathname === path;
 
   const navItems = [
@@ -18,6 +23,18 @@ export default function Header() {
     { href: '/local-info', label: '近隣情報', icon: '📍' },
     { href: '/vendors', label: 'マシン・業者一覧', icon: '🏋️' },
   ];
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      alert('ログアウトに失敗しました: ' + error.message);
+      return;
+    }
+
+    router.push('/login');
+    router.refresh();
+  };
 
   return (
     <header className="bg-[#5e9bc4] text-white shadow-md sticky top-0 z-40">
@@ -41,6 +58,7 @@ export default function Header() {
         <nav className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
           {navItems.map((item) => {
             const active = isActive(item.href);
+
             return (
               <Link
                 key={item.href}
@@ -56,6 +74,15 @@ export default function Header() {
               </Link>
             );
           })}
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white"
+          >
+            <span>🚪</span>
+            <span>ログアウト</span>
+          </button>
         </nav>
       </div>
     </header>

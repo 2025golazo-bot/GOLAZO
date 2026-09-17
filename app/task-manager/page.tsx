@@ -26,6 +26,9 @@ type TaskItem = {
 type MinutesItem = {
   id: number;
   date: string; // YYYY-MM-DD
+  campaignStartDate?: string;
+  campaignEndDate?: string;
+  campaignCalendarEnabled?: boolean;
   title: string;
   category: string; // キャンペーン / 週MT / 月MT / その他
   targetAmount?: number;
@@ -340,7 +343,7 @@ export default function TaskManagerPage() {
     const loadMinutes = async () => {
       const { data, error } = await supabase
         .from('minutes')
-        .select('id, date, title, category, target_amount, target_count, sales_progress, target_achievement_rate, campaign_progress, tasks, notes, created_at')
+        .select('id, date, campaign_start_date, campaign_end_date, campaign_calendar_enabled, title, category, target_amount, target_count, sales_progress, target_achievement_rate, campaign_progress, tasks, notes, created_at')
         .order('date', { ascending: false });
       if (error) {
         console.warn('議事録読み込みエラー:', error.message);
@@ -348,7 +351,12 @@ export default function TaskManagerPage() {
       }
       if (cancelled) return;
       const loaded: MinutesItem[] = (data ?? []).map(row => ({
-        id: Number(row.id), date: row.date ?? '', title: row.title ?? '',
+        id: Number(row.id),
+        date: row.date ?? '',
+        campaignStartDate: row.campaign_start_date ?? undefined,
+        campaignEndDate: row.campaign_end_date ?? undefined,
+        campaignCalendarEnabled: Boolean(row.campaign_calendar_enabled),
+        title: row.title ?? '',
         category: row.category ?? 'その他',
         targetAmount: row.target_amount == null ? undefined : Number(row.target_amount),
         targetCount: row.target_count == null ? undefined : Number(row.target_count),
@@ -388,6 +396,9 @@ export default function TaskManagerPage() {
 
   // 議事録用フォームステート
   const [mFormDate, setMFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [mFormCampaignStartDate, setMFormCampaignStartDate] = useState('');
+  const [mFormCampaignEndDate, setMFormCampaignEndDate] = useState('');
+  const [mFormCampaignCalendarEnabled, setMFormCampaignCalendarEnabled] = useState(false);
   const [mFormTitle, setMFormTitle] = useState('');
   const [mFormCategory, setMFormCategory] = useState('週MT');
   const [mFormOtherCategory, setMFormOtherCategory] = useState('');
@@ -668,7 +679,10 @@ export default function TaskManagerPage() {
   // ---------------------------------------------------------------------------
   const handleOpenAddMinutes = () => {
     setEditingMinutes(null);
-    setMFormDate(new Date().toISOString().split('T')[0]);
+    const today = new Date().toISOString().split('T')[0];
+    setMFormDate(today);
+    setMFormCampaignStartDate(today);
+    setMFormCampaignEndDate(today);
     setMFormTitle('');
     setMFormCategory('週MT');
     setMFormOtherCategory('');
@@ -685,6 +699,8 @@ export default function TaskManagerPage() {
   const handleOpenEditMinutes = (m: MinutesItem) => {
     setEditingMinutes(m);
     setMFormDate(m.date);
+    setMFormCampaignStartDate(m.campaignStartDate ?? m.date);
+    setMFormCampaignEndDate(m.campaignEndDate ?? m.date);
     setMFormTitle(m.title);
     if (['キャンペーン', '週MT', '月MT'].includes(m.category)) {
       setMFormCategory(m.category);
@@ -807,6 +823,9 @@ export default function TaskManagerPage() {
     const payload = {
       id: minutesId,
       date: mFormDate,
+      campaign_start_date: finalCategory === 'キャンペーン' ? (mFormCampaignStartDate || null) : null,
+      campaign_end_date: finalCategory === 'キャンペーン' ? (mFormCampaignEndDate || null) : null,
+      campaign_calendar_enabled: finalCategory === 'キャンペーン' ? mFormCampaignCalendarEnabled : false,
       title: mFormTitle.trim(),
       category: finalCategory,
       target_amount: mFormTargetAmount === '' ? null : Number(mFormTargetAmount),
@@ -830,7 +849,13 @@ export default function TaskManagerPage() {
 
     const row = result.data;
     const minutesData: MinutesItem = {
-      id: Number(row.id), date: row.date, title: row.title, category: row.category,
+      id: Number(row.id),
+      date: row.date,
+      campaignStartDate: row.campaign_start_date ?? undefined,
+      campaignEndDate: row.campaign_end_date ?? undefined,
+      campaignCalendarEnabled: Boolean(row.campaign_calendar_enabled),
+      title: row.title,
+      category: row.category,
       targetAmount: row.target_amount == null ? undefined : Number(row.target_amount),
       targetCount: row.target_count == null ? undefined : Number(row.target_count),
       salesProgress: row.sales_progress ?? '',
@@ -1281,6 +1306,16 @@ export default function TaskManagerPage() {
             <div className="grid grid-cols-7 gap-1.5">
               {calendarDays.map((item, index) => {
                 const dayTasks = item.dateStr ? tasks.filter(t => t.dueDate === item.dateStr) : [];
+                const dayCampaigns = item.dateStr
+                  ? minutesList.filter(m =>
+                      m.category === 'キャンペーン' &&
+                      m.campaignCalendarEnabled === true &&
+                      m.campaignStartDate &&
+                      m.campaignEndDate &&
+                      item.dateStr >= m.campaignStartDate &&
+                      item.dateStr <= m.campaignEndDate
+                    )
+                  : [];
                 return (
                   <div
                     key={index}
@@ -1301,6 +1336,15 @@ export default function TaskManagerPage() {
                           )}
                         </div>
                         <div className="space-y-1 overflow-y-auto max-h-[70px] mt-1">
+                          {dayCampaigns.map(campaign => (
+                            <div
+                              key={`campaign-${campaign.id}`}
+                              className="text-[10px] p-1 rounded truncate bg-[#5e9bc4]/10 text-[#4d85ab] font-semibold"
+                              title={`キャンペーン: ${campaign.title}`}
+                            >
+                              🟦 {campaign.title}
+                            </div>
+                          ))}
                           {dayTasks.map(t => (
                             <div
                               key={t.id}
@@ -1572,6 +1616,48 @@ export default function TaskManagerPage() {
                   </div>
                 )}
               </div>
+
+              {mFormCategory === 'キャンペーン' && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        キャンペーン開始日
+                      </label>
+                      <input
+                        type="date"
+                        value={mFormCampaignStartDate}
+                        onChange={(e) => setMFormCampaignStartDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        キャンペーン終了日
+                      </label>
+                      <input
+                        type="date"
+                        value={mFormCampaignEndDate}
+                        onChange={(e) => setMFormCampaignEndDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mFormCampaignCalendarEnabled}
+                      onChange={(e) => setMFormCampaignCalendarEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-[#5e9bc4] focus:ring-[#5e9bc4]"
+                    />
+                    <span className="text-sm font-semibold text-slate-700">
+                      カレンダーに連携する
+                    </span>
+                  </label>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div>
