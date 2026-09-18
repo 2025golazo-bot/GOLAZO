@@ -1061,70 +1061,75 @@ export default function SalesPage() {
             </button>
           </div>
           <div className="space-y-3">
-            {Array.from(new Set([...currentCampaigns.map(c => c.title), ...selectedCampaigns.map(c => c.title)])).length > 0 ?
-              Array.from(new Set([...currentCampaigns.map(c => c.title), ...selectedCampaigns.map(c => c.title)])).map((title) => {
-                const current = currentCampaigns.find(c => c.title === title);
-                const selected = selectedCampaigns.find(c => c.title === title);
-                return (
-                  <div key={title} className="border border-slate-200 rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
-                      <span className="font-bold text-sm text-slate-800">🎯 {title}</span>
-                    </div>
-                    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
-                      <div className="p-4 space-y-2">
-                        <div className="text-xs font-bold text-[#5e9bc4]">今月（{realCurrentYear}年{Number(realCurrentMonth)}月）</div>
-                        {current ? (
-                          <>
-                            <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{current.targetCount}件</span> ／ 実績：<span className="font-bold">{current.appliedCount}件</span></div>
-                            <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{current.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{current.contribution.toLocaleString()}</span></div>
-                            {current.campaignStartDate && current.campaignEndDate && (
-                              <div className="text-xs text-slate-600">
-                                実施期間：<span className="font-bold">{current.campaignStartDate.replace(/-/g, '/')} ～ {current.campaignEndDate.replace(/-/g, '/')}</span>
-                              </div>
+            {currentCampaigns.length > 0 || selectedCampaigns.length > 0 ? (
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                  <div className="p-4 space-y-2">
+                    <div className="text-xs font-bold text-[#5e9bc4]">今月（{realCurrentYear}年{Number(realCurrentMonth)}月）</div>
+                    {currentCampaigns.length > 0 ? (
+                      currentCampaigns.map((current) => (
+                        <div key={`current-${current.id}`} className="border-b border-slate-100 last:border-b-0 pb-3 last:pb-0 space-y-2">
+                          <div className="text-[11px] font-bold text-[#5e9bc4]">今月キャンペーン</div>
+                          <div className="font-bold text-sm text-slate-800">🎯 {current.title}</div>
+                          <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{current.targetCount}件</span> ／ 実績：<span className="font-bold">{current.appliedCount}件</span></div>
+                          <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{current.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{current.contribution.toLocaleString()}</span></div>
+                          <div className="text-xs text-slate-600">
+                            実施期間：<span className="font-bold">
+                              {current.campaignStartDate && current.campaignEndDate
+                                ? `${current.campaignStartDate.replace(/-/g, '/')} ～ ${current.campaignEndDate.replace(/-/g, '/')}`
+                                : `${current.yearMonth.replace('-', '/')}（月単位）`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => openCampaignEditor(current)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
+                            {campaigns.some((campaign) => campaign.id === current.id) && (
+                              <button
+                                onClick={() => handleDeleteCampaign(current.id)}
+                                className="text-red-500 hover:text-red-700 text-xs font-bold"
+                              >
+                                🗑️ 削除
+                              </button>
                             )}
-                            <div className="flex items-center gap-3">
-                              <button onClick={() => openCampaignEditor(current)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
-                              {campaigns.some((campaign) => campaign.id === current.id) && (
-                                <button
-                                  onClick={() => handleDeleteCampaign(current.id)}
-                                  className="text-red-500 hover:text-red-700 text-xs font-bold"
-                                >
-                                  🗑️ 削除
-                                </button>
-                              )}
-                            </div>
-                          </>
-                        ) : <span className="text-slate-400 text-xs">該当なし</span>}
-                      </div>
-                      <div className="p-4 space-y-2">
-                        <div className="text-xs font-bold text-slate-700">比較年月（{selectedYear}年{selectedMonth}月）</div>
-                        {selected ? (
-                          <>
-                            <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{selected.targetCount}件</span> ／ 実績：<span className="font-bold">{selected.appliedCount}件</span></div>
-                            <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{selected.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{selected.contribution.toLocaleString()}</span></div>
-                            {selected.campaignStartDate && selected.campaignEndDate && (
-                              <div className="text-xs text-slate-600">
-                                実施期間：<span className="font-bold">{selected.campaignStartDate.replace(/-/g, '/')} ～ {selected.campaignEndDate.replace(/-/g, '/')}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-3">
-                              <button onClick={() => openCampaignEditor(selected)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
-                              {campaigns.some((campaign) => campaign.id === selected.id) && (
-                                <button
-                                  onClick={() => handleDeleteCampaign(selected.id)}
-                                  className="text-red-500 hover:text-red-700 text-xs font-bold"
-                                >
-                                  🗑️ 削除
-                                </button>
-                              )}
-                            </div>
-                          </>
-                        ) : <span className="text-slate-400 text-xs">該当なし</span>}
-                      </div>
-                    </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : <span className="text-slate-400 text-xs">該当なし</span>}
                   </div>
-                );
-              }) : <div className="p-6 text-center text-slate-400 text-sm">キャンペーン登録なし</div>}
+
+                  <div className="p-4 space-y-2">
+                    <div className="text-xs font-bold text-slate-700">比較年月（{selectedYear}年{selectedMonth}月）</div>
+                    {selectedCampaigns.length > 0 ? (
+                      selectedCampaigns.map((selected) => (
+                        <div key={`selected-${selected.id}`} className="border-b border-slate-100 last:border-b-0 pb-3 last:pb-0 space-y-2">
+                          <div className="text-[11px] font-bold text-slate-500">比較月キャンペーン</div>
+                          <div className="font-bold text-sm text-slate-800">🎯 {selected.title}</div>
+                          <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{selected.targetCount}件</span> ／ 実績：<span className="font-bold">{selected.appliedCount}件</span></div>
+                          <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{selected.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{selected.contribution.toLocaleString()}</span></div>
+                          <div className="text-xs text-slate-600">
+                            実施期間：<span className="font-bold">
+                              {selected.campaignStartDate && selected.campaignEndDate
+                                ? `${selected.campaignStartDate.replace(/-/g, '/')} ～ ${selected.campaignEndDate.replace(/-/g, '/')}`
+                                : `${selected.yearMonth.replace('-', '/')}（月単位）`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => openCampaignEditor(selected)} className="text-[#5e9bc4] hover:text-[#4d85ab] text-xs font-bold">✏️ 修正</button>
+                            {campaigns.some((campaign) => campaign.id === selected.id) && (
+                              <button
+                                onClick={() => handleDeleteCampaign(selected.id)}
+                                className="text-red-500 hover:text-red-700 text-xs font-bold"
+                              >
+                                🗑️ 削除
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : <span className="text-slate-400 text-xs">該当なし</span>}
+                  </div>
+                </div>
+              </div>
+            ) : <div className="p-6 text-center text-slate-400 text-sm">キャンペーン登録なし</div>}
           </div>
         </div>
 
