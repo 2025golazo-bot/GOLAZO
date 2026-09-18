@@ -39,6 +39,11 @@ type StoredSquareSale = {
   memo: string;
   product_name?: string | null;
   product_names?: string[];
+  product_line_items?: Array<{
+    name: string;
+    quantity: number;
+    amount: number;
+  }>;
   square_catalog_object_ids?: string[];
   source: 'square';
   team_member_id?: string | null;
@@ -234,7 +239,7 @@ async function loadStoredSales(startDate: string, endDate: string): Promise<Stor
   if (!url || !supabaseSecretKey) return [];
 
   const params = new URLSearchParams({
-    select: 'id,square_order_id,square_payment_id,customer_id,date,client_name,category,amount,payment_method,staff,memo,product_name,product_names,square_catalog_object_ids,source,team_member_id',
+    select: 'id,square_order_id,square_payment_id,customer_id,date,client_name,category,amount,payment_method,staff,memo,product_name,product_names,square_catalog_object_ids,product_line_items,source,team_member_id',
     date: `gte.${startDate}`,
     order: 'date.desc',
     limit: '10000',
@@ -316,6 +321,7 @@ async function upsertStoredSales(sales: StoredSquareSale[]) {
     memo: sale.memo,
     product_name: sale.product_name || null,
     product_names: sale.product_names || [],
+    product_line_items: sale.product_line_items || [],
     square_catalog_object_ids: sale.square_catalog_object_ids || [],
     source: 'square',
     team_member_id: sale.team_member_id || null,
@@ -368,6 +374,7 @@ async function updateStoredSalesWithoutOverwritingMemos(sales: StoredSquareSale[
           staff: sale.staff,
           product_name: sale.product_name || null,
           product_names: sale.product_names || [],
+          product_line_items: sale.product_line_items || [],
           square_catalog_object_ids: sale.square_catalog_object_ids || [],
           source: 'square',
           team_member_id: sale.team_member_id || null,
@@ -475,6 +482,18 @@ export async function POST(request: NextRequest) {
             const productNames = (order.line_items || [])
               .map((item) => item.name || item.variation_name || '')
               .filter(Boolean);
+
+            const productLineItems = (order.line_items || [])
+              .map((item) => ({
+                name: item.name || item.variation_name || '',
+                quantity: Number(item.quantity || 1),
+                amount: moneyToMajorUnits(
+                  item.total_money?.amount,
+                  order.total_money?.currency,
+                ),
+              }))
+              .filter((item) => item.name);
+
             const catalogIds = (order.line_items || [])
               .map((item) => item.catalog_object_id || '')
               .filter(Boolean);
@@ -498,6 +517,7 @@ export async function POST(request: NextRequest) {
               productName: productNames[0] || null,
               product_names: productNames,
               productNames,
+              product_line_items: productLineItems,
               square_catalog_object_ids: catalogIds,
               squareCatalogObjectIds: catalogIds,
               source: 'square',
@@ -610,6 +630,9 @@ export async function POST(request: NextRequest) {
         productNames: Array.isArray(item.product_names) ? item.product_names : [],
         squareCatalogObjectIds: Array.isArray(item.square_catalog_object_ids)
           ? item.square_catalog_object_ids
+          : [],
+        productLineItems: Array.isArray(item.product_line_items)
+          ? item.product_line_items
           : [],
         source: 'square',
         squareOrderId: item.square_order_id || undefined,

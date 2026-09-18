@@ -29,6 +29,7 @@ type MinutesItem = {
   campaignStartDate?: string;
   campaignEndDate?: string;
   campaignCalendarEnabled?: boolean;
+  squareProductName?: string;
   title: string;
   category: string; // キャンペーン / 週MT / 月MT / その他
   targetAmount?: number;
@@ -36,6 +37,8 @@ type MinutesItem = {
   salesProgress?: string;
   targetAchievementRate?: string;
   campaignProgress?: string;
+  actualCount?: number;
+  actualSales?: number;
   tasks: {
     title: string;
     assignee: Assignee;
@@ -338,12 +341,94 @@ export default function TaskManagerPage() {
 
   const [minutesSearch, setMinutesSearch] = useState('');
 
+  type SquareProductLineItem = {
+    name?: string;
+    quantity?: number;
+    amount?: number;
+  };
+
   useEffect(() => {
     let cancelled = false;
+    const loadCampaignActuals = async (loadedMinutes: MinutesItem[]) => {
+      const campaigns = loadedMinutes.filter(
+        (m) =>
+          m.category === 'キャンペーン' &&
+          m.squareProductName?.trim() &&
+          m.campaignStartDate &&
+          m.campaignEndDate,
+      );
+
+      if (campaigns.length === 0) return loadedMinutes;
+
+      const minStart = campaigns.reduce(
+        (min, m) => (m.campaignStartDate! < min ? m.campaignStartDate! : min),
+        campaigns[0].campaignStartDate!,
+      );
+      const maxEnd = campaigns.reduce(
+        (max, m) => (m.campaignEndDate! > max ? m.campaignEndDate! : max),
+        campaigns[0].campaignEndDate!,
+      );
+
+      const { data: squareSales, error: squareSalesError } = await supabase
+        .from('square_sales')
+        .select('date,product_line_items,source')
+        .gte('date', minStart)
+        .lte('date', maxEnd);
+
+      if (squareSalesError) {
+        console.warn('キャンペーン実績のSquare売上読み込みエラー:', squareSalesError.message);
+        return loadedMinutes;
+      }
+
+      console.log('キャンペーン実績Square売上:', squareSales);
+
+      return loadedMinutes.map((campaign) => {
+        if (
+          campaign.category !== 'キャンペーン' ||
+          !campaign.squareProductName?.trim() ||
+          !campaign.campaignStartDate ||
+          !campaign.campaignEndDate
+        ) {
+          return campaign;
+        }
+
+        const productName = campaign.squareProductName.trim();
+        let actualCount = 0;
+        let actualSales = 0;
+
+        (squareSales ?? []).forEach((sale) => {
+          if (
+            sale.source !== 'square' ||
+            sale.date < campaign.campaignStartDate! ||
+            sale.date > campaign.campaignEndDate!
+          ) {
+            return;
+          }
+
+          const lineItems = Array.isArray(sale.product_line_items)
+            ? (sale.product_line_items as SquareProductLineItem[])
+            : [];
+
+          lineItems.forEach((line) => {
+            if (line.name === productName) {
+              actualCount += Number(line.quantity) || 0;
+              actualSales += Number(line.amount) || 0;
+            }
+          });
+        });
+
+        return {
+          ...campaign,
+          actualCount,
+          actualSales,
+        };
+      });
+    };
+
     const loadMinutes = async () => {
       const { data, error } = await supabase
         .from('minutes')
-        .select('id, date, campaign_start_date, campaign_end_date, campaign_calendar_enabled, title, category, target_amount, target_count, sales_progress, target_achievement_rate, campaign_progress, tasks, notes, created_at')
+        .select('id, date, campaign_start_date, campaign_end_date, campaign_calendar_enabled, square_product_name, title, category, target_amount, target_count, sales_progress, target_achievement_rate, campaign_progress, tasks, notes, created_at')
         .order('date', { ascending: false });
       if (error) {
         console.warn('議事録読み込みエラー:', error.message);
@@ -356,6 +441,7 @@ export default function TaskManagerPage() {
         campaignStartDate: row.campaign_start_date ?? undefined,
         campaignEndDate: row.campaign_end_date ?? undefined,
         campaignCalendarEnabled: Boolean(row.campaign_calendar_enabled),
+        squareProductName: row.square_product_name ?? undefined,
         title: row.title ?? '',
         category: row.category ?? 'その他',
         targetAmount: row.target_amount == null ? undefined : Number(row.target_amount),
@@ -369,7 +455,9 @@ export default function TaskManagerPage() {
         })) : [],
         notes: row.notes ?? ''
       }));
-      if (!cancelled && loaded.length > 0) setMinutesList(loaded);
+      const withActuals = await loadCampaignActuals(loaded);
+
+      if (!cancelled && withActuals.length > 0) setMinutesList(withActuals);
     };
     loadMinutes();
     return () => { cancelled = true; };
@@ -399,6 +487,7 @@ export default function TaskManagerPage() {
   const [mFormCampaignStartDate, setMFormCampaignStartDate] = useState('');
   const [mFormCampaignEndDate, setMFormCampaignEndDate] = useState('');
   const [mFormCampaignCalendarEnabled, setMFormCampaignCalendarEnabled] = useState(false);
+  const [mFormSquareProductName, setMFormSquareProductName] = useState('');
   const [mFormTitle, setMFormTitle] = useState('');
   const [mFormCategory, setMFormCategory] = useState('週MT');
   const [mFormOtherCategory, setMFormOtherCategory] = useState('');
@@ -701,6 +790,7 @@ export default function TaskManagerPage() {
     setMFormDate(m.date);
     setMFormCampaignStartDate(m.campaignStartDate ?? m.date);
     setMFormCampaignEndDate(m.campaignEndDate ?? m.date);
+    setMFormSquareProductName(m.squareProductName ?? '');
     setMFormTitle(m.title);
     if (['キャンペーン', '週MT', '月MT'].includes(m.category)) {
       setMFormCategory(m.category);
@@ -826,6 +916,7 @@ export default function TaskManagerPage() {
       campaign_start_date: finalCategory === 'キャンペーン' ? (mFormCampaignStartDate || null) : null,
       campaign_end_date: finalCategory === 'キャンペーン' ? (mFormCampaignEndDate || null) : null,
       campaign_calendar_enabled: finalCategory === 'キャンペーン' ? mFormCampaignCalendarEnabled : false,
+      square_product_name: finalCategory === 'キャンペーン' ? (mFormSquareProductName.trim() || null) : null,
       title: mFormTitle.trim(),
       category: finalCategory,
       target_amount: mFormTargetAmount === '' ? null : Number(mFormTargetAmount),
@@ -1229,6 +1320,22 @@ export default function TaskManagerPage() {
                           <span className="text-slate-400 block">目標件数</span>
                           <span className="font-bold text-slate-800 text-sm">{m.targetCount} 件</span>
                         </div>
+                      )}
+                      {m.category === 'キャンペーン' && m.squareProductName?.trim() && (
+                        <>
+                          <div>
+                            <span className="text-slate-400 block">実績件数</span>
+                            <span className="font-bold text-slate-800 text-sm">
+                              {(m.actualCount ?? 0).toLocaleString()} 件
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">実績売上</span>
+                            <span className="font-bold text-slate-800 text-sm">
+                              ¥{(m.actualSales ?? 0).toLocaleString()}
+                            </span>
+                          </div>
+                        </>
                       )}
                       {m.salesProgress && (
                         <div>
@@ -1656,6 +1763,21 @@ export default function TaskManagerPage() {
                       カレンダーに連携する
                     </span>
                   </label>
+                  <div className="mt-4">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      レジ設定の商品名（Square）
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Squareに登録されている商品名と完全一致"
+                      value={mFormSquareProductName}
+                      onChange={(e) => setMFormSquareProductName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Squareの売上と商品名を完全一致で照合します。
+                    </p>
+                  </div>
                 </div>
               )}
 

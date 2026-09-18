@@ -21,6 +21,11 @@ type SaleItem = {
   productName?: string;
   productNames?: string[];
   squareCatalogObjectIds?: string[];
+  productLineItems?: Array<{
+    name: string;
+    quantity: number;
+    amount: number;
+  }>;
 };
 
 type TrialItem = {
@@ -63,6 +68,13 @@ const normalizeSquareSale = (item: any): SaleItem => ({
   source: 'square',
   squareOrderId: item.squareOrderId ? String(item.squareOrderId) : undefined,
   squarePaymentId: item.squarePaymentId ? String(item.squarePaymentId) : undefined,
+  productLineItems: Array.isArray(item.productLineItems)
+    ? item.productLineItems.map((line: any) => ({
+        name: String(line.name || ''),
+        quantity: Number(line.quantity) || 0,
+        amount: Number(line.amount) || 0,
+      }))
+    : [],
 });
 
 export default function SalesPage() {
@@ -243,11 +255,14 @@ export default function SalesPage() {
   }, []);
 
   // タスク・議事録の「カレンダーに連携する」がONのキャンペーンを読み込みます。
+  // Squareの商品名と完全一致する売上だけをキャンペーン実績として集計します。
   useEffect(() => {
     const loadLinkedCampaigns = async () => {
       const { data, error } = await supabase
         .from('minutes')
-        .select('id, date, campaign_start_date, campaign_end_date, campaign_calendar_enabled, title, category, target_amount, target_count')
+        .select(
+          'id, date, campaign_start_date, campaign_end_date, campaign_calendar_enabled, square_product_name, title, category, target_amount, target_count'
+        )
         .eq('category', 'キャンペーン')
         .eq('campaign_calendar_enabled', true);
 
@@ -256,40 +271,140 @@ export default function SalesPage() {
         return;
       }
 
+      const campaignsWithPeriod = (data || [])
+        .map((row: any) => ({
+          row,
+          start: String(row.campaign_start_date || row.date || ''),
+          end: String(
+            row.campaign_end_date ||
+              row.campaign_start_date ||
+              row.date ||
+              ''
+          ),
+          productName: String(row.square_product_name || '').trim(),
+        }))
+        .filter((item) => item.start && item.end);
+
+      if (campaignsWithPeriod.length === 0) {
+        setLinkedCampaigns([]);
+        return;
+      }
+
+      const minStart = campaignsWithPeriod.reduce(
+        (min, item) => (item.start < min ? item.start : min),
+        campaignsWithPeriod[0].start
+      );
+
+      const maxEnd = campaignsWithPeriod.reduce(
+        (max, item) => (item.end > max ? item.end : max),
+        campaignsWithPeriod[0].end
+      );
+
+      const { data: squareSales, error: squareSalesError } = await supabase
+        .from('square_sales')
+        .select('date, source, product_line_items')
+        .eq('source', 'square')
+        .gte('date', minStart)
+        .lte('date', maxEnd);
+
+      if (squareSalesError) {
+        console.warn(
+          'キャンペーン実績のSquare売上読み込みに失敗しました:',
+          squareSalesError.message
+        );
+      }
+
+      console.log('Sales画面 キャンペーン実績Square売上:', squareSales);
+
       const result: CampaignItem[] = [];
 
-      (data || []).forEach((row: any) => {
-        const start = String(row.campaign_start_date || row.date || '');
-        const end = String(row.campaign_end_date || row.campaign_start_date || row.date || '');
-
-        if (!start || !end) return;
-
+      campaignsWithPeriod.forEach(({ row, start, end, productName }) => {
         const startDate = new Date(`${start}T00:00:00`);
         const endDate = new Date(`${end}T00:00:00`);
 
-        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return;
+        if (
+          Number.isNaN(startDate.getTime()) ||
+          Number.isNaN(endDate.getTime())
+        ) {
+          return;
+        }
 
-        const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-        const lastMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+        let actualCount = 0;
+        let actualSales = 0;
+
+        if (productName) {
+          (squareSales || []).forEach((sale: any) => {
+            const saleDate = String(sale.date || '');
+
+            if (
+              sale.source !== 'square' ||
+              saleDate < start ||
+              saleDate > end
+            ) {
+              return;
+            }
+
+            const lineItems = Array.isArray(sale.product_line_items)
+              ? sale.product_line_items
+              : [];
+
+            lineItems.forEach((line: any) => {
+              const lineName = String(line.name || '').trim();
+
+              if (lineName !== productName) {
+                return;
+              }
+
+              actualCount += Number(line.quantity) || 0;
+              actualSales += Number(line.amount) || 0;
+            });
+          });
+        }
+
+        const cursor = new Date(
+          startDate.getFullYear(),
+          startDate.getMonth(),
+          1
+        );
+        const lastMonth = new Date(
+          endDate.getFullYear(),
+          endDate.getMonth(),
+          1
+        );
 
         while (cursor <= lastMonth) {
-          const yearMonth = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+          const yearMonth = `${cursor.getFullYear()}-${String(
+            cursor.getMonth() + 1
+          ).padStart(2, '0')}`;
 
           result.push({
-            id: 1000000000 + Number(row.id) * 1000 + cursor.getMonth(),
+            id:
+              1000000000 +
+              Number(row.id) * 1000 +
+              cursor.getMonth(),
+
             yearMonth,
+
             title: String(row.title || 'キャンペーン'),
-            appliedCount: 0,
-            contribution: 0,
+
+            appliedCount: actualCount,
+
+            contribution: actualSales,
+
             targetCount: Number(row.target_count) || 0,
+
             targetSales: Number(row.target_amount) || 0,
+
             campaignStartDate: start,
+
             campaignEndDate: end,
           });
 
           cursor.setMonth(cursor.getMonth() + 1);
         }
       });
+
+      console.log('Sales画面 キャンペーン実績:', result);
 
       setLinkedCampaigns(result);
     };
