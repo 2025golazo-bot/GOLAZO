@@ -1712,7 +1712,7 @@ export default function ClientsPage() {
                       type="button"
                       onClick={() => {
                         setSelectedStudentId(student.id);
-                        setSelectedParentId(student.parentId || null);
+                        setSelectedParentId(null);
 
                         requestAnimationFrame(() => {
                           document.getElementById('client-carte')?.scrollIntoView({
