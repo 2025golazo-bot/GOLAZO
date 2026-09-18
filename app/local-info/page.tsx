@@ -397,7 +397,18 @@ const handleAdd = async () => {
                 onChange={e => handleImageUpload(e, setNewCardFront)}
                 className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
               />
-              {newCardFront && <span className="text-emerald-600 text-[10px] mt-0.5 block">表面画像セット済み</span>}
+              {newCardFront && (
+                <div className="mt-2 space-y-1">
+                  <span className="text-emerald-600 text-[10px] block">表面画像セット済み</span>
+                  <div className="border border-slate-200 rounded-lg bg-slate-50 p-2">
+                    <img
+                      src={newCardFront}
+                      alt="名刺表面プレビュー"
+                      className="max-h-48 mx-auto object-contain rounded border border-slate-200 bg-white shadow-sm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-slate-500 mb-1 font-semibold">名刺（裏面）</label>
@@ -407,7 +418,18 @@ const handleAdd = async () => {
                 onChange={e => handleImageUpload(e, setNewCardBack)}
                 className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
               />
-              {newCardBack && <span className="text-emerald-600 text-[10px] mt-0.5 block">裏面画像セット済み</span>}
+              {newCardBack && (
+                <div className="mt-2 space-y-1">
+                  <span className="text-emerald-600 text-[10px] block">裏面画像セット済み</span>
+                  <div className="border border-slate-200 rounded-lg bg-slate-50 p-2">
+                    <img
+                      src={newCardBack}
+                      alt="名刺裏面プレビュー"
+                      className="max-h-48 mx-auto object-contain rounded border border-slate-200 bg-white shadow-sm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -554,13 +576,20 @@ const handleAdd = async () => {
                             className="w-full text-xs text-slate-500"
                           />
                           {editCardFront && (
-                            <button
-                              type="button"
-                              onClick={() => setEditCardFront('')}
-                              className="text-rose-600 text-[10px] border border-rose-200 px-2 py-1 rounded"
-                            >
-                              削除
-                            </button>
+                            <div className="mt-2 border border-slate-200 rounded-lg bg-slate-50 p-2">
+                              <img
+                                src={editCardFront}
+                                alt="名刺表面プレビュー"
+                                className="max-h-32 max-w-full mx-auto object-contain rounded"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setEditCardFront('')}
+                                className="mt-2 text-rose-600 text-[10px] border border-rose-200 px-2 py-1 rounded"
+                              >
+                                削除
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -574,13 +603,20 @@ const handleAdd = async () => {
                             className="w-full text-xs text-slate-500"
                           />
                           {editCardBack && (
-                            <button
-                              type="button"
-                              onClick={() => setEditCardBack('')}
-                              className="text-rose-600 text-[10px] border border-rose-200 px-2 py-1 rounded"
-                            >
-                              削除
-                            </button>
+                            <div className="mt-2 border border-slate-200 rounded-lg bg-slate-50 p-2">
+                              <img
+                                src={editCardBack}
+                                alt="名刺裏面プレビュー"
+                                className="max-h-32 max-w-full mx-auto object-contain rounded"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setEditCardBack('')}
+                                className="mt-2 text-rose-600 text-[10px] border border-rose-200 px-2 py-1 rounded"
+                              >
+                                削除
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -660,13 +696,13 @@ const handleAdd = async () => {
                           {item.businessCardFront && (
                             <div>
                               <span className="text-[10px] text-slate-400 block mb-0.5">名刺（表面）</span>
-                              <img src={item.businessCardFront} alt="名刺表面" className="w-24 h-16 object-cover rounded border border-slate-200 shadow-sm" />
+                              <img src={item.businessCardFront} alt="名刺表面" className="max-w-32 max-h-24 object-contain rounded border border-slate-200 shadow-sm bg-white" />
                             </div>
                           )}
                           {item.businessCardBack && (
                             <div>
                               <span className="text-[10px] text-slate-400 block mb-0.5">名刺（裏面）</span>
-                              <img src={item.businessCardBack} alt="名刺裏面" className="w-24 h-16 object-cover rounded border border-slate-200 shadow-sm" />
+                              <img src={item.businessCardBack} alt="名刺裏面" className="max-w-32 max-h-24 object-contain rounded border border-slate-200 shadow-sm bg-white" />
                             </div>
                           )}
                         </div>
