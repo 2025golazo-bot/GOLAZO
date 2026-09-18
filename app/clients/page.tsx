@@ -370,7 +370,7 @@ export default function ClientsPage() {
               return !existingStudentKeys.has(key);
             })
             .map((client, index): Student | null => {
-              const parent = parents.find(parent => parent.name === client.parent_name);
+              const parent = (savedParents ? JSON.parse(savedParents) : parents).find((parent: Parent) => parent.name === client.parent_name);
 
               if (!parent) {
                 console.warn(
