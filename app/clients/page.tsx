@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import Header from '@/components/Header';
+import { createClient } from '@/lib/supabase/client';
 
 // --- 型定義 ---
 interface Session {
@@ -91,6 +92,7 @@ interface Parent {
 interface Student {
   id: string;
   parentId: string;
+  supabaseClientId?: string; // Supabase clients.id
   squareCustomerId?: string; // Square顧客ID（受講生一覧への同期用） // 1:N 構造（代表者ID）
   isRepresentative?: boolean; // 代表者本人のカルテ
   name: string;
@@ -271,6 +273,7 @@ export default function ClientsPage() {
   ]);
 
   const router = useRouter();
+  const supabase = createClient();
 
   // UI状態
   const [selectedStudentId, setSelectedStudentId] = useState<string>('s-001');
@@ -305,6 +308,17 @@ export default function ClientsPage() {
 
     const loadData = async () => {
       try {
+        const { data: supabaseClients, error: supabaseClientsError } = await supabase
+          .from('clients')
+          .select('id, parent_name, child_name, birth_date, first_session_date, next_reservation_date, concerns_and_goals, ticket_total, ticket_used, memo')
+          .order('created_at', { ascending: true });
+
+        if (supabaseClientsError) {
+          console.error('Supabase顧客データの読み込み確認に失敗しました:', supabaseClientsError);
+        } else {
+          console.log('Supabase clients 読み込み成功:', supabaseClients?.length ?? 0, '件');
+        }
+
         const savedParents = localStorage.getItem('golazo-clients-parents-v2');
         if (savedParents) {
           setParents(JSON.parse(savedParents));
@@ -315,17 +329,71 @@ export default function ClientsPage() {
         if (cancelled) return;
 
         if (indexedStudents) {
-          setStudents(indexedStudents);
+          const linkedStudents = indexedStudents.map(student => {
+            const matchedClient = supabaseClients?.find(client =>
+              client.child_name === student.name &&
+              client.birth_date === student.birthdate
+            );
+
+            console.log(
+              '顧客照合確認:',
+              'studentName=', student.name,
+              'studentBirthdate=', student.birthdate,
+              'supabaseName=', supabaseClients?.[0]?.child_name,
+              'supabaseBirthdate=', supabaseClients?.[0]?.birth_date,
+              'matchedClientId=', matchedClient?.id || null
+            );
+
+            if (!matchedClient) return student;
+
+            const parts = (matchedClient.concerns_and_goals || "").split("。");
+            const concern = parts[0] || "";
+            const target = parts.slice(1).join("。").replace(/^\s+/, "");
+
+            return {
+              ...student,
+              supabaseClientId: matchedClient.id,
+              name: matchedClient.child_name,
+              concern,
+              target,
+              memo: matchedClient.memo || ""
+            };
+          });
+
+          setStudents(linkedStudents);
         } else {
           // 旧localStorageデータがあれば初回だけIndexedDBへ移行
           const savedStudents = localStorage.getItem('golazo-clients-students-v2');
 
           if (savedStudents) {
             const parsedStudents = JSON.parse(savedStudents) as Student[];
-            setStudents(parsedStudents);
+
+            const linkedStudents = parsedStudents.map(student => {
+              const matchedClient = supabaseClients?.find(client =>
+                client.child_name === student.name &&
+                client.birth_date === student.birthdate
+              );
+
+              if (!matchedClient) return student;
+
+              const parts = (matchedClient.concerns_and_goals || "").split("。");
+              const concern = parts[0] || "";
+              const target = parts.slice(1).join("。").replace(/^\s+/, "");
+
+              return {
+                ...student,
+                supabaseClientId: matchedClient.id,
+                name: matchedClient.child_name,
+                concern,
+                target,
+                memo: matchedClient.memo || ""
+              };
+            });
+
+            setStudents(linkedStudents);
 
             try {
-              await saveStudentsToIndexedDB(parsedStudents);
+              await saveStudentsToIndexedDB(linkedStudents);
               localStorage.removeItem('golazo-clients-students-v2');
               console.log('顧客データをIndexedDBへ移行しました');
             } catch (migrationError) {
@@ -505,6 +573,31 @@ export default function ClientsPage() {
   });
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Supabase読み込み後、基本情報編集フォームを最新の顧客情報に同期
+  useEffect(() => {
+    if (!isLoaded || activeTab !== 'edit_info') return;
+
+    setEditForm({
+      name: currentStudent.name,
+      kana: currentStudent.kana,
+      phone: currentParent.phone,
+      concern: currentStudent.concern,
+      target: currentStudent.target,
+      memo: currentStudent.memo
+    });
+  }, [
+    isLoaded,
+    activeTab,
+    currentStudent.id,
+    currentStudent.name,
+    currentStudent.kana,
+    currentStudent.concern,
+    currentStudent.target,
+    currentStudent.memo,
+    currentParent.id,
+    currentParent.phone
+  ]);
 
   // ---------------------------------------------------------------------------
   // Square顧客情報自動同期（Square顧客IDを主キー）
@@ -1342,7 +1435,17 @@ export default function ClientsPage() {
     );
   };
 
-  const handleSaveInfo = () => {
+  const handleSaveInfo = async () => {
+    const supabaseClientId = currentStudent.supabaseClientId;
+    if (supabaseClientId) {
+      const concernsAndGoals = [editForm.concern.trim(), editForm.target.trim()].filter(Boolean).join('。');
+      const { error } = await supabase.from('clients').update({ child_name: editForm.name.trim(), concerns_and_goals: concernsAndGoals || null, memo: editForm.memo.trim() || null }).eq('id', supabaseClientId);
+      if (error) {
+        console.error('Supabase基本情報の保存に失敗しました:', error);
+        alert('Supabaseへの保存に失敗しました。入力内容は画面上に反映しませんでした。');
+        return;
+      }
+    }
     setStudents(prev =>
       prev.map(s => (s.id === currentStudent.id ? { ...s, name: editForm.name, kana: editForm.kana, concern: editForm.concern, target: editForm.target, memo: editForm.memo } : s))
     );
