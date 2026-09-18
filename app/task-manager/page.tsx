@@ -1339,10 +1339,10 @@ export default function TaskManagerPage() {
                           {dayCampaigns.map(campaign => (
                             <div
                               key={`campaign-${campaign.id}`}
-                              className="text-[10px] p-1 rounded truncate bg-[#5e9bc4]/10 text-[#4d85ab] font-semibold"
+                              className="text-[10px] p-1 rounded truncate bg-[#FFE8AB] text-slate-700 font-semibold"
                               title={`キャンペーン: ${campaign.title}`}
                             >
-                              🟦 {campaign.title}
+                              🟨 {campaign.title}
                             </div>
                           ))}
                           {dayTasks.map(t => (
