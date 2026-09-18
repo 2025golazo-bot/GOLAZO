@@ -9,3 +9,6 @@ build/
 .env.local.backup
 .env.vercel
 tsconfig.tsbuildinfo
+
+# Local offline database
+/data/
