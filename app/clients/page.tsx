@@ -360,7 +360,82 @@ export default function ClientsPage() {
             };
           });
 
-          setStudents(linkedStudents);
+          const existingStudentKeys = new Set(
+            linkedStudents.map(student => `${student.name}__${student.birthdate}`)
+          );
+
+          const newSupabaseStudents = (supabaseClients || [])
+            .filter(client => {
+              const key = `${client.child_name}__${client.birth_date}`;
+              return !existingStudentKeys.has(key);
+            })
+            .map((client, index): Student | null => {
+              const parent = parents.find(parent => parent.name === client.parent_name);
+
+              if (!parent) {
+                console.warn(
+                  '代表者カルテが見つからないため受講生を追加できません:',
+                  client.parent_name,
+                  client.child_name
+                );
+                return null;
+              }
+
+              const parts = (client.concerns_and_goals || "").split("。");
+              const concern = parts[0] || "";
+              const target = parts.slice(1).join("。").replace(/^\s+/, "");
+
+              const birthDate = client.birth_date || "";
+              const birth = birthDate ? new Date(`${birthDate}T00:00:00`) : null;
+              const today = new Date();
+              const age = birth
+                ? Math.max(
+                    0,
+                    today.getFullYear() -
+                      birth.getFullYear() -
+                      (
+                        today.getMonth() < birth.getMonth() ||
+                        (
+                          today.getMonth() === birth.getMonth() &&
+                          today.getDate() < birth.getDate()
+                        )
+                          ? 1
+                          : 0
+                      )
+                  )
+                : 0;
+
+              return {
+                id: `s-${Date.now()}-${index}`,
+                parentId: parent.id,
+                supabaseClientId: client.id,
+                name: client.child_name,
+                kana: "",
+                age,
+                birthdate: birthDate,
+                firstLessonDate: client.first_session_date || "",
+                lastReservationDate: "",
+                concern,
+                target,
+                memo: client.memo || "",
+                physicalHistory: [],
+                sessions: []
+              };
+            })
+            .filter((student): student is Student => student !== null) as Student[];
+
+          const validNewSupabaseStudents = newSupabaseStudents.filter(
+            (student): student is Student => student !== null
+          );
+
+          if (validNewSupabaseStudents.length > 0) {
+            console.log(
+              'Supabaseから受講生カルテを追加:',
+              validNewSupabaseStudents.map(student => student.name)
+            );
+          }
+
+          setStudents([...linkedStudents, ...validNewSupabaseStudents]);
         } else {
           // 旧localStorageデータがあれば初回だけIndexedDBへ移行
           const savedStudents = localStorage.getItem('golazo-clients-students-v2');
