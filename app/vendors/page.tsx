@@ -324,6 +324,31 @@ export default function MachineMakersPage() {
         });
     }
 
+    // NAS二重保存：業者名刺「裏面」
+    // NAS保存に失敗しても、既存のSupabase保存には影響させない
+    if (side === 'back') {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('vendorId', String(currentMaker.id));
+      formData.append('side', 'back');
+
+      fetch('/api/nas-vendor-card-backup', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(async response => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || `HTTP ${response.status}`);
+          }
+
+          console.log('NAS業者名刺・裏面バックアップ成功:', currentMaker.id);
+        })
+        .catch(error => {
+          console.error('NAS業者名刺・裏面バックアップ失敗:', error);
+        });
+    }
+
     reader.readAsDataURL(file);
   };
 
