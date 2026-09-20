@@ -90,6 +90,7 @@ export default function LocalInfoPage() {
   const [editContactName, setEditContactName] = useState('');
   const [editContactEmail, setEditContactEmail] = useState('');
   const [editCardFront, setEditCardFront] = useState('');
+  const [editCardFrontFile, setEditCardFrontFile] = useState<File | null>(null);
   const [editCardBack, setEditCardBack] = useState('');
   const [editMemo1, setEditMemo1] = useState('');
   const [editMemo2, setEditMemo2] = useState('');
@@ -313,6 +314,31 @@ const handleAdd = async () => {
       memo2: data.memo2 ?? '',
       memo3: data.memo3 ?? ''
     };
+
+    // NAS二重保存：既存データ編集の名刺「表面」
+    // NAS保存に失敗しても、既存のSupabase保存には影響させない
+    if (editCardFrontFile) {
+      const formData = new FormData();
+      formData.append('file', editCardFrontFile);
+      formData.append('localInfoId', String(data.id));
+      formData.append('side', 'front');
+
+      fetch('/api/nas-local-info-card-backup', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(async response => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || `HTTP ${response.status}`);
+          }
+
+          console.log('NAS近隣情報名刺・表面（編集）バックアップ成功:', data.id);
+        })
+        .catch(error => {
+          console.error('NAS近隣情報名刺・表面（編集）バックアップ失敗:', error);
+        });
+    }
 
     setTeamInfos(prev => prev.map(item => item.id === id ? updatedItem : item));
     setEditingId(null);
@@ -631,7 +657,10 @@ const handleAdd = async () => {
                           <input
                             type="file"
                             accept="image/*"
-                            onChange={e => handleImageUpload(e, setEditCardFront)}
+                            onChange={e => {
+                              setEditCardFrontFile(e.target.files?.[0] ?? null);
+                              handleImageUpload(e, setEditCardFront);
+                            }}
                             className="w-full text-xs text-slate-500"
                           />
                           {editCardFront && (
