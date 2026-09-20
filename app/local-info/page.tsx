@@ -92,6 +92,7 @@ export default function LocalInfoPage() {
   const [editCardFront, setEditCardFront] = useState('');
   const [editCardFrontFile, setEditCardFrontFile] = useState<File | null>(null);
   const [editCardBack, setEditCardBack] = useState('');
+  const [editCardBackFile, setEditCardBackFile] = useState<File | null>(null);
   const [editMemo1, setEditMemo1] = useState('');
   const [editMemo2, setEditMemo2] = useState('');
   const [editMemo3, setEditMemo3] = useState('');
@@ -337,6 +338,31 @@ const handleAdd = async () => {
         })
         .catch(error => {
           console.error('NAS近隣情報名刺・表面（編集）バックアップ失敗:', error);
+        });
+    }
+
+    // NAS二重保存：既存データ編集の名刺「裏面」
+    // NAS保存に失敗しても、既存のSupabase保存には影響させない
+    if (editCardBackFile) {
+      const formData = new FormData();
+      formData.append('file', editCardBackFile);
+      formData.append('localInfoId', String(data.id));
+      formData.append('side', 'back');
+
+      fetch('/api/nas-local-info-card-backup', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(async response => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || `HTTP ${response.status}`);
+          }
+
+          console.log('NAS近隣情報名刺・裏面（編集）バックアップ成功:', data.id);
+        })
+        .catch(error => {
+          console.error('NAS近隣情報名刺・裏面（編集）バックアップ失敗:', error);
         });
     }
 
@@ -687,7 +713,10 @@ const handleAdd = async () => {
                           <input
                             type="file"
                             accept="image/*"
-                            onChange={e => handleImageUpload(e, setEditCardBack)}
+                            onChange={e => {
+                              setEditCardBackFile(e.target.files?.[0] ?? null);
+                              handleImageUpload(e, setEditCardBack);
+                            }}
                             className="w-full text-xs text-slate-500"
                           />
                           {editCardBack && (
