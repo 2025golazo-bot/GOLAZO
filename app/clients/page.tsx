@@ -1491,6 +1491,32 @@ export default function ClientsPage() {
         );
       };
       reader.readAsDataURL(file);
+
+      // NAS二重保存テスト：姿勢写真「正面」だけ追加バックアップ
+      // NAS保存に失敗しても、既存の写真保存には影響させない
+      if (type === 'posture' && keyName === 'front') {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('clientId', String(currentStudent.id));
+        formData.append('targetDate', targetDate);
+        formData.append('photoType', 'posture-front');
+
+        fetch('/api/nas-photo-backup', {
+          method: 'POST',
+          body: formData,
+        })
+          .then(async response => {
+            if (!response.ok) {
+              const result = await response.json().catch(() => null);
+              throw new Error(result?.error || `HTTP ${response.status}`);
+            }
+
+            console.log('NAS姿勢写真バックアップ成功:', targetDate);
+          })
+          .catch(error => {
+            console.error('NAS姿勢写真バックアップ失敗:', error);
+          });
+      }
     });
 
     e.target.value = '';
