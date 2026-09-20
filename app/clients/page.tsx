@@ -1520,6 +1520,32 @@ export default function ClientsPage() {
             console.error('NAS姿勢写真バックアップ失敗:', error);
           });
       }
+      // NAS二重保存：フィジカルチェック測定結果
+      // NAS保存に失敗しても、既存のファイル保存には影響させない
+      if (type === 'physicalCheck') {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('clientId', String(currentStudent.id));
+        formData.append('targetDate', targetDate);
+        formData.append('photoType', 'physical-check');
+
+        fetch('/api/nas-photo-backup', {
+          method: 'POST',
+          body: formData,
+        })
+          .then(async response => {
+            if (!response.ok) {
+              const result = await response.json().catch(() => null);
+              throw new Error(result?.error || `HTTP ${response.status}`);
+            }
+
+            console.log('NASフィジカルチェックバックアップ成功:', targetDate);
+          })
+          .catch(error => {
+            console.error('NASフィジカルチェックバックアップ失敗:', error);
+          });
+      }
+
     });
 
     e.target.value = '';
