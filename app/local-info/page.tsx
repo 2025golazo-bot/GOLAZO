@@ -163,6 +163,18 @@ const handleAdd = async () => {
           throw new Error(result?.error || `HTTP ${response.status}`);
         }
 
+        const result = await response.json().catch(() => null);
+        if (result?.relativePath) {
+          const { error: nasLinkError } = await supabase
+            .from('local_info')
+            .update({ nas_business_card_front: result.relativePath })
+            .eq('id', data.id);
+
+          if (nasLinkError) {
+            console.error('NAS名刺・表面リンク情報の保存に失敗:', nasLinkError);
+          }
+        }
+
         console.log('NAS近隣情報名刺・表面バックアップ成功:', data.id);
       })
       .catch(error => {
@@ -186,6 +198,18 @@ const handleAdd = async () => {
         if (!response.ok) {
           const result = await response.json().catch(() => null);
           throw new Error(result?.error || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json().catch(() => null);
+        if (result?.relativePath) {
+          const { error: nasLinkError } = await supabase
+            .from('local_info')
+            .update({ nas_business_card_back: result.relativePath })
+            .eq('id', data.id);
+
+          if (nasLinkError) {
+            console.error('NAS名刺・裏面リンク情報の保存に失敗:', nasLinkError);
+          }
         }
 
         console.log('NAS近隣情報名刺・裏面バックアップ成功:', data.id);
@@ -334,6 +358,18 @@ const handleAdd = async () => {
             throw new Error(result?.error || `HTTP ${response.status}`);
           }
 
+          const result = await response.json().catch(() => null);
+          if (result?.relativePath) {
+            const { error: nasLinkError } = await supabase
+              .from('local_info')
+              .update({ nas_business_card_front: result.relativePath })
+              .eq('id', data.id);
+
+            if (nasLinkError) {
+              console.error('NAS名刺・表面（編集）リンク情報の保存に失敗:', nasLinkError);
+            }
+          }
+
           console.log('NAS近隣情報名刺・表面（編集）バックアップ成功:', data.id);
         })
         .catch(error => {
@@ -357,6 +393,18 @@ const handleAdd = async () => {
           if (!response.ok) {
             const result = await response.json().catch(() => null);
             throw new Error(result?.error || `HTTP ${response.status}`);
+          }
+
+          const result = await response.json().catch(() => null);
+          if (result?.relativePath) {
+            const { error: nasLinkError } = await supabase
+              .from('local_info')
+              .update({ nas_business_card_back: result.relativePath })
+              .eq('id', data.id);
+
+            if (nasLinkError) {
+              console.error('NAS名刺・裏面（編集）リンク情報の保存に失敗:', nasLinkError);
+            }
           }
 
           console.log('NAS近隣情報名刺・裏面（編集）バックアップ成功:', data.id);

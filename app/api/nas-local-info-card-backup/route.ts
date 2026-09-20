@@ -61,9 +61,19 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     await writeFile(destination, Buffer.from(arrayBuffer));
 
+    const relativePath = path
+      .join(
+        'local-info',
+        safePart(localInfoId),
+        `business-card-${side}`,
+        fileName
+      )
+      .replace(/\\/g, '/');
+
     return NextResponse.json({
       ok: true,
       fileName,
+      relativePath,
     });
   } catch (error) {
     console.error('NAS近隣情報名刺バックアップエラー:', error);
