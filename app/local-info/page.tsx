@@ -72,6 +72,7 @@ export default function LocalInfoPage() {
   const [newCardFront, setNewCardFront] = useState('');
   const [newCardFrontFile, setNewCardFrontFile] = useState<File | null>(null);
   const [newCardBack, setNewCardBack] = useState('');
+  const [newCardBackFile, setNewCardBackFile] = useState<File | null>(null);
   const [newMemo1, setNewMemo1] = useState('');
   const [newMemo2, setNewMemo2] = useState('');
   const [newMemo3, setNewMemo3] = useState('');
@@ -164,6 +165,31 @@ const handleAdd = async () => {
       })
       .catch(error => {
         console.error('NAS近隣情報名刺・表面バックアップ失敗:', error);
+      });
+  }
+
+  // NAS二重保存：新規登録の名刺「裏面」
+  // NAS保存に失敗しても、既存のSupabase保存には影響させない
+  if (newCardBackFile) {
+    const formData = new FormData();
+    formData.append('file', newCardBackFile);
+    formData.append('localInfoId', String(data.id));
+    formData.append('side', 'back');
+
+    fetch('/api/nas-local-info-card-backup', {
+      method: 'POST',
+      body: formData,
+    })
+      .then(async response => {
+        if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error || `HTTP ${response.status}`);
+        }
+
+        console.log('NAS近隣情報名刺・裏面バックアップ成功:', data.id);
+      })
+      .catch(error => {
+        console.error('NAS近隣情報名刺・裏面バックアップ失敗:', error);
       });
   }
 
@@ -445,7 +471,10 @@ const handleAdd = async () => {
               <input
                 type="file"
                 accept="image/*"
-                onChange={e => handleImageUpload(e, setNewCardBack)}
+                onChange={e => {
+                  setNewCardBackFile(e.target.files?.[0] ?? null);
+                  handleImageUpload(e, setNewCardBack);
+                }}
                 className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
               />
               {newCardBack && (
