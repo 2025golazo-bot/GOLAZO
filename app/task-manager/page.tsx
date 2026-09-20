@@ -704,14 +704,17 @@ export default function TaskManagerPage() {
   const handleDeleteTask = async (id: string) => {
     const target = tasks.find(t => t.id === id);
     if (!target) return;
-    const isSeries = Boolean(target.repeatGroupId);
-    if (!confirm(isSeries
-      ? 'この繰り返しタスクを削除しますか？\n同じ繰り返しグループの予定も削除されます。'
-      : 'このタスクを削除してもよろしいですか？')) return;
 
-    const { error } = isSeries
-      ? await supabase.from('tasks').delete().eq('repeat_group_id', target.repeatGroupId)
-      : await supabase.from('tasks').delete().eq('id', id);
+    if (!confirm(
+      target.repeatGroupId
+        ? 'この繰り返しタスクだけを削除しますか？\n他の繰り返し予定は残ります。'
+        : 'このタスクを削除してもよろしいですか？'
+    )) return;
+
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
 
     if (error) {
       console.error('タスク削除エラー:', error);
@@ -719,9 +722,7 @@ export default function TaskManagerPage() {
       return;
     }
 
-    setTasks(prev => isSeries
-      ? prev.filter(t => t.repeatGroupId !== target.repeatGroupId)
-      : prev.filter(t => t.id !== id));
+    setTasks(prev => prev.filter(t => t.id !== id));
   };
 
   const toggleComplete = async (id: string) => {
@@ -1183,79 +1184,135 @@ export default function TaskManagerPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              {filteredTasks.length > 0 ? (
-                filteredTasks.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition ${
-                      item.completed ? 'opacity-60 bg-slate-50' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-3 w-full">
-                      <input
-                        type="checkbox"
-                        checked={item.completed}
-                        onChange={() => toggleComplete(item.id)}
-                        className="mt-1 w-4 h-4 rounded border-slate-300 text-[#5e9bc4] focus:ring-[#5e9bc4] cursor-pointer"
-                      />
-                      <div className="space-y-1.5 w-full">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-bold text-white ${
-                              item.assignee === 'TAKA' ? 'bg-[#5e9bc4]' : 'bg-emerald-600'
-                            }`}
-                          >
-                            {item.assignee}
-                          </span>
+            {(() => {
+              const standaloneTasks = filteredTasks.filter(
+                item => !item.linkedMinutesId &&
+                  item.repeat === 'none' &&
+                  !item.repeatGroupId
+              );
 
-                          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600">
-                            {item.category}
-                          </span>
+              const repeatedTasks = filteredTasks.filter(
+                item => !item.linkedMinutesId &&
+                  (item.repeat !== 'none' || item.repeatGroupId)
+              );
 
-                          {item.priority && (
-                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
-                              🔥 重要
-                            </span>
-                          )}
+              const minutesTasks = filteredTasks.filter(
+                item => !!item.linkedMinutesId
+              );
 
-                          {(item.repeat !== 'none' || item.repeatGroupId) && (
-                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                              🔄 繰り返し{item.repeat !== 'none' ? ` (${item.repeat === 'weekly' ? '週' : '月'})` : ''}
-                            </span>
-                          )}
+              const renderTaskCard = (item: (typeof tasks)[number]) => (
+<div
+  key={item.id}
+  className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition ${
+    item.completed ? 'opacity-60 bg-slate-50' : ''
+  }`}
+>
+  <div className="flex items-start gap-3 w-full">
+    <input
+      type="checkbox"
+      checked={item.completed}
+      onChange={() => toggleComplete(item.id)}
+      className="mt-1 w-4 h-4 rounded border-slate-300 text-[#5e9bc4] focus:ring-[#5e9bc4] cursor-pointer"
+    />
+    <div className="space-y-1.5 w-full">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span
+          className={`px-2 py-0.5 rounded text-xs font-bold text-white ${
+            item.assignee === 'TAKA' ? 'bg-[#5e9bc4]' : 'bg-emerald-600'
+          }`}
+        >
+          {item.assignee}
+        </span>
 
-                          <span className="text-xs text-slate-400 ml-auto">期日: {item.dueDate}</span>
-                        </div>
+        <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600">
+          {item.category}
+        </span>
 
-                        <h3 className={`font-bold text-slate-800 text-sm sm:text-base ${item.completed ? 'line-through text-slate-400' : ''}`}>
-                          {item.title}
-                        </h3>
-                      </div>
-                    </div>
+        {item.priority && (
+          <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+            🔥 重要
+          </span>
+        )}
 
-                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                      <button
-                        onClick={() => handleOpenEditTask(item)}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
-                      >
-                        修正
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTask(item.id)}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition"
-                      >
-                        削除
-                      </button>
-                    </div>
+        {(item.repeat !== 'none' || item.repeatGroupId) && (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            🔄 繰り返し{item.repeat !== 'none' ? ` (${item.repeat === 'weekly' ? '週' : '月'})` : ''}
+          </span>
+        )}
+
+        <span className="text-xs text-slate-400 ml-auto">期日: {item.dueDate}</span>
+      </div>
+
+      <h3 className={`font-bold text-slate-800 text-sm sm:text-base ${item.completed ? 'line-through text-slate-400' : ''}`}>
+        {item.title}
+      </h3>
+    </div>
+  </div>
+
+  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+    <button
+      onClick={() => handleOpenEditTask(item)}
+      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+    >
+      修正
+    </button>
+    <button
+      onClick={() => handleDeleteTask(item.id)}
+      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition"
+    >
+      削除
+    </button>
+  </div>
+</div>
+              );
+
+              const renderColumn = (
+                title: string,
+                tasksInColumn: (typeof tasks)[number][],
+                headerClass: string
+              ) => (
+                <div className="min-w-0">
+                  <div className={`mb-3 px-4 py-3 rounded-xl font-bold text-sm ${headerClass}`}>
+                    {title}
+                    <span className="ml-2 text-xs font-semibold opacity-70">
+                      {tasksInColumn.length}
+                    </span>
                   </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-slate-200">
-                  該当するタスクが見つかりませんでした。
+
+                  <div className="space-y-3">
+                    {tasksInColumn.length > 0 ? (
+                      tasksInColumn.map(renderTaskCard)
+                    ) : (
+                      <div className="p-6 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
+                        該当するタスクはありません
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+                  {renderColumn(
+                    '① 単体タスク',
+                    standaloneTasks,
+                    'bg-amber-50 text-black'
+                  )}
+
+                  {renderColumn(
+                    '② 繰り返しタスク',
+                    repeatedTasks,
+                    'bg-amber-50 text-black'
+                  )}
+
+                  {renderColumn(
+                    '③ 議事録から登録',
+                    minutesTasks,
+                    'bg-amber-50 text-black'
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
