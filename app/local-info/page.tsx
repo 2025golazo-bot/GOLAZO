@@ -70,6 +70,7 @@ export default function LocalInfoPage() {
   const [newContactName, setNewContactName] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
   const [newCardFront, setNewCardFront] = useState('');
+  const [newCardFrontFile, setNewCardFrontFile] = useState<File | null>(null);
   const [newCardBack, setNewCardBack] = useState('');
   const [newMemo1, setNewMemo1] = useState('');
   const [newMemo2, setNewMemo2] = useState('');
@@ -141,6 +142,31 @@ const handleAdd = async () => {
     return;
   }
 
+  // NAS二重保存：新規登録の名刺「表面」
+  // NAS保存に失敗しても、既存のSupabase保存には影響させない
+  if (newCardFrontFile) {
+    const formData = new FormData();
+    formData.append('file', newCardFrontFile);
+    formData.append('localInfoId', String(data.id));
+    formData.append('side', 'front');
+
+    fetch('/api/nas-local-info-card-backup', {
+      method: 'POST',
+      body: formData,
+    })
+      .then(async response => {
+        if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error || `HTTP ${response.status}`);
+        }
+
+        console.log('NAS近隣情報名刺・表面バックアップ成功:', data.id);
+      })
+      .catch(error => {
+        console.error('NAS近隣情報名刺・表面バックアップ失敗:', error);
+      });
+  }
+
   const newItem: TeamInfo = {
     id: data.id,
     title: data.event_name,
@@ -167,6 +193,7 @@ const handleAdd = async () => {
   setNewContactName('');
   setNewContactEmail('');
   setNewCardFront('');
+  setNewCardFrontFile(null);
   setNewCardBack('');
   setNewMemo1('');
   setNewMemo2('');
@@ -394,7 +421,10 @@ const handleAdd = async () => {
               <input
                 type="file"
                 accept="image/*"
-                onChange={e => handleImageUpload(e, setNewCardFront)}
+                onChange={e => {
+                  setNewCardFrontFile(e.target.files?.[0] ?? null);
+                  handleImageUpload(e, setNewCardFront);
+                }}
                 className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
               />
               {newCardFront && (
