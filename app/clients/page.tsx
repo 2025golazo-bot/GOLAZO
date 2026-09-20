@@ -1610,6 +1610,32 @@ export default function ClientsPage() {
       if (dataUrl) handleUpdateEarAcupuncturePhoto(targetDate, keyName, dataUrl);
     };
     reader.readAsDataURL(file);
+
+    // NAS二重保存：耳ツボ写真「右耳・施術前」
+    // NAS保存に失敗しても、既存の写真保存には影響させない
+    if (keyName === 'beforeRight') {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('clientId', String(currentStudent.id));
+      formData.append('targetDate', targetDate);
+      formData.append('photoType', 'ear-before-right');
+
+      fetch('/api/nas-photo-backup', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(async response => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || `HTTP ${response.status}`);
+          }
+
+          console.log('NAS耳ツボ右耳・施術前バックアップ成功:', targetDate);
+        })
+        .catch(error => {
+          console.error('NAS耳ツボ右耳・施術前バックアップ失敗:', error);
+        });
+    }
     e.target.value = '';
   };
 
