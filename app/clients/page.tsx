@@ -329,36 +329,81 @@ export default function ClientsPage() {
         if (cancelled) return;
 
         if (indexedStudents) {
-          const linkedStudents = indexedStudents.map(student => {
-            const matchedClient = supabaseClients?.find(client =>
-              client.child_name === student.name &&
-              client.birth_date === student.birthdate
-            );
+          const linkedStudents = await Promise.all(
+            indexedStudents.map(async student => {
+              const matchedClient = supabaseClients?.find(client =>
+                client.child_name === student.name &&
+                client.birth_date === student.birthdate
+              );
 
-            console.log(
-              '顧客照合確認:',
-              'studentName=', student.name,
-              'studentBirthdate=', student.birthdate,
-              'supabaseName=', supabaseClients?.[0]?.child_name,
-              'supabaseBirthdate=', supabaseClients?.[0]?.birth_date,
-              'matchedClientId=', matchedClient?.id || null
-            );
+              console.log(
+                '顧客照合確認:',
+                'studentName=', student.name,
+                'studentBirthdate=', student.birthdate,
+                'supabaseName=', supabaseClients?.[0]?.child_name,
+                'supabaseBirthdate=', supabaseClients?.[0]?.birth_date,
+                'matchedClientId=', matchedClient?.id || null
+              );
 
-            if (!matchedClient) return student;
+              if (!matchedClient) return student;
 
-            const parts = (matchedClient.concerns_and_goals || "").split("。");
-            const concern = parts[0] || "";
-            const target = parts.slice(1).join("。").replace(/^\s+/, "");
+              const parts = (matchedClient.concerns_and_goals || "").split("。");
+              const concern = parts[0] || "";
+              const target = parts.slice(1).join("。").replace(/^\s+/, "");
 
-            return {
-              ...student,
-              supabaseClientId: matchedClient.id,
-              name: matchedClient.child_name,
-              concern,
-              target,
-              memo: matchedClient.memo || ""
-            };
-          });
+              const { data: supabaseMeasurements, error: measurementsError } = await supabase
+                .from('measurements')
+                .select('measurement_date, weight, body_fat, muscle_mass')
+                .eq('client_id', matchedClient.id)
+                .order('measurement_date', { ascending: true });
+
+              if (measurementsError) {
+                console.error(
+                  'Supabase測定データの読み込みに失敗しました:',
+                  matchedClient.id,
+                  measurementsError
+                );
+                return {
+                  ...student,
+                  supabaseClientId: matchedClient.id,
+                  name: matchedClient.child_name,
+                  concern,
+                  target,
+                  memo: matchedClient.memo || ""
+                };
+              }
+
+              const measurementMap = new Map(
+                (supabaseMeasurements || []).map(measurement => [
+                  measurement.measurement_date,
+                  measurement
+                ])
+              );
+
+              const mergedPhysicalHistory = student.physicalHistory.map(physical => {
+                const saved = measurementMap.get(physical.date);
+
+                if (!saved) return physical;
+
+                return {
+                  ...physical,
+                  weight: Number(saved.weight ?? physical.weight ?? 0),
+                  fat: Number(saved.body_fat ?? physical.fat ?? 0),
+                  muscle: Number(saved.muscle_mass ?? physical.muscle ?? 0)
+                };
+              });
+
+              return {
+                ...student,
+                supabaseClientId: matchedClient.id,
+                name: matchedClient.child_name,
+                concern,
+                target,
+                memo: matchedClient.memo || "",
+                physicalHistory: mergedPhysicalHistory
+              };
+            })
+          );
 
           const existingStudentKeys = new Set(
             linkedStudents.map(student => `${student.name}__${student.birthdate}`)
@@ -1122,11 +1167,85 @@ export default function ClientsPage() {
 
   const openAddChild = (parentId: string) => { setEditingChildId(null); setChildFormParentId(parentId); setChildFormName(''); setChildFormKana(''); setChildFormBirthdate(''); setChildFormMemo(''); setIsChildFormOpen(true); };
   const openEditChild = (student: Student) => { setEditingChildId(student.id); setChildFormParentId(student.parentId); setChildFormName(student.name); setChildFormKana(student.kana); setChildFormBirthdate(student.birthdate); setChildFormMemo(student.memo); setIsChildFormOpen(true); };
-  const handleSaveChild = () => {
-    const name = childFormName.trim(); if (!name) return alert('受講生のお名前を入力してください。'); if (!childFormParentId) return alert('代表者を選択してください。');
-    if (editingChildId) setStudents(prev => prev.map(s => s.id === editingChildId ? { ...s, parentId: childFormParentId, name, kana: childFormKana.trim(), birthdate: childFormBirthdate, memo: childFormMemo } : s));
-    else { const s: Student = { id: `s-${Date.now()}`, parentId: childFormParentId, name, kana: childFormKana.trim(), age: childFormBirthdate ? Math.max(0, new Date().getFullYear() - new Date(childFormBirthdate).getFullYear()) : 0, birthdate: childFormBirthdate, firstLessonDate: new Date().toISOString().split('T')[0], lastReservationDate: '', concern: '', target: '', memo: childFormMemo, physicalHistory: [], sessions: [] }; setStudents(prev => [...prev, s]); setSelectedStudentId(s.id); setSelectedParentId(null); }
-    setIsChildFormOpen(false); alert(editingChildId ? '受講生情報を更新しました。' : '受講生を追加しました。');
+  const handleSaveChild = async () => {
+    const name = childFormName.trim();
+    if (!name) return alert('受講生のお名前を入力してください。');
+    if (!childFormParentId) return alert('代表者を選択してください。');
+
+    if (editingChildId) {
+      setStudents(prev =>
+        prev.map(s =>
+          s.id === editingChildId
+            ? {
+                ...s,
+                parentId: childFormParentId,
+                name,
+                kana: childFormKana.trim(),
+                birthdate: childFormBirthdate,
+                memo: childFormMemo
+              }
+            : s
+        )
+      );
+      setIsChildFormOpen(false);
+      alert('受講生情報を更新しました。');
+      return;
+    }
+
+    if (!childFormBirthdate) return alert('生年月日を入力してください。');
+    const newStudentId = `s-${Date.now()}`;
+    let supabaseClientId: string | undefined;
+
+    if (childFormBirthdate) {
+      const parent = parents.find(p => p.id === childFormParentId);
+
+      const { data: insertedClient, error: insertError } = await supabase
+        .from('clients')
+        .insert({
+          parent_name: parent?.name || null,
+          child_name: name,
+          birth_date: childFormBirthdate,
+          first_session_date: new Date().toISOString().split('T')[0],
+          concerns_and_goals: null,
+          memo: childFormMemo.trim() || null,
+          square_customer_id: parent?.squareCustomerId || null
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.error('Supabase受講生登録に失敗しました:', insertError);
+        alert('Supabaseへの顧客登録に失敗しました。受講生は追加していません。');
+        return;
+      }
+
+      supabaseClientId = insertedClient?.id;
+    }
+
+    const newStudent: Student = {
+      id: newStudentId,
+      parentId: childFormParentId,
+      supabaseClientId,
+      name,
+      kana: childFormKana.trim(),
+      age: childFormBirthdate
+        ? Math.max(0, new Date().getFullYear() - new Date(childFormBirthdate).getFullYear())
+        : 0,
+      birthdate: childFormBirthdate,
+      firstLessonDate: new Date().toISOString().split('T')[0],
+      lastReservationDate: '',
+      concern: '',
+      target: '',
+      memo: childFormMemo,
+      physicalHistory: [],
+      sessions: []
+    };
+
+    setStudents(prev => [...prev, newStudent]);
+    setSelectedStudentId(newStudent.id);
+    setSelectedParentId(null);
+    setIsChildFormOpen(false);
+    alert('受講生を追加しました。');
   };
   const handleDeleteParent = (parentId: string) => {
     const target = parents.find(p => p.id === parentId);
@@ -1468,8 +1587,82 @@ export default function ClientsPage() {
     );
   };
 
-  const handleSavePhysicalMeasurements = () => {
-    alert('測定内容を保存しました。');
+  const handleSavePhysicalMeasurements = async () => {
+    const supabaseClientId = currentStudent.supabaseClientId;
+
+    if (!supabaseClientId) {
+      alert('この顧客はSupabaseの顧客IDと紐づいていないため、測定内容を保存できません。');
+      return;
+    }
+
+    const targetDates = Array.from(
+      new Set([beforeDate, afterDate].filter(Boolean))
+    );
+
+    if (targetDates.length === 0) {
+      alert('保存する測定日がありません。');
+      return;
+    }
+
+    try {
+      for (const targetDate of targetDates) {
+        const measurement = currentStudent.physicalHistory.find(
+          m => m.date === targetDate
+        );
+
+        if (!measurement) continue;
+
+        console.log('測定値Supabase保存確認:', {
+          targetDate,
+          weight: measurement.weight,
+          fat: measurement.fat,
+          muscle: measurement.muscle,
+        });
+
+        const { data: existing, error: findError } = await supabase
+          .from('measurements')
+          .select('id')
+          .eq('client_id', supabaseClientId)
+          .eq('measurement_date', targetDate)
+          .maybeSingle();
+
+        if (findError) {
+          throw findError;
+        }
+
+        const payload = {
+          client_id: supabaseClientId,
+          measurement_date: targetDate,
+          weight: measurement.weight,
+          body_fat: measurement.fat,
+          muscle_mass: measurement.muscle,
+        };
+
+        if (existing?.id) {
+          const { error: updateError } = await supabase
+            .from('measurements')
+            .update(payload)
+            .eq('id', existing.id);
+
+          if (updateError) {
+            throw updateError;
+          }
+        } else {
+          const { error: insertError } = await supabase
+            .from('measurements')
+            .insert(payload);
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+      }
+
+      alert('測定内容をSupabaseに保存しました。');
+    } catch (error) {
+      console.error('Supabase測定内容の保存に失敗しました:', error);
+      alert('Supabaseへの測定内容の保存に失敗しました。');
+    }
   };
 
   const handleDeleteSelectedPhysicalMeasurement = () => {
@@ -2999,7 +3192,7 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
+        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" required /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
       </main>
     </div>
   );
