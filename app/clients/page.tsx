@@ -281,8 +281,65 @@ export default function ClientsPage() {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [alertFilter, setAlertFilter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
+
+  // 再読み込み後も最後に開いていた顧客・タブを復元
+  useEffect(() => {
+    try {
+      const savedStudentId = localStorage.getItem('golazo-clients-selected-student');
+      const savedParentId = localStorage.getItem('golazo-clients-selected-parent');
+      const savedTab = localStorage.getItem('golazo-clients-active-tab');
+      const savedSearch = localStorage.getItem('golazo-clients-search-keyword');
+
+      if (savedStudentId) setSelectedStudentId(savedStudentId);
+      if (savedParentId) setSelectedParentId(savedParentId);
+
+      if (
+        savedTab === 'carte' ||
+        savedTab === 'tickets' ||
+        savedTab === 'edit_info'
+      ) {
+        setActiveTab(savedTab);
+      }
+
+      if (savedSearch !== null) setSearchKeyword(savedSearch);
+    } catch (error) {
+      console.error('画面状態の復元に失敗しました:', error);
+    }
+  }, []);
+
   const [isSyncing, setIsSyncing] = useState<boolean>(false); // Square同期中のローディング状態
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    try {
+      localStorage.setItem(
+        'golazo-clients-selected-student',
+        selectedStudentId
+      );
+
+      if (selectedParentId) {
+        localStorage.setItem(
+          'golazo-clients-selected-parent',
+          selectedParentId
+        );
+      } else {
+        localStorage.removeItem('golazo-clients-selected-parent');
+      }
+
+      localStorage.setItem('golazo-clients-active-tab', activeTab);
+      localStorage.setItem('golazo-clients-search-keyword', searchKeyword);
+    } catch (error) {
+      console.error('画面状態の保存に失敗しました:', error);
+    }
+  }, [
+    isLoaded,
+    selectedStudentId,
+    selectedParentId,
+    activeTab,
+    searchKeyword
+  ]);
   const [squareCustomers, setSquareCustomers] = useState<any[]>([]);
   const [squareCustomerSearch, setSquareCustomerSearch] = useState('');
   const [isGroupLinkModalOpen, setIsGroupLinkModalOpen] = useState(false);
