@@ -1492,14 +1492,14 @@ export default function ClientsPage() {
       };
       reader.readAsDataURL(file);
 
-      // NAS二重保存テスト：姿勢写真「正面」だけ追加バックアップ
+      // NAS二重保存：姿勢写真「正面・側面」を追加バックアップ
       // NAS保存に失敗しても、既存の写真保存には影響させない
-      if (type === 'posture' && keyName === 'front') {
+      if (type === 'posture' && (keyName === 'front' || keyName === 'side')) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('clientId', String(currentStudent.id));
         formData.append('targetDate', targetDate);
-        formData.append('photoType', 'posture-front');
+        formData.append('photoType', `posture-${keyName}`);
 
         fetch('/api/nas-photo-backup', {
           method: 'POST',
