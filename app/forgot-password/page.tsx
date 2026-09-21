@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`, // 再設定後のリダイレクト先
+        redirectTo: `${window.location.origin}/reset-password`, // 新しいパスワード設定画面
       });
 
       if (error) {
