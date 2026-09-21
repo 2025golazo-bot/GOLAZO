@@ -1833,34 +1833,57 @@ export default function ClientsPage() {
     let supabaseClientId = currentStudent.supabaseClientId;
 
     if (!supabaseClientId) {
-      const { data: insertedClient, error: insertClientError } = await supabase
-        .from('clients')
-        .insert({
-          parent_name: currentParent.name || null,
-          child_name: currentStudent.name,
-          birth_date: currentStudent.birthdate || null,
-          first_session_date: currentStudent.firstLessonDate || new Date().toISOString().split('T')[0],
-          concerns_and_goals: [currentStudent.concern, currentStudent.target]
-            .filter(Boolean)
-            .join('。') || null,
-          memo: currentStudent.memo || null,
-          square_customer_id: currentParent.squareCustomerId || null
-        })
-        .select('id')
-        .single();
+      let recoveredClientId: string | undefined;
 
-      if (insertClientError || !insertedClient?.id) {
-        console.error('Supabase顧客IDの作成に失敗しました:', insertClientError);
-        alert('Supabaseへの顧客登録に失敗したため、測定内容を保存できませんでした。');
-        return;
+      if (currentStudent.birthdate) {
+        const { data: existingClient, error: findClientError } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('child_name', currentStudent.name)
+          .eq('birth_date', currentStudent.birthdate)
+          .maybeSingle();
+
+        if (findClientError) {
+          console.error('Supabase既存顧客の検索に失敗しました:', findClientError);
+          alert('Supabaseの顧客情報を確認できなかったため、測定内容を保存できませんでした。');
+          return;
+        }
+
+        recoveredClientId = existingClient?.id;
       }
 
-      supabaseClientId = insertedClient.id;
+      if (!recoveredClientId) {
+        const { data: insertedClient, error: insertClientError } = await supabase
+          .from('clients')
+          .insert({
+            parent_name: currentParent.name || null,
+            child_name: currentStudent.name,
+            birth_date: currentStudent.birthdate || null,
+            first_session_date: currentStudent.firstLessonDate || new Date().toISOString().split('T')[0],
+            concerns_and_goals: [currentStudent.concern, currentStudent.target]
+              .filter(Boolean)
+              .join('。') || null,
+            memo: currentStudent.memo || null,
+            square_customer_id: currentParent.squareCustomerId || null
+          })
+          .select('id')
+          .single();
+
+        if (insertClientError || !insertedClient?.id) {
+          console.error('Supabase顧客IDの作成に失敗しました:', insertClientError);
+          alert('Supabaseへの顧客登録に失敗したため、測定内容を保存できませんでした。');
+          return;
+        }
+
+        recoveredClientId = insertedClient.id;
+      }
+
+      supabaseClientId = recoveredClientId;
 
       setStudents(prev =>
         prev.map(student =>
           student.id === currentStudent.id
-            ? { ...student, supabaseClientId: insertedClient.id }
+            ? { ...student, supabaseClientId: recoveredClientId }
             : student
         )
       );
