@@ -3,6 +3,43 @@ import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/client';
+import { heicTo } from 'heic-to';
+
+// HEIC / HEIFだけJPEGへ変換し、それ以外は元ファイルをそのまま返す
+const prepareImageForUpload = async (file: File): Promise<File> => {
+  const lowerName = file.name.toLowerCase();
+
+  const isHeic =
+    lowerName.endsWith('.heic') ||
+    lowerName.endsWith('.heif') ||
+    file.type === 'image/heic' ||
+    file.type === 'image/heif';
+
+  if (!isHeic) {
+    return file;
+  }
+
+  const converted = await heicTo({
+    blob: file,
+    type: 'image/jpeg',
+    quality: 0.9,
+  });
+
+  if (!(converted instanceof Blob)) {
+    throw new Error('HEIC写真をJPEGへ変換できませんでした。');
+  }
+
+  const baseName = file.name.replace(/\.(heic|heif)$/i, '');
+
+  return new File(
+    [converted],
+    `${baseName}.jpg`,
+    {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    }
+  );
+};
 
 // --- 型定義 ---
 interface Session {
@@ -376,6 +413,17 @@ export default function ClientsPage() {
           console.log('Supabase clients 読み込み成功:', supabaseClients?.length ?? 0, '件');
         }
 
+        const { data: supabaseSessionLogs, error: sessionLogsError } = await supabase
+          .from('session_logs')
+          .select('id, client_id, session_date, staff_name, content, homework, photo_url, local_session_id')
+          .order('session_date', { ascending: false });
+
+        if (sessionLogsError) {
+          console.error('Supabaseセッション記録の読み込みに失敗しました:', sessionLogsError);
+        } else {
+          console.log('Supabase session_logs 読み込み成功:', supabaseSessionLogs?.length ?? 0, '件');
+        }
+
         const savedParents = localStorage.getItem('golazo-clients-parents-v2');
         let loadedParents: Parent[] | null = null;
 
@@ -442,7 +490,7 @@ export default function ClientsPage() {
 
               const { data: supabaseMeasurements, error: measurementsError } = await supabase
                 .from('measurements')
-                .select('measurement_date, weight, body_fat, muscle_mass')
+                .select('measurement_date, weight, body_fat, muscle_mass, posture_image_1_url, posture_image_2_url, posture_image_3_url, physical_check_image_url, injury_zero_image_url, ear_before_right_image_url, ear_after_right_image_url, ear_before_left_image_url, ear_after_left_image_url')
                 .eq('client_id', matchedClient.id)
                 .order('measurement_date', { ascending: true });
 
@@ -469,6 +517,44 @@ export default function ClientsPage() {
                 ])
               );
 
+              const existingSessions = student.sessions || [];
+              const existingSessionIds = new Set(
+                existingSessions.map(session => session.id)
+              );
+
+              const remoteSessions = (supabaseSessionLogs || [])
+                .filter(log => log.client_id === matchedClient.id)
+                .map(log => ({
+                  id: log.local_session_id || log.id,
+                  date: log.session_date || '',
+                  staff: log.staff_name || 'TAKA',
+                  content: log.content || '',
+                  homework: log.homework || '',
+                  photo: log.photo_url || null,
+                }));
+
+              const mergedSessions = [
+                ...existingSessions.map(session => {
+                  const remote = remoteSessions.find(
+                    remoteSession => remoteSession.id === session.id
+                  );
+
+                  return remote
+                    ? {
+                        ...session,
+                        date: remote.date,
+                        staff: remote.staff,
+                        content: remote.content,
+                        homework: remote.homework,
+                        photo: remote.photo,
+                      }
+                    : session;
+                }),
+                ...remoteSessions.filter(
+                  remoteSession => !existingSessionIds.has(remoteSession.id)
+                ),
+              ].sort((a, b) => b.date.localeCompare(a.date));
+
               const mergedPhysicalHistory = student.physicalHistory.map(physical => {
                 const saved = measurementMap.get(physical.date);
 
@@ -478,7 +564,59 @@ export default function ClientsPage() {
                   ...physical,
                   weight: Number(saved.weight ?? physical.weight ?? 0),
                   fat: Number(saved.body_fat ?? physical.fat ?? 0),
-                  muscle: Number(saved.muscle_mass ?? physical.muscle ?? 0)
+                  muscle: Number(saved.muscle_mass ?? physical.muscle ?? 0),
+                  posturePhotos: {
+                    front:
+                      saved.posture_image_1_url ??
+                      physical.posturePhotos?.front ??
+                      null,
+                    side:
+                      saved.posture_image_2_url ??
+                      physical.posturePhotos?.side ??
+                      null,
+                    back:
+                      saved.posture_image_3_url ??
+                      physical.posturePhotos?.back ??
+                      null,
+                  },
+                  physicalCheckFiles: saved.physical_check_image_url
+                    ? [
+                        {
+                          id: `physical-check-${physical.date}`,
+                          name: 'フィジカルチェック測定結果',
+                          type: 'image/*',
+                          dataUrl: saved.physical_check_image_url,
+                        },
+                      ]
+                    : physical.physicalCheckFiles || [],
+                  injuryZeroFiles: saved.injury_zero_image_url
+                    ? [
+                        {
+                          id: `injury-zero-${physical.date}`,
+                          name: 'ケガゼロ測定結果',
+                          type: 'image/*',
+                          dataUrl: saved.injury_zero_image_url,
+                        },
+                      ]
+                    : physical.injuryZeroFiles || [],
+                  earAcupuncturePhotos: {
+                    beforeRight:
+                      saved.ear_before_right_image_url ??
+                      physical.earAcupuncturePhotos?.beforeRight ??
+                      null,
+                    afterRight:
+                      saved.ear_after_right_image_url ??
+                      physical.earAcupuncturePhotos?.afterRight ??
+                      null,
+                    beforeLeft:
+                      saved.ear_before_left_image_url ??
+                      physical.earAcupuncturePhotos?.beforeLeft ??
+                      null,
+                    afterLeft:
+                      saved.ear_after_left_image_url ??
+                      physical.earAcupuncturePhotos?.afterLeft ??
+                      null,
+                  }
                 };
               });
 
@@ -489,7 +627,8 @@ export default function ClientsPage() {
                 concern,
                 target,
                 memo: matchedClient.memo || "",
-                physicalHistory: mergedPhysicalHistory
+                physicalHistory: mergedPhysicalHistory,
+                sessions: mergedSessions
               };
             })
           );
@@ -733,6 +872,7 @@ export default function ClientsPage() {
   const [newSessionStaff, setNewSessionStaff] = useState<'TAKA' | 'NANA'>('TAKA');
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
+  const [newSessionPhotoUrl, setNewSessionPhotoUrl] = useState<string | null>(null);
   const [useTicket, setUseTicket] = useState<boolean>(true);
   const [isEditingTicketRemaining, setIsEditingTicketRemaining] = useState(false);
   const [ticketRemainingInput, setTicketRemainingInput] = useState('');
@@ -1362,62 +1502,162 @@ export default function ClientsPage() {
 
   const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの受講生のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('受講生を削除しました。'); };
 
-  const handleAddSession = () => {
+  const handleAddSession = async () => {
     if (!newSessionContent) return;
 
     if (useTicket && currentParent.ticketRemaining <= 0) {
       alert('🎫 回数券残数がありません。回数券を追加購入してから登録してください。');
       return;
     }
+
+    if (!currentStudent.supabaseClientId) {
+      alert('Supabaseの顧客IDが確認できないため、セッションを保存できません。');
+      return;
+    }
+
+    const localSessionId = `ses-${Date.now()}`;
+
+    const { error: sessionInsertError } = await supabase
+      .from('session_logs')
+      .insert({
+        client_id: currentStudent.supabaseClientId,
+        session_date: newSessionDate,
+        staff_name: newSessionStaff,
+        content: newSessionContent,
+        homework: newSessionHomework || null,
+        photo_url: newSessionPhotoUrl,
+        local_session_id: localSessionId,
+      });
+
+    if (sessionInsertError) {
+      console.error('Supabaseセッション記録の保存に失敗しました:', sessionInsertError);
+      alert('Supabaseへのセッション記録保存に失敗しました。セッションは登録していません。');
+      return;
+    }
+
     const newSession: Session = {
-      id: `ses-${Date.now()}`,
+      id: localSessionId,
       date: newSessionDate,
       staff: newSessionStaff,
       content: newSessionContent,
       homework: newSessionHomework,
-      photo: null
+      photo: newSessionPhotoUrl
     };
 
     setStudents(prev =>
-      prev.map(s => (s.id === currentStudent.id ? { ...s, sessions: [newSession, ...s.sessions], lastReservationDate: newSessionDate } : s))
+      prev.map(s =>
+        s.id === currentStudent.id
+          ? {
+              ...s,
+              sessions: [newSession, ...s.sessions],
+              lastReservationDate: newSessionDate
+            }
+          : s
+      )
     );
 
     if (useTicket) {
       setParents(prev =>
-        prev.map(p => (p.id === currentParent.id ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) } : p))
+        prev.map(p =>
+          p.id === currentParent.id
+            ? { ...p, ticketRemaining: Math.max(0, p.ticketRemaining - 1) }
+            : p
+        )
       );
     }
 
     setNewSessionContent('');
     setNewSessionHomework('');
+    setNewSessionPhotoUrl(null);
     alert('セッションを登録しました！');
   };
 
-  const handleSaveEditSession = (sessionId: string) => {
+  const handleSaveEditSession = async (sessionId: string) => {
+    if (!currentStudent.supabaseClientId) {
+      alert('Supabaseの顧客IDが確認できないため、セッションを更新できません。');
+      return;
+    }
+
+    const { error: sessionUpdateError } = await supabase
+      .from('session_logs')
+      .update({
+        content: editSessionContent,
+        homework: editSessionHomework || null,
+      })
+      .eq('client_id', currentStudent.supabaseClientId)
+      .eq('local_session_id', sessionId);
+
+    if (sessionUpdateError) {
+      console.error('Supabaseセッション記録の更新に失敗しました:', sessionUpdateError);
+      alert('Supabaseへのセッション記録更新に失敗しました。');
+      return;
+    }
+
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
+
         return {
           ...s,
-          sessions: s.sessions.map(ses => (ses.id === sessionId ? { ...ses, content: editSessionContent, homework: editSessionHomework } : ses))
+          sessions: s.sessions.map(ses =>
+            ses.id === sessionId
+              ? {
+                  ...ses,
+                  content: editSessionContent,
+                  homework: editSessionHomework
+                }
+              : ses
+          )
         };
       })
     );
+
     setEditingSessionId(null);
     alert('セッション記録を更新しました');
   };
 
-  const handleDeleteSession = (sessionId: string) => {
+  const handleDeleteSession = async (sessionId: string) => {
     if (!confirm('このセッション記録を削除しますか？')) return;
+
+    if (!currentStudent.supabaseClientId) {
+      alert('Supabaseの顧客IDが確認できないため、セッションを削除できません。');
+      return;
+    }
+
+    const { data: deletedSessionLogs, error: sessionDeleteError } = await supabase
+      .from('session_logs')
+      .delete()
+      .eq('client_id', currentStudent.supabaseClientId)
+      .eq('local_session_id', sessionId)
+      .select('id, local_session_id');
+
+    if (sessionDeleteError) {
+      console.error('Supabaseセッション記録の削除に失敗しました:', sessionDeleteError);
+      alert('Supabaseからのセッション記録削除に失敗しました。');
+      return;
+    }
+
+    if (!deletedSessionLogs || deletedSessionLogs.length === 0) {
+      console.error('Supabaseセッション記録の削除対象が見つかりませんでした:', {
+        clientId: currentStudent.supabaseClientId,
+        sessionId,
+      });
+      alert('Supabase上のセッション記録を削除できませんでした。画面からも削除していません。');
+      return;
+    }
+
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
+
         return {
           ...s,
           sessions: s.sessions.filter(ses => ses.id !== sessionId)
         };
       })
     );
+
+    alert('セッション記録を削除しました');
   };
 
   const handleAddNewMeasureDate = () => {
@@ -1533,132 +1773,314 @@ export default function ClientsPage() {
     if (!files.length) return;
 
     files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = String(reader.result || '');
-        if (!dataUrl) return;
+      if (type === 'physicalCheck' || type === 'injuryZero') {
+        void (async () => {
+          try {
+            if (!currentStudent.supabaseClientId) {
+              throw new Error('Supabaseの顧客IDが確認できません。');
+            }
 
-        setStudents(prev =>
-          prev.map(s => {
-            if (s.id !== currentStudent.id) return s;
+            const uploadFile = await prepareImageForUpload(file);
 
-            const updatedHistory = s.physicalHistory.map(m => {
-              if (m.date !== targetDate) return m;
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
-              if (type === 'posture' && keyName) {
+            if (!allowedTypes.includes(uploadFile.type)) {
+              throw new Error(
+                'JPEG・PNG・WebP・HEIC・HEIF形式の写真を選択してください。'
+              );
+            }
+
+            const ext =
+              uploadFile.type === 'image/png'
+                ? 'png'
+                : uploadFile.type === 'image/webp'
+                  ? 'webp'
+                  : 'jpg';
+
+            const photoName =
+              type === 'physicalCheck' ? 'physical-check' : 'injury-zero';
+
+            const photoColumn =
+              type === 'physicalCheck'
+                ? 'physical_check_image_url'
+                : 'injury_zero_image_url';
+
+            const storagePath =
+              `clients/${currentStudent.supabaseClientId}/measurements/${targetDate}/${photoName}-${crypto.randomUUID()}.${ext}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('client-photos')
+              .upload(storagePath, uploadFile, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: uploadFile.type,
+              });
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage
+              .from('client-photos')
+              .getPublicUrl(storagePath);
+
+            if (!data?.publicUrl) {
+              throw new Error('測定結果写真のURLを取得できませんでした。');
+            }
+
+            const { data: existingMeasurement, error: findMeasurementError } =
+              await supabase
+                .from('measurements')
+                .select('id')
+                .eq('client_id', currentStudent.supabaseClientId)
+                .eq('measurement_date', targetDate)
+                .maybeSingle();
+
+            if (findMeasurementError) throw findMeasurementError;
+
+            if (existingMeasurement?.id) {
+              const { error: updateMeasurementError } = await supabase
+                .from('measurements')
+                .update({
+                  [photoColumn]: data.publicUrl,
+                })
+                .eq('id', existingMeasurement.id);
+
+              if (updateMeasurementError) throw updateMeasurementError;
+            } else {
+              const { error: insertMeasurementError } = await supabase
+                .from('measurements')
+                .insert({
+                  client_id: currentStudent.supabaseClientId,
+                  measurement_date: targetDate,
+                  [photoColumn]: data.publicUrl,
+                });
+
+              if (insertMeasurementError) throw insertMeasurementError;
+            }
+
+            const attachment: MeasurementAttachment = {
+              id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              name: file.name,
+              type: file.type,
+              dataUrl: data.publicUrl,
+            };
+
+            setStudents(prev =>
+              prev.map(student => {
+                if (student.id !== currentStudent.id) return student;
+
                 return {
-                  ...m,
-                  posturePhotos: {
-                    ...(m.posturePhotos || { front: null, side: null, back: null }),
-                    [keyName]: dataUrl
-                  }
+                  ...student,
+                  physicalHistory: student.physicalHistory.map(m => {
+                    if (m.date !== targetDate) return m;
+
+                    return type === 'physicalCheck'
+                      ? {
+                          ...m,
+                          physicalCheckFiles: [attachment],
+                        }
+                      : {
+                          ...m,
+                          injuryZeroFiles: [attachment],
+                        };
+                  }),
                 };
+              })
+            );
+
+            // NAS二重保存は従来どおり継続
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('clientId', String(currentStudent.id));
+            formData.append('targetDate', targetDate);
+            formData.append('photoType', photoName);
+
+            fetch('/api/nas-photo-backup', {
+              method: 'POST',
+              body: formData,
+            })
+              .then(async response => {
+                if (!response.ok) {
+                  const result = await response.json().catch(() => null);
+                  throw new Error(result?.error || `HTTP ${response.status}`);
+                }
+
+                console.log(
+                  type === 'physicalCheck'
+                    ? 'NASフィジカルチェックバックアップ成功:'
+                    : 'NASケガゼロバックアップ成功:',
+                  targetDate
+                );
+              })
+              .catch(error => {
+                console.error(
+                  type === 'physicalCheck'
+                    ? 'NASフィジカルチェックバックアップ失敗:'
+                    : 'NASケガゼロバックアップ失敗:',
+                  error
+                );
+              });
+          } catch (error) {
+            console.error('Supabase測定結果写真アップロード失敗:', error);
+
+            alert(
+              `測定結果写真のアップロードに失敗しました。\n${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
+        })();
+
+        return;
+      }
+
+      if (type === 'posture' && keyName) {
+        void (async () => {
+          try {
+            if (!currentStudent.supabaseClientId) {
+              throw new Error('Supabaseの顧客IDが確認できません。');
+            }
+
+            const uploadFile = await prepareImageForUpload(file);
+
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+
+            if (!allowedTypes.includes(uploadFile.type)) {
+              throw new Error(
+                'JPEG・PNG・WebP・HEIC・HEIF形式の写真を選択してください。'
+              );
+            }
+
+            const ext =
+              uploadFile.type === 'image/png'
+                ? 'png'
+                : uploadFile.type === 'image/webp'
+                  ? 'webp'
+                  : 'jpg';
+
+            const storagePath =
+              `clients/${currentStudent.supabaseClientId}/measurements/${targetDate}/posture-${keyName}-${crypto.randomUUID()}.${ext}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('client-photos')
+              .upload(storagePath, uploadFile, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: uploadFile.type,
+              });
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage
+              .from('client-photos')
+              .getPublicUrl(storagePath);
+
+            if (!data?.publicUrl) {
+              throw new Error('姿勢写真のURLを取得できませんでした。');
+            }
+
+            const postureColumn =
+              keyName === 'front'
+                ? 'posture_image_1_url'
+                : keyName === 'side'
+                  ? 'posture_image_2_url'
+                  : 'posture_image_3_url';
+
+            const { data: existingMeasurement, error: findMeasurementError } =
+              await supabase
+                .from('measurements')
+                .select('id')
+                .eq('client_id', currentStudent.supabaseClientId)
+                .eq('measurement_date', targetDate)
+                .maybeSingle();
+
+            if (findMeasurementError) {
+              throw findMeasurementError;
+            }
+
+            if (existingMeasurement?.id) {
+              const { error: updateMeasurementError } = await supabase
+                .from('measurements')
+                .update({
+                  [postureColumn]: data.publicUrl,
+                })
+                .eq('id', existingMeasurement.id);
+
+              if (updateMeasurementError) {
+                throw updateMeasurementError;
               }
+            } else {
+              const { error: insertMeasurementError } = await supabase
+                .from('measurements')
+                .insert({
+                  client_id: currentStudent.supabaseClientId,
+                  measurement_date: targetDate,
+                  [postureColumn]: data.publicUrl,
+                });
 
-              const attachment: MeasurementAttachment = {
-                id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                name: file.name,
-                type: file.type || 'application/octet-stream',
-                dataUrl
-              };
+              if (insertMeasurementError) {
+                throw insertMeasurementError;
+              }
+            }
 
-              if (type === 'physicalCheck') {
+            setStudents(prev =>
+              prev.map(student => {
+                if (student.id !== currentStudent.id) return student;
+
                 return {
-                  ...m,
-                  physicalCheckFiles: [...(m.physicalCheckFiles || []), attachment]
+                  ...student,
+                  physicalHistory: student.physicalHistory.map(m =>
+                    m.date === targetDate
+                      ? {
+                          ...m,
+                          posturePhotos: {
+                            ...(m.posturePhotos || {
+                              front: null,
+                              side: null,
+                              back: null,
+                            }),
+                            [keyName]: data.publicUrl,
+                          },
+                        }
+                      : m
+                  ),
                 };
-              }
+              })
+            );
 
-              return {
-                ...m,
-                injuryZeroFiles: [...(m.injuryZeroFiles || []), attachment]
-              };
-            });
+            // NAS二重保存：Supabase Storage保存成功後も従来どおりバックアップ
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('clientId', String(currentStudent.id));
+            formData.append('targetDate', targetDate);
+            formData.append('photoType', `posture-${keyName}`);
 
-            return { ...s, physicalHistory: updatedHistory };
-          })
-        );
-      };
-      reader.readAsDataURL(file);
+            fetch('/api/nas-photo-backup', {
+              method: 'POST',
+              body: formData,
+            })
+              .then(async response => {
+                if (!response.ok) {
+                  const result = await response.json().catch(() => null);
+                  throw new Error(result?.error || `HTTP ${response.status}`);
+                }
 
-      // NAS二重保存：姿勢写真「正面・側面・背面」を追加バックアップ
-      // NAS保存に失敗しても、既存の写真保存には影響させない
-      if (
-        type === 'posture' &&
-        (keyName === 'front' || keyName === 'side' || keyName === 'back')
-      ) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('clientId', String(currentStudent.id));
-        formData.append('targetDate', targetDate);
-        formData.append('photoType', `posture-${keyName}`);
+                console.log('NAS姿勢写真バックアップ成功:', targetDate);
+              })
+              .catch(error => {
+                console.error('NAS姿勢写真バックアップ失敗:', error);
+              });
+          } catch (error) {
+            console.error('Supabase姿勢写真アップロード失敗:', error);
 
-        fetch('/api/nas-photo-backup', {
-          method: 'POST',
-          body: formData,
-        })
-          .then(async response => {
-            if (!response.ok) {
-              const result = await response.json().catch(() => null);
-              throw new Error(result?.error || `HTTP ${response.status}`);
-            }
+            alert(
+              `姿勢写真のアップロードに失敗しました。\n${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
+        })();
 
-            console.log('NAS姿勢写真バックアップ成功:', targetDate);
-          })
-          .catch(error => {
-            console.error('NAS姿勢写真バックアップ失敗:', error);
-          });
-      }
-      // NAS二重保存：フィジカルチェック測定結果
-      // NAS保存に失敗しても、既存のファイル保存には影響させない
-      if (type === 'physicalCheck') {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('clientId', String(currentStudent.id));
-        formData.append('targetDate', targetDate);
-        formData.append('photoType', 'physical-check');
-
-        fetch('/api/nas-photo-backup', {
-          method: 'POST',
-          body: formData,
-        })
-          .then(async response => {
-            if (!response.ok) {
-              const result = await response.json().catch(() => null);
-              throw new Error(result?.error || `HTTP ${response.status}`);
-            }
-
-            console.log('NASフィジカルチェックバックアップ成功:', targetDate);
-          })
-          .catch(error => {
-            console.error('NASフィジカルチェックバックアップ失敗:', error);
-          });
-      }
-
-      // NAS二重保存：ケガゼロプロジェクト測定結果
-      // NAS保存に失敗しても、既存のファイル保存には影響させない
-      if (type === 'injuryZero') {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('clientId', String(currentStudent.id));
-        formData.append('targetDate', targetDate);
-        formData.append('photoType', 'injury-zero');
-
-        fetch('/api/nas-photo-backup', {
-          method: 'POST',
-          body: formData,
-        })
-          .then(async response => {
-            if (!response.ok) {
-              const result = await response.json().catch(() => null);
-              throw new Error(result?.error || `HTTP ${response.status}`);
-            }
-
-            console.log('NASケガゼロバックアップ成功:', targetDate);
-          })
-          .catch(error => {
-            console.error('NASケガゼロバックアップ失敗:', error);
-          });
+        return;
       }
 
     });
@@ -1688,17 +2110,112 @@ export default function ClientsPage() {
   const handleEarAcupuncturePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, targetDate: string, keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft') => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('耳ツボ写真は画像ファイルを選択してください。');
-      e.target.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '');
-      if (dataUrl) handleUpdateEarAcupuncturePhoto(targetDate, keyName, dataUrl);
-    };
-    reader.readAsDataURL(file);
+    void (async () => {
+      try {
+        if (!currentStudent.supabaseClientId) {
+          throw new Error('Supabaseの顧客IDが確認できません。');
+        }
+
+        const uploadFile = await prepareImageForUpload(file);
+
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(uploadFile.type)) {
+          throw new Error(
+            'JPEG・PNG・WebP・HEIC・HEIF形式の写真を選択してください。'
+          );
+        }
+
+        const ext =
+          uploadFile.type === 'image/png'
+            ? 'png'
+            : uploadFile.type === 'image/webp'
+              ? 'webp'
+              : 'jpg';
+
+        const storagePath =
+          `clients/${currentStudent.supabaseClientId}/measurements/${targetDate}/ear-${keyName}-${crypto.randomUUID()}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('client-photos')
+          .upload(storagePath, uploadFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: uploadFile.type,
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data } = supabase.storage
+          .from('client-photos')
+          .getPublicUrl(storagePath);
+
+        if (!data?.publicUrl) {
+          throw new Error('耳ツボ写真のURLを取得できませんでした。');
+        }
+
+        const earColumn =
+          keyName === 'beforeRight'
+            ? 'ear_before_right_image_url'
+            : keyName === 'afterRight'
+              ? 'ear_after_right_image_url'
+              : keyName === 'beforeLeft'
+                ? 'ear_before_left_image_url'
+                : 'ear_after_left_image_url';
+
+        const { data: existingMeasurement, error: findMeasurementError } =
+          await supabase
+            .from('measurements')
+            .select('id')
+            .eq('client_id', currentStudent.supabaseClientId)
+            .eq('measurement_date', targetDate)
+            .maybeSingle();
+
+        if (findMeasurementError) {
+          throw findMeasurementError;
+        }
+
+        if (existingMeasurement?.id) {
+          const { error: updateMeasurementError } = await supabase
+            .from('measurements')
+            .update({
+              [earColumn]: data.publicUrl,
+            })
+            .eq('id', existingMeasurement.id);
+
+          if (updateMeasurementError) {
+            throw updateMeasurementError;
+          }
+        } else {
+          const { error: insertMeasurementError } = await supabase
+            .from('measurements')
+            .insert({
+              client_id: currentStudent.supabaseClientId,
+              measurement_date: targetDate,
+              [earColumn]: data.publicUrl,
+            });
+
+          if (insertMeasurementError) {
+            throw insertMeasurementError;
+          }
+        }
+
+        handleUpdateEarAcupuncturePhoto(
+          targetDate,
+          keyName,
+          data.publicUrl
+        );
+      } catch (error) {
+        console.error('Supabase耳ツボ写真アップロード失敗:', error);
+
+        alert(
+          `耳ツボ写真のアップロードに失敗しました。\n${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    })();
 
     // NAS二重保存：耳ツボ写真「右耳・施術前」
     // NAS保存に失敗しても、既存の写真保存には影響させない
@@ -1806,35 +2323,136 @@ export default function ClientsPage() {
     e.target.value = '';
   };
 
-  const handleDeleteEarAcupuncturePhoto = (targetDate: string, keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft') => {
+  const handleDeleteEarAcupuncturePhoto = async (
+    targetDate: string,
+    keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft'
+  ) => {
     if (!confirm('この耳ツボ写真を削除しますか？')) return;
+
+    if (!currentStudent.supabaseClientId) {
+      alert('Supabaseの顧客IDが確認できないため、耳ツボ写真を削除できません。');
+      return;
+    }
+
+    const earColumn =
+      keyName === 'beforeRight'
+        ? 'ear_before_right_image_url'
+        : keyName === 'afterRight'
+          ? 'ear_after_right_image_url'
+          : keyName === 'beforeLeft'
+            ? 'ear_before_left_image_url'
+            : 'ear_after_left_image_url';
+
+    const { error: deletePhotoError } = await supabase
+      .from('measurements')
+      .update({
+        [earColumn]: null,
+      })
+      .eq('client_id', currentStudent.supabaseClientId)
+      .eq('measurement_date', targetDate);
+
+    if (deletePhotoError) {
+      console.error('Supabase耳ツボ写真URLの削除に失敗しました:', deletePhotoError);
+      alert('耳ツボ写真の削除に失敗しました。');
+      return;
+    }
+
     handleUpdateEarAcupuncturePhoto(targetDate, keyName, null);
   };
 
-  const handleDeletePosturePhoto = (targetDate: string, keyName: 'front' | 'side' | 'back') => {
+  const handleDeletePosturePhoto = async (
+    targetDate: string,
+    keyName: 'front' | 'side' | 'back'
+  ) => {
     if (!confirm('この姿勢写真を削除しますか？')) return;
+
+    if (!currentStudent.supabaseClientId) {
+      alert('Supabaseの顧客IDが確認できないため、姿勢写真を削除できません。');
+      return;
+    }
+
+    const postureColumn =
+      keyName === 'front'
+        ? 'posture_image_1_url'
+        : keyName === 'side'
+          ? 'posture_image_2_url'
+          : 'posture_image_3_url';
+
+    const { error: deletePhotoError } = await supabase
+      .from('measurements')
+      .update({
+        [postureColumn]: null,
+      })
+      .eq('client_id', currentStudent.supabaseClientId)
+      .eq('measurement_date', targetDate);
+
+    if (deletePhotoError) {
+      console.error('Supabase姿勢写真URLの削除に失敗しました:', deletePhotoError);
+      alert('姿勢写真の削除に失敗しました。');
+      return;
+    }
+
     setStudents(prev =>
       prev.map(s => {
         if (s.id !== currentStudent.id) return s;
+
         const updatedHistory = s.physicalHistory.map(m => {
           if (m.date !== targetDate) return m;
-          const currentPhotos = m.posturePhotos || { front: null, side: null, back: null };
+
+          const currentPhotos =
+            m.posturePhotos || {
+              front: null,
+              side: null,
+              back: null,
+            };
+
           return {
             ...m,
-            posturePhotos: { ...currentPhotos, [keyName]: null }
+            posturePhotos: {
+              ...currentPhotos,
+              [keyName]: null,
+            },
           };
         });
-        return { ...s, physicalHistory: updatedHistory };
+
+        return {
+          ...s,
+          physicalHistory: updatedHistory,
+        };
       })
     );
   };
 
-  const handleDeleteMeasurementFile = (
+  const handleDeleteMeasurementFile = async (
     targetDate: string,
     type: 'physicalCheck' | 'injuryZero',
     fileId: string
   ) => {
     if (!confirm('この測定結果ファイルを削除しますか？')) return;
+
+    if (!currentStudent.supabaseClientId) {
+      alert('Supabaseの顧客IDが確認できないため、測定結果ファイルを削除できません。');
+      return;
+    }
+
+    const photoColumn =
+      type === 'physicalCheck'
+        ? 'physical_check_image_url'
+        : 'injury_zero_image_url';
+
+    const { error: deletePhotoError } = await supabase
+      .from('measurements')
+      .update({
+        [photoColumn]: null,
+      })
+      .eq('client_id', currentStudent.supabaseClientId)
+      .eq('measurement_date', targetDate);
+
+    if (deletePhotoError) {
+      console.error('Supabase測定結果写真URLの削除に失敗しました:', deletePhotoError);
+      alert('測定結果ファイルの削除に失敗しました。');
+      return;
+    }
 
     setStudents(prev =>
       prev.map(s => {
@@ -1846,13 +2464,17 @@ export default function ClientsPage() {
           if (type === 'physicalCheck') {
             return {
               ...m,
-              physicalCheckFiles: (m.physicalCheckFiles || []).filter(file => file.id !== fileId)
+              physicalCheckFiles: (m.physicalCheckFiles || []).filter(
+                file => file.id !== fileId
+              ),
             };
           }
 
           return {
             ...m,
-            injuryZeroFiles: (m.injuryZeroFiles || []).filter(file => file.id !== fileId)
+            injuryZeroFiles: (m.injuryZeroFiles || []).filter(
+              file => file.id !== fileId
+            ),
           };
         });
 
@@ -1956,27 +2578,49 @@ export default function ClientsPage() {
           throw findError;
         }
 
-        const payload = {
-          client_id: supabaseClientId,
-          measurement_date: targetDate,
-          weight: measurement.weight,
-          body_fat: measurement.fat,
-          muscle_mass: measurement.muscle,
-        };
+        const numericPayload: {
+          weight?: number;
+          body_fat?: number;
+          muscle_mass?: number;
+        } = {};
+
+        if (measurement.weight > 0) {
+          numericPayload.weight = measurement.weight;
+        }
+
+        if (measurement.fat > 0) {
+          numericPayload.body_fat = measurement.fat;
+        }
+
+        if (measurement.muscle > 0) {
+          numericPayload.muscle_mass = measurement.muscle;
+        }
 
         if (existing?.id) {
+          if (Object.keys(numericPayload).length === 0) {
+            continue;
+          }
+
           const { error: updateError } = await supabase
             .from('measurements')
-            .update(payload)
+            .update(numericPayload)
             .eq('id', existing.id);
 
           if (updateError) {
             throw updateError;
           }
         } else {
+          if (Object.keys(numericPayload).length === 0) {
+            continue;
+          }
+
           const { error: insertError } = await supabase
             .from('measurements')
-            .insert(payload);
+            .insert({
+              client_id: supabaseClientId,
+              measurement_date: targetDate,
+              ...numericPayload,
+            });
 
           if (insertError) {
             throw insertError;
@@ -2696,6 +3340,8 @@ export default function ClientsPage() {
                     <label className="block text-slate-500 mb-1 font-semibold">宿題・自主トレ指示</label>
                     <input type="text" placeholder="例: 片足ドローイン 1分×2" value={newSessionHomework} onChange={e => setNewSessionHomework(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2 outline-none" />
                   </div>
+
+
                   <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
                     セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
                   </button>
@@ -2742,6 +3388,23 @@ export default function ClientsPage() {
                             <>
                               <p className="text-slate-800 font-medium">{session.content}</p>
                               {session.homework && <p className="text-amber-800 bg-amber-50 p-2 rounded border border-amber-100"><strong>宿題:</strong> {session.homework}</p>}
+                              {session.photo && (
+                                <div className="pt-1">
+                                  <a
+                                    href={session.photo}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-block"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={session.photo}
+                                      alt="セッション写真"
+                                      className="h-28 w-28 rounded-lg object-cover border border-slate-200 hover:opacity-80 transition"
+                                    />
+                                  </a>
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
@@ -2888,7 +3551,7 @@ export default function ClientsPage() {
                                 <div className="text-[10px] font-bold text-slate-500 mb-1">{item.title}</div>
                                 {item.data ? (
                                   <div className="relative">
-                                    <img src={item.data} alt={`${label} ${item.title}`} className="w-full h-28 object-cover rounded border" />
+                                    <img src={item.data} alt={`${label} ${item.title}`} className="w-full h-28 object-contain rounded border bg-slate-50" />
                                     <button
                                       type="button"
                                       onClick={() => handleDeletePosturePhoto(item.date, key)}
