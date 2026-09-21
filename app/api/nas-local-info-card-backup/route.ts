@@ -6,9 +6,7 @@ import path from 'path';
 
 export const runtime = 'nodejs';
 
-const NAS_PHOTO_ROOT =
-  process.env.NAS_PHOTO_ROOT ||
-  '/Volumes/GOLAZO(アプリ)/files/golazo-photos';
+const NAS_PHOTO_ROOT = process.env.NAS_PHOTO_ROOT;
 
 function safePart(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -47,6 +45,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { ok: false, error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    if (!NAS_PHOTO_ROOT) {
+      return NextResponse.json(
+        { ok: false, error: 'NAS_PHOTO_ROOT is not configured' },
+        { status: 500 }
       );
     }
 
