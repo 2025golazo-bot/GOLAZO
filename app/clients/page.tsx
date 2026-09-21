@@ -377,8 +377,23 @@ export default function ClientsPage() {
         }
 
         const savedParents = localStorage.getItem('golazo-clients-parents-v2');
+        let loadedParents: Parent[] | null = null;
+
         if (savedParents) {
-          setParents(JSON.parse(savedParents));
+          const parsedParents = JSON.parse(savedParents) as Parent[];
+
+          loadedParents = parsedParents.map(parent => {
+            const squareId = String(parent.squareCustomerId || '').trim();
+
+            if (!squareId) return parent;
+
+            return {
+              ...parent,
+              id: `p-square-${squareId}`,
+            };
+          });
+
+          setParents(loadedParents);
         }
 
         const indexedStudents = await loadStudentsFromIndexedDB();
@@ -386,8 +401,25 @@ export default function ClientsPage() {
         if (cancelled) return;
 
         if (indexedStudents) {
+          const normalizedIndexedStudents = indexedStudents.map(student => {
+            const parent = loadedParents?.find(parent =>
+              parent.squareCustomerId &&
+              (
+                student.parentId === `square-${parent.squareCustomerId}` ||
+                student.parentId === `p-square-${parent.squareCustomerId}`
+              )
+            );
+
+            if (!parent) return student;
+
+            return {
+              ...student,
+              parentId: parent.id,
+            };
+          });
+
           const linkedStudents = await Promise.all(
-            indexedStudents.map(async student => {
+            normalizedIndexedStudents.map(async student => {
               const matchedClient = supabaseClients?.find(client =>
                 client.child_name === student.name &&
                 client.birth_date === student.birthdate
