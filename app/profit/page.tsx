@@ -29,6 +29,22 @@ type AnnualMonthData = {
   profit: number;
 };
 
+type FiscalMonthData = {
+  year: number;
+  month: number;
+  label: string;
+  sales: number;
+  expenses: number;
+  profit: number;
+};
+
+type ExpenseComparisonData = {
+  category: string;
+  currentAmount: number;
+  previousAmount: number;
+  difference: number;
+};
+
 const DEFAULT_EXPENSE_CATEGORIES = [
   '家賃',
   '水道',
@@ -66,9 +82,17 @@ export default function ProfitPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
+  const [viewMode, setViewMode] = useState<
+    'monthly' | 'annual' | 'fiscal' | 'expenseComparison'
+  >('monthly');
   const [annualData, setAnnualData] = useState<AnnualMonthData[]>([]);
   const [isAnnualLoading, setIsAnnualLoading] = useState(false);
+  const [fiscalData, setFiscalData] = useState<FiscalMonthData[]>([]);
+  const [expenseComparisonData, setExpenseComparisonData] = useState<
+    ExpenseComparisonData[]
+  >([]);
+  const [isFiscalLoading, setIsFiscalLoading] = useState(false);
+  const [isComparisonLoading, setIsComparisonLoading] = useState(false);
 
   const expenseMonth = `${selectedYear}-${selectedMonth.padStart(2, '0')}`;
 
@@ -92,6 +116,20 @@ export default function ProfitPage() {
   );
 
   const annualProfit = annualSales - annualExpenses;
+
+  const fiscalSales = fiscalData.reduce(
+    (sum, item) => sum + item.sales,
+    0
+  );
+
+  const fiscalExpenses = fiscalData.reduce(
+    (sum, item) => sum + item.expenses,
+    0
+  );
+
+  const fiscalProfit = fiscalSales - fiscalExpenses;
+
+  const previousYear = String(Number(selectedYear) - 1);
 
   const years = Array.from(
     { length: 8 },
@@ -346,6 +384,224 @@ export default function ProfitPage() {
     void loadAnnualData();
   }, [selectedYear, supabase, viewMode]);
 
+  useEffect(() => {
+    if (viewMode !== 'fiscal') return;
+
+    const loadFiscalData = async () => {
+      setIsFiscalLoading(true);
+
+      try {
+        const fiscalYear = Number(selectedYear);
+        const nextYear = fiscalYear + 1;
+        const startDate = `${fiscalYear}-04-01`;
+        const endDate = `${nextYear}-03-31`;
+
+        const [
+          { data: squareSales, error: squareSalesError },
+          { data: expenseRows, error: expenseError },
+        ] = await Promise.all([
+          supabase
+            .from('square_sales')
+            .select('date, amount')
+            .eq('source', 'square')
+            .gte('date', startDate)
+            .lte('date', endDate),
+          supabase
+            .from('profit_expenses')
+            .select('expense_month, amount')
+            .gte('expense_month', `${fiscalYear}-04`)
+            .lte('expense_month', `${nextYear}-03`),
+        ]);
+
+        if (squareSalesError) {
+          console.warn(
+            '年度Square売上の読み込みに失敗しました:',
+            squareSalesError.message
+          );
+        }
+
+        if (expenseError) {
+          console.warn(
+            '年度経費の読み込みに失敗しました:',
+            expenseError.message
+          );
+        }
+
+        const months: FiscalMonthData[] = [
+          ...Array.from({ length: 9 }, (_, index) => ({
+            year: fiscalYear,
+            month: index + 4,
+            label: `${index + 4}月`,
+            sales: 0,
+            expenses: 0,
+            profit: 0,
+          })),
+          ...Array.from({ length: 3 }, (_, index) => ({
+            year: nextYear,
+            month: index + 1,
+            label: `${index + 1}月`,
+            sales: 0,
+            expenses: 0,
+            profit: 0,
+          })),
+        ];
+
+        const findMonth = (year: number, month: number) =>
+          months.find(
+            (item) => item.year === year && item.month === month
+          );
+
+        ((squareSales || []) as SquareSale[]).forEach((item) => {
+          const date = String(item.date);
+          const year = Number(date.slice(0, 4));
+          const month = Number(date.slice(5, 7));
+          const target = findMonth(year, month);
+
+          if (target) {
+            target.sales += Number(item.amount) || 0;
+          }
+        });
+
+        try {
+          const savedSales = JSON.parse(
+            localStorage.getItem('golazo_sales_items') || '[]'
+          );
+
+          if (Array.isArray(savedSales)) {
+            (savedSales as ManualSale[])
+              .filter((item) => {
+                if (item?.source !== 'manual') return false;
+                const date = String(item.date || '');
+                return date >= startDate && date <= endDate;
+              })
+              .forEach((item) => {
+                const date = String(item.date || '');
+                const year = Number(date.slice(0, 4));
+                const month = Number(date.slice(5, 7));
+                const target = findMonth(year, month);
+
+                if (target) {
+                  target.sales += Number(item.amount) || 0;
+                }
+              });
+          }
+        } catch (error) {
+          console.warn('年度手入力売上の読み込みに失敗しました:', error);
+        }
+
+        (expenseRows || []).forEach((row: any) => {
+          const expenseMonthValue = String(row.expense_month);
+          const year = Number(expenseMonthValue.slice(0, 4));
+          const month = Number(expenseMonthValue.slice(5, 7));
+          const target = findMonth(year, month);
+
+          if (target) {
+            target.expenses += Number(row.amount) || 0;
+          }
+        });
+
+        months.forEach((item) => {
+          item.profit = item.sales - item.expenses;
+        });
+
+        setFiscalData(months);
+      } finally {
+        setIsFiscalLoading(false);
+      }
+    };
+
+    void loadFiscalData();
+  }, [selectedYear, supabase, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'expenseComparison') return;
+
+    const loadExpenseComparison = async () => {
+      setIsComparisonLoading(true);
+
+      try {
+        const currentYear = Number(selectedYear);
+        const priorYear = currentYear - 1;
+
+        const { data: rows, error } = await supabase
+          .from('profit_expenses')
+          .select('expense_month, category, amount')
+          .gte('expense_month', `${priorYear}-01`)
+          .lte('expense_month', `${currentYear}-12`);
+
+        if (error) {
+          console.warn(
+            '経費比較の読み込みに失敗しました:',
+            error.message
+          );
+        }
+
+        const currentMap = new Map<string, number>();
+        const previousMap = new Map<string, number>();
+        const categoryNames = new Set<string>(
+          DEFAULT_EXPENSE_CATEGORIES
+        );
+
+        (rows || []).forEach((row: any) => {
+          const expenseMonthValue = String(row.expense_month);
+          const year = Number(expenseMonthValue.slice(0, 4));
+          const category = String(row.category);
+          const amount = Number(row.amount) || 0;
+
+          categoryNames.add(category);
+
+          if (year === currentYear) {
+            currentMap.set(
+              category,
+              (currentMap.get(category) || 0) + amount
+            );
+          }
+
+          if (year === priorYear) {
+            previousMap.set(
+              category,
+              (previousMap.get(category) || 0) + amount
+            );
+          }
+        });
+
+        const defaultOrder = (category: string) => {
+          const index = DEFAULT_EXPENSE_CATEGORIES.indexOf(category);
+          return index >= 0 ? index : 1000;
+        };
+
+        const comparison = Array.from(categoryNames)
+          .sort((a, b) => {
+            const orderDifference =
+              defaultOrder(a) - defaultOrder(b);
+
+            if (orderDifference !== 0) {
+              return orderDifference;
+            }
+
+            return a.localeCompare(b, 'ja');
+          })
+          .map((category) => {
+            const currentAmount = currentMap.get(category) || 0;
+            const previousAmount = previousMap.get(category) || 0;
+
+            return {
+              category,
+              currentAmount,
+              previousAmount,
+              difference: currentAmount - previousAmount,
+            };
+          });
+
+        setExpenseComparisonData(comparison);
+      } finally {
+        setIsComparisonLoading(false);
+      }
+    };
+
+    void loadExpenseComparison();
+  }, [selectedYear, supabase, viewMode]);
+
   const handleAmountChange = (index: number, value: string) => {
     const amount = Math.max(0, Number(value) || 0);
 
@@ -485,6 +741,28 @@ export default function ProfitPage() {
                   }`}
                 >
                   年間
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('fiscal')}
+                  className={`px-4 py-2 text-sm font-semibold ${
+                    viewMode === 'fiscal'
+                      ? 'bg-[#5e9bc4] text-white'
+                      : 'bg-white text-slate-600'
+                  }`}
+                >
+                  年度
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('expenseComparison')}
+                  className={`px-4 py-2 text-sm font-semibold ${
+                    viewMode === 'expenseComparison'
+                      ? 'bg-[#5e9bc4] text-white'
+                      : 'bg-white text-slate-600'
+                  }`}
+                >
+                  経費比較
                 </button>
               </div>
             </div>
@@ -670,7 +948,7 @@ export default function ProfitPage() {
           )}
         </div>
           </>
-        ) : (
+        ) : viewMode === 'annual' ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -788,6 +1066,216 @@ export default function ProfitPage() {
               )}
             </div>
           </>
+        ) : viewMode === 'fiscal' ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <p className="text-xs font-semibold text-slate-500">
+                  年度売上
+                </p>
+                <p className="text-2xl font-bold text-[#5e9bc4] mt-2">
+                  ¥{fiscalSales.toLocaleString()}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <p className="text-xs font-semibold text-slate-500">
+                  年度経費
+                </p>
+                <p className="text-2xl font-bold text-slate-800 mt-2">
+                  ¥{fiscalExpenses.toLocaleString()}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <p className="text-xs font-semibold text-slate-500">
+                  年度収支
+                </p>
+                <p
+                  className={`text-2xl font-bold mt-2 ${
+                    fiscalProfit >= 0
+                      ? 'text-emerald-600'
+                      : 'text-red-600'
+                  }`}
+                >
+                  ¥{fiscalProfit.toLocaleString()}
+                </p>
+                <p className="text-xs text-slate-400 mt-2">
+                  4月〜翌年3月
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-100">
+                <h3 className="font-bold text-slate-800">
+                  {selectedYear}年度 収支
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {selectedYear}年4月〜{Number(selectedYear) + 1}年3月
+                </p>
+              </div>
+
+              {isFiscalLoading ? (
+                <div className="p-8 text-center text-sm text-slate-500">
+                  読み込み中...
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
+                        <th className="p-4">月</th>
+                        <th className="p-4 text-right">売上</th>
+                        <th className="p-4 text-right">経費</th>
+                        <th className="p-4 text-right">収支</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {fiscalData.map((item) => (
+                        <tr key={`${item.year}-${item.month}`}>
+                          <td className="p-4 font-semibold text-slate-700">
+                            {item.year}年 {item.label}
+                          </td>
+                          <td className="p-4 text-right font-semibold text-[#5e9bc4]">
+                            ¥{item.sales.toLocaleString()}
+                          </td>
+                          <td className="p-4 text-right text-slate-700">
+                            ¥{item.expenses.toLocaleString()}
+                          </td>
+                          <td
+                            className={`p-4 text-right font-bold ${
+                              item.profit >= 0
+                                ? 'text-emerald-600'
+                                : 'text-red-600'
+                            }`}
+                          >
+                            ¥{item.profit.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 border-t border-slate-200">
+                        <td className="p-4 font-bold">年度合計</td>
+                        <td className="p-4 text-right font-bold text-[#5e9bc4]">
+                          ¥{fiscalSales.toLocaleString()}
+                        </td>
+                        <td className="p-4 text-right font-bold">
+                          ¥{fiscalExpenses.toLocaleString()}
+                        </td>
+                        <td
+                          className={`p-4 text-right font-bold ${
+                            fiscalProfit >= 0
+                              ? 'text-emerald-600'
+                              : 'text-red-600'
+                          }`}
+                        >
+                          ¥{fiscalProfit.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800">
+                経費内訳比較
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {previousYear}年と{selectedYear}年の年間経費を項目別に比較します。
+              </p>
+            </div>
+
+            {isComparisonLoading ? (
+              <div className="p-8 text-center text-sm text-slate-500">
+                読み込み中...
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
+                      <th className="p-4">経費項目</th>
+                      <th className="p-4 text-right">
+                        {previousYear}年
+                      </th>
+                      <th className="p-4 text-right">
+                        {selectedYear}年
+                      </th>
+                      <th className="p-4 text-right">前年差</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {expenseComparisonData.map((item) => (
+                      <tr key={item.category}>
+                        <td className="p-4 font-semibold text-slate-700">
+                          {item.category}
+                        </td>
+                        <td className="p-4 text-right text-slate-600">
+                          ¥{item.previousAmount.toLocaleString()}
+                        </td>
+                        <td className="p-4 text-right font-semibold text-slate-800">
+                          ¥{item.currentAmount.toLocaleString()}
+                        </td>
+                        <td
+                          className={`p-4 text-right font-bold ${
+                            item.difference > 0
+                              ? 'text-red-600'
+                              : item.difference < 0
+                              ? 'text-emerald-600'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {item.difference > 0 ? '+' : ''}
+                          ¥{item.difference.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t border-slate-200">
+                      <td className="p-4 font-bold">経費合計</td>
+                      <td className="p-4 text-right font-bold">
+                        ¥
+                        {expenseComparisonData
+                          .reduce(
+                            (sum, item) =>
+                              sum + item.previousAmount,
+                            0
+                          )
+                          .toLocaleString()}
+                      </td>
+                      <td className="p-4 text-right font-bold">
+                        ¥
+                        {expenseComparisonData
+                          .reduce(
+                            (sum, item) =>
+                              sum + item.currentAmount,
+                            0
+                          )
+                          .toLocaleString()}
+                      </td>
+                      <td className="p-4 text-right font-bold">
+                        ¥
+                        {expenseComparisonData
+                          .reduce(
+                            (sum, item) =>
+                              sum + item.difference,
+                            0
+                          )
+                          .toLocaleString()}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </main>
     </div>
