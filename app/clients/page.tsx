@@ -1845,8 +1845,27 @@ export default function ClientsPage() {
 
     if (!supabaseClientId) {
       let recoveredClientId: string | undefined;
+      const squareCustomerId =
+        currentStudent.squareCustomerId ||
+        currentParent.squareCustomerId;
 
-      if (currentStudent.birthdate) {
+      if (squareCustomerId) {
+        const { data: squareClient, error: squareClientError } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('square_customer_id', squareCustomerId)
+          .maybeSingle();
+
+        if (squareClientError) {
+          console.error('セッション保存時のSquare顧客ID検索に失敗しました:', squareClientError);
+          alert('Supabaseの顧客情報を確認できなかったため、セッションを保存できませんでした。');
+          return;
+        }
+
+        recoveredClientId = squareClient?.id;
+      }
+
+      if (!recoveredClientId && currentStudent.birthdate) {
         const { data: existingClient, error: findClientError } = await supabase
           .from('clients')
           .select('id')
@@ -1865,7 +1884,7 @@ export default function ClientsPage() {
 
       if (!recoveredClientId) {
         if (!currentStudent.birthdate) {
-          alert('生年月日が未登録のため、Supabase顧客を作成できません。顧客情報に生年月日を登録してください。');
+          alert('Supabase顧客との紐付けが確認できません。顧客情報に生年月日を登録してください。');
           return;
         }
 
