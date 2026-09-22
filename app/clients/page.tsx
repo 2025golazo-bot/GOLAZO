@@ -2733,6 +2733,7 @@ export default function ClientsPage() {
     const alerts = getAlertBadges(student, parent);
 
     const matchesAlert =
+      alertFilter === '' ||
       alertFilter === 'all' ||
       (alertFilter === 'alert' && alerts.length > 0) ||
       alerts.some(alert => {
@@ -2767,6 +2768,7 @@ export default function ClientsPage() {
       String(parent.email || '').toLowerCase().includes(query);
 
     const matchesAlert =
+      alertFilter === '' ||
       alertFilter === 'all' ||
       (alertFilter === 'ticket' && parent.ticketRemaining <= 1) ||
       (alertFilter === 'alert' && parent.ticketRemaining <= 1);
