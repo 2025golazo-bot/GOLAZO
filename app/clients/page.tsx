@@ -2906,7 +2906,15 @@ export default function ClientsPage() {
               type="text"
               placeholder="名前・ふりがな・電話番号・メールで検索..."
               value={searchKeyword}
-              onChange={e => setSearchKeyword(e.target.value)}
+              onChange={e => {
+                const value = e.target.value;
+                setSearchKeyword(value);
+
+                if (value.trim() === '' && alertFilter === '') {
+                  setSelectedParentId(null);
+                  setSelectedStudentId('');
+                }
+              }}
               className="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-[#5e9bc4] outline-none"
             />
           </div>
