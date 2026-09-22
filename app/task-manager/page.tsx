@@ -668,8 +668,8 @@ export default function TaskManagerPage() {
         repeatGroupId: data.repeat_group_id ? String(data.repeat_group_id) : undefined,
         linkedMinutesId: data.linked_minutes_id ? String(data.linked_minutes_id) : undefined,
       };
-      setTasks(prev => [newTaskItem, ...prev]);
-
+      // 繰り返しタスクは、先に全発生日をDBへ登録してから
+      // stateへ反映する。自動補充useEffectとの同時INSERTを防ぐ。
       // 期限なしは登録時に1年分を先行登録します。以降の月を表示した際に不足分を自動追加します。
       // 将来の月を開いた際の自動補充は次段階で追加できます。
       if (tFormRepeat !== 'none' && repeatGroupId) {
@@ -730,6 +730,10 @@ export default function TaskManagerPage() {
           }
         }
       }
+
+      // DBへの繰り返し登録が完了してから親タスクをstateへ追加する。
+      // この時点で自動補充が動いても、同一期日はDB確認で除外される。
+      setTasks(prev => [newTaskItem, ...prev]);
     }
 
     setIsTaskModalOpen(false);
