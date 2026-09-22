@@ -1760,19 +1760,17 @@ export default function ClientsPage() {
       return;
     }
 
-    if (!childFormBirthdate) return alert('生年月日を入力してください。');
     const newStudentId = `s-${Date.now()}`;
     let supabaseClientId: string | undefined;
 
-    if (childFormBirthdate) {
-      const parent = parents.find(p => p.id === childFormParentId);
+    const parent = parents.find(p => p.id === childFormParentId);
 
-      const { data: insertedClient, error: insertError } = await supabase
+    const { data: insertedClient, error: insertError } = await supabase
         .from('clients')
         .insert({
           parent_name: parent?.name || null,
           child_name: name,
-          birth_date: childFormBirthdate,
+          birth_date: childFormBirthdate || null,
           first_session_date: new Date().toISOString().split('T')[0],
           concerns_and_goals: null,
           memo: childFormMemo.trim() || null,
@@ -1787,8 +1785,7 @@ export default function ClientsPage() {
         return;
       }
 
-      supabaseClientId = insertedClient?.id;
-    }
+    supabaseClientId = insertedClient?.id;
 
     const newStudent: Student = {
       id: newStudentId,
@@ -4885,7 +4882,7 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" required /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
+        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
       </main>
     </div>
   );
