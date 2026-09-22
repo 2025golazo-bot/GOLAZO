@@ -320,6 +320,8 @@ export default function TaskManagerPage() {
   const [taskSearch, setTaskSearch] = useState('');
   const [taskCategoryFilter, setTaskCategoryFilter] = useState('all');
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('all');
+  const [deleteRepeatTask, setDeleteRepeatTask] = useState<TaskItem | null>(null);
+  const [isDeletingRepeatTask, setIsDeletingRepeatTask] = useState(false);
 
   // --- 議事録の状態 ---
   const [minutesList, setMinutesList] = useState<MinutesItem[]>([
@@ -573,10 +575,34 @@ export default function TaskManagerPage() {
       ? (editingTask?.repeatGroupId || crypto.randomUUID())
       : null;
 
+    // 繰り返しタスクは、開始日以降で最初に条件へ一致する日を最初の期日にする
+    let firstDueDate = tFormDueDate;
+
+    if (tFormRepeat !== 'none') {
+      const candidate = new Date(`${tFormDueDate}T00:00:00`);
+
+      while (true) {
+        const matches = tFormRepeat === 'weekly'
+          ? repeatConfig.days.includes(candidate.getDay())
+          : repeatConfig.days.includes(candidate.getDate());
+
+        if (matches) {
+          firstDueDate = [
+            candidate.getFullYear(),
+            String(candidate.getMonth() + 1).padStart(2, '0'),
+            String(candidate.getDate()).padStart(2, '0'),
+          ].join('-');
+          break;
+        }
+
+        candidate.setDate(candidate.getDate() + 1);
+      }
+    }
+
     const taskPayload = {
       title: tFormTitle.trim(),
       assignee: tFormAssignee,
-      due_date: tFormDueDate,
+      due_date: firstDueDate,
       category: finalCategory,
       priority: tFormPriority,
       repeat: tFormRepeat,
@@ -643,7 +669,7 @@ export default function TaskManagerPage() {
       // 期限なしは登録時に1年分を先行登録します。以降の月を表示した際に不足分を自動追加します。
       // 将来の月を開いた際の自動補充は次段階で追加できます。
       if (tFormRepeat !== 'none' && repeatGroupId) {
-        const start = new Date(`${tFormDueDate}T00:00:00`);
+        const start = new Date(`${firstDueDate}T00:00:00`);
         const end = repeatConfig.endDate
           ? new Date(`${repeatConfig.endDate}T00:00:00`)
           : new Date(start.getFullYear() + 1, start.getMonth(), start.getDate());
@@ -651,7 +677,7 @@ export default function TaskManagerPage() {
 
         for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
           const dateStr = d.toISOString().slice(0, 10);
-          if (dateStr === tFormDueDate) continue;
+          if (dateStr === firstDueDate) continue;
           const matches = tFormRepeat === 'weekly'
             ? repeatConfig.days.includes(d.getDay())
             : repeatConfig.days.includes(d.getDate());
@@ -705,24 +731,152 @@ export default function TaskManagerPage() {
     const target = tasks.find(t => t.id === id);
     if (!target) return;
 
-    if (!confirm(
-      target.repeatGroupId
-        ? 'この繰り返しタスクだけを削除しますか？\n他の繰り返し予定は残ります。'
-        : 'このタスクを削除してもよろしいですか？'
-    )) return;
+    // 通常タスクは従来どおり1件だけ削除
+    if (!target.repeatGroupId) {
+      if (!confirm('このタスクを削除してもよろしいですか？')) return;
 
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', id);
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id);
 
-    if (error) {
-      console.error('タスク削除エラー:', error);
-      alert(`タスクの削除に失敗しました。\n${error.message}`);
+      if (error) {
+        console.error('タスク削除エラー:', error);
+        alert(`タスクの削除に失敗しました。\n${error.message}`);
+        return;
+      }
+
+      setTasks(prev => prev.filter(t => t.id !== id));
       return;
     }
 
-    setTasks(prev => prev.filter(t => t.id !== id));
+    // 繰り返しタスクは削除範囲をモーダルで選択
+    setDeleteRepeatTask(target);
+  };
+
+  const handleDeleteRepeatTask = async (
+    mode: 'single' | 'future' | 'all'
+  ) => {
+    const target = deleteRepeatTask;
+    if (!target?.repeatGroupId || isDeletingRepeatTask) return;
+
+    setIsDeletingRepeatTask(true);
+
+    try {
+      // このタスクだけ
+      if (mode === 'single') {
+        const { error } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('id', target.id);
+
+        if (error) {
+          console.error('繰り返しタスク個別削除エラー:', error);
+          alert(`タスクの削除に失敗しました。\n${error.message}`);
+          return;
+        }
+
+        setTasks(prev => prev.filter(t => t.id !== target.id));
+        setDeleteRepeatTask(null);
+        return;
+      }
+
+      // この繰り返しをすべて削除
+      if (mode === 'all') {
+        const { error } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('repeat_group_id', target.repeatGroupId);
+
+        if (error) {
+          console.error('繰り返しタスク一括削除エラー:', error);
+          alert(`繰り返しタスクの一括削除に失敗しました。\n${error.message}`);
+          return;
+        }
+
+        setTasks(prev =>
+          prev.filter(t => t.repeatGroupId !== target.repeatGroupId)
+        );
+        setDeleteRepeatTask(null);
+        return;
+      }
+
+      // このタスク以降
+      const previousDate = new Date(`${target.dueDate}T00:00:00`);
+      previousDate.setDate(previousDate.getDate() - 1);
+
+      const newEndDate = [
+        previousDate.getFullYear(),
+        String(previousDate.getMonth() + 1).padStart(2, '0'),
+        String(previousDate.getDate()).padStart(2, '0'),
+      ].join('-');
+
+      const groupTasks = tasks.filter(
+        t => t.repeatGroupId === target.repeatGroupId
+      );
+
+      const master = groupTasks.find(t => t.repeat !== 'none');
+
+      // 元タスクが選択日より前なら、繰り返し終了日を選択日の前日に変更。
+      // これにより自動生成処理で未来のタスクが復活しません。
+      if (master && master.dueDate < target.dueDate) {
+        const nextConfig: RepeatConfig = {
+          days: [...(master.repeatConfig?.days ?? [])],
+          endDate: newEndDate,
+        };
+
+        const { error: masterError } = await supabase
+          .from('tasks')
+          .update({ repeat_config: nextConfig })
+          .eq('id', master.id);
+
+        if (masterError) {
+          console.error('繰り返し終了日更新エラー:', masterError);
+          alert(`繰り返し終了日の更新に失敗しました。\n${masterError.message}`);
+          return;
+        }
+      }
+
+      const { error: deleteError } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('repeat_group_id', target.repeatGroupId)
+        .gte('due_date', target.dueDate);
+
+      if (deleteError) {
+        console.error('繰り返しタスク未来削除エラー:', deleteError);
+        alert(`この先の繰り返しタスクの削除に失敗しました。\n${deleteError.message}`);
+        return;
+      }
+
+      setTasks(prev =>
+        prev
+          .filter(
+            t =>
+              !(
+                t.repeatGroupId === target.repeatGroupId &&
+                t.dueDate >= target.dueDate
+              )
+          )
+          .map(t =>
+            master &&
+            t.id === master.id &&
+            master.dueDate < target.dueDate
+              ? {
+                  ...t,
+                  repeatConfig: {
+                    days: [...(master.repeatConfig?.days ?? [])],
+                    endDate: newEndDate,
+                  },
+                }
+              : t
+          )
+      );
+
+      setDeleteRepeatTask(null);
+    } finally {
+      setIsDeletingRepeatTask(false);
+    }
   };
 
   const toggleComplete = async (id: string) => {
@@ -2009,6 +2163,93 @@ export default function TaskManagerPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteRepeatTask && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-5">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800">
+                  繰り返しタスクを削除
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  削除する範囲を選択してください。
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingRepeatTask}
+                onClick={() => setDeleteRepeatTask(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-3">
+              <div className="text-sm font-bold text-slate-800">
+                {deleteRepeatTask.title}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                期日: {deleteRepeatTask.dueDate}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={isDeletingRepeatTask}
+                onClick={() => void handleDeleteRepeatTask('single')}
+                className="w-full text-left p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition disabled:opacity-50"
+              >
+                <div className="text-sm font-bold text-slate-800">
+                  このタスクだけ
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  選択した日のタスク1件だけを削除します
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingRepeatTask}
+                onClick={() => void handleDeleteRepeatTask('future')}
+                className="w-full text-left p-3 rounded-xl border border-amber-200 bg-amber-50/50 hover:bg-amber-50 transition disabled:opacity-50"
+              >
+                <div className="text-sm font-bold text-amber-800">
+                  このタスク以降
+                </div>
+                <div className="text-xs text-amber-700 mt-0.5">
+                  選択した日を含め、それ以降の繰り返しを削除します
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingRepeatTask}
+                onClick={() => void handleDeleteRepeatTask('all')}
+                className="w-full text-left p-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 transition disabled:opacity-50"
+              >
+                <div className="text-sm font-bold text-rose-700">
+                  すべて削除
+                </div>
+                <div className="text-xs text-rose-600 mt-0.5">
+                  この繰り返しタスクを過去・未来すべて削除します
+                </div>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              disabled={isDeletingRepeatTask}
+              onClick={() => setDeleteRepeatTask(null)}
+              className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+            >
+              キャンセル
+            </button>
           </div>
         </div>
       )}
