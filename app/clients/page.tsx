@@ -3136,7 +3136,7 @@ export default function ClientsPage() {
                 👥 グループ管理
               </button>
             </div>
-            <div className={isParentOnlySelected ? "hidden" : ""}>
+            <div className={isParentOnlySelected || !selectedStudentId ? "hidden" : ""}>
             {/* 顧客基本情報ヘッダー */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
 
