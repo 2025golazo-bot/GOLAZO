@@ -6,18 +6,6 @@ import Header from '@/components/Header';
 
 const menuItems = [
   {
-    href: '/sales',
-    icon: '📊',
-    title: '売上管理',
-    description: '売上・決済・取引情報を管理します。',
-  },
-  {
-    href: '/profit',
-    icon: '💰',
-    title: '収支管理',
-    description: '売上・経費・利益を月ごとに確認します。',
-  },
-  {
     href: '/clients',
     icon: '📋',
     title: '顧客リスト',
@@ -40,6 +28,18 @@ const menuItems = [
     icon: '🏋️',
     title: 'マシン・業者一覧',
     description: 'マシン・設備・取引業者の情報を管理します。',
+  },
+  {
+    href: '/sales',
+    icon: '📊',
+    title: '売上管理',
+    description: '売上・決済・取引情報を管理します。',
+  },
+  {
+    href: '/profit',
+    icon: '💰',
+    title: '収支管理',
+    description: '売上・経費・利益を月ごとに確認します。',
   },
 ];
 

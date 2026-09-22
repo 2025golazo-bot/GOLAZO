@@ -17,12 +17,12 @@ export default function Header() {
   const isActive = (path: string) => pathname === path;
 
   const navItems = [
-    { href: '/sales', label: '売上管理', icon: '📊' },
-    { href: '/profit', label: '収支管理', icon: '💰' },
     { href: '/clients', label: '顧客リスト', icon: '📋' },
     { href: '/task-manager', label: 'タスク・議事録', icon: '📝' },
     { href: '/local-info', label: '近隣情報', icon: '📍' },
     { href: '/vendors', label: 'マシン・業者一覧', icon: '🏋️' },
+    { href: '/sales', label: '売上管理', icon: '📊' },
+    { href: '/profit', label: '収支管理', icon: '💰' },
   ];
 
   const handleLogout = async () => {
