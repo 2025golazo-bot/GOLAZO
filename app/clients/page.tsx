@@ -899,12 +899,30 @@ export default function ClientsPage() {
   const [sessionTemplates, setSessionTemplates] = useState<SessionTemplate[]>([]);
   const [selectedSessionExercises, setSelectedSessionExercises] = useState<SessionExercise[]>([]);
   const [newSessionTemplateName, setNewSessionTemplateName] = useState<string>('');
+  const [editingSessionTemplateId, setEditingSessionTemplateId] = useState<string | null>(null);
+  const [editingSessionTemplateName, setEditingSessionTemplateName] = useState<string>('');
   const [useTicket, setUseTicket] = useState<boolean>(true);
   const [isEditingTicketRemaining, setIsEditingTicketRemaining] = useState(false);
   const [ticketRemainingInput, setTicketRemainingInput] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadSessionTemplates = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('セッション種目読み込み時の認証確認に失敗しました:', userError);
+        return false;
+      }
+
+      if (!user) {
+        return false;
+      }
+
       const { data, error } = await supabase
         .from('session_templates')
         .select('id, name, category, record_type, sort_order')
@@ -913,21 +931,42 @@ export default function ClientsPage() {
 
       if (error) {
         console.error('セッション種目の読み込みに失敗しました:', error);
-        return;
+        return false;
       }
 
-      setSessionTemplates(
-        (data || []).map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category || 'トレーニング',
-          recordType: item.record_type === 'check' ? 'check' : 'weight_reps',
-          sortOrder: item.sort_order || 0,
-        }))
-      );
+      if (!cancelled) {
+        setSessionTemplates(
+          (data || []).map(item => ({
+            id: item.id,
+            name: item.name,
+            category: item.category || 'トレーニング',
+            recordType: item.record_type === 'check' ? 'check' : 'weight_reps',
+            sortOrder: item.sort_order || 0,
+          }))
+        );
+      }
+
+      return true;
     };
 
     void loadSessionTemplates();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(event => {
+      if (
+        event === 'INITIAL_SESSION' ||
+        event === 'SIGNED_IN' ||
+        event === 'TOKEN_REFRESHED'
+      ) {
+        void loadSessionTemplates();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleAddSessionTemplate = async () => {
@@ -971,6 +1010,97 @@ export default function ClientsPage() {
 
     setSessionTemplates(prev => [...prev, newTemplate]);
     setNewSessionTemplateName('');
+  };
+
+  const startEditSessionTemplate = (template: SessionTemplate) => {
+    setEditingSessionTemplateId(template.id);
+    setEditingSessionTemplateName(template.name);
+  };
+
+  const cancelEditSessionTemplate = () => {
+    setEditingSessionTemplateId(null);
+    setEditingSessionTemplateName('');
+  };
+
+  const handleUpdateSessionTemplate = async (templateId: string) => {
+    const name = editingSessionTemplateName.trim();
+
+    if (!name) {
+      alert('種目名を入力してください。');
+      return;
+    }
+
+    if (
+      sessionTemplates.some(
+        template =>
+          template.id !== templateId &&
+          template.name.toLowerCase() === name.toLowerCase()
+      )
+    ) {
+      alert('同じ名前の種目がすでに登録されています。');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('session_templates')
+      .update({
+        name,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', templateId);
+
+    if (error) {
+      console.error('セッション種目の修正に失敗しました:', error);
+      alert('種目の修正に失敗しました。');
+      return;
+    }
+
+    setSessionTemplates(prev =>
+      prev.map(template =>
+        template.id === templateId
+          ? { ...template, name }
+          : template
+      )
+    );
+
+    setSelectedSessionExercises(prev =>
+      prev.map(exercise =>
+        exercise.templateId === templateId
+          ? { ...exercise, name }
+          : exercise
+      )
+    );
+
+    cancelEditSessionTemplate();
+  };
+
+  const handleDeleteSessionTemplate = async (template: SessionTemplate) => {
+    if (!confirm(`「${template.name}」を登録種目から削除しますか？\n\n過去のセッション履歴は削除されません。`)) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('session_templates')
+      .delete()
+      .eq('id', template.id);
+
+    if (error) {
+      console.error('セッション種目の削除に失敗しました:', error);
+      alert('種目の削除に失敗しました。');
+      return;
+    }
+
+    setSessionTemplates(prev =>
+      prev.filter(item => item.id !== template.id)
+    );
+
+    setSelectedSessionExercises(prev =>
+      prev.filter(exercise => exercise.templateId !== template.id)
+    );
+
+    if (editingSessionTemplateId === template.id) {
+      cancelEditSessionTemplate();
+    }
   };
 
   const toggleSessionExercise = (template: SessionTemplate) => {
@@ -3612,19 +3742,77 @@ export default function ClientsPage() {
                               key={template.id}
                               className="rounded-lg border border-slate-200 bg-white p-3"
                             >
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(selectedExercise)}
-                                  onChange={() => toggleSessionExercise(template)}
-                                  className="rounded text-[#5e9bc4]"
-                                />
-                                <span className="text-xs font-bold text-slate-700">
-                                  {template.name}
-                                </span>
-                              </label>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                {editingSessionTemplateId === template.id ? (
+                                  <div className="flex flex-1 flex-wrap items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={editingSessionTemplateName}
+                                      onChange={e => setEditingSessionTemplateName(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          void handleUpdateSessionTemplate(template.id);
+                                        }
+                                        if (e.key === 'Escape') {
+                                          cancelEditSessionTemplate();
+                                        }
+                                      }}
+                                      className="min-w-[180px] flex-1 border border-slate-300 rounded-lg p-2 text-xs outline-none"
+                                      autoFocus
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleUpdateSessionTemplate(template.id)}
+                                      className="px-3 py-2 rounded-lg bg-[#5e9bc4] text-white text-[11px] font-bold"
+                                    >
+                                      保存
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={cancelEditSessionTemplate}
+                                      className="px-3 py-2 rounded-lg border border-slate-300 text-slate-500 text-[11px] font-bold"
+                                    >
+                                      キャンセル
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(selectedExercise)}
+                                        onChange={() => toggleSessionExercise(template)}
+                                        className="rounded text-[#5e9bc4]"
+                                      />
+                                      <span className="text-xs font-bold text-slate-700">
+                                        {template.name}
+                                      </span>
+                                    </label>
 
-                              {selectedExercise && template.recordType === 'weight_reps' && (
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditSessionTemplate(template)}
+                                        className="text-[11px] font-bold text-[#5e9bc4] hover:underline"
+                                      >
+                                        修正
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleDeleteSessionTemplate(template)}
+                                        className="text-[11px] font-bold text-rose-500 hover:underline"
+                                      >
+                                        削除
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+
+                              {selectedExercise &&
+                                editingSessionTemplateId !== template.id &&
+                                template.recordType === 'weight_reps' && (
                                 <div className="mt-3 ml-6 space-y-2">
                                   {selectedExercise.sets.map((set, setIndex) => (
                                     <div
