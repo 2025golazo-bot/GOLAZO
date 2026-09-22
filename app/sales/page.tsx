@@ -634,6 +634,15 @@ export default function SalesPage() {
     (item) => item.category === '回数券'
   ).length;
 
+  // 比較①の担当者別売上
+  const compareTakaMonthAmount = comparePeriodSales
+    .filter((item) => item.staff === 'TAKA')
+    .reduce((sum, item) => sum + item.amount, 0);
+
+  const compareNanaMonthAmount = comparePeriodSales
+    .filter((item) => item.staff === 'NANA')
+    .reduce((sum, item) => sum + item.amount, 0);
+
   const selectedPeriodSales = sales.filter((item) =>
     item.date.startsWith(`${selectedYear}-${selectedMonth.padStart(2, '0')}`)
   );
@@ -1232,6 +1241,16 @@ export default function SalesPage() {
                   <td className="p-4 font-semibold text-slate-600">月間売上</td>
                   <td className="p-4 font-bold text-[#5e9bc4]">¥{comparePeriodAmount.toLocaleString()}</td>
                   <td className="p-4 font-bold text-slate-800">¥{selectedPeriodAmount.toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td className="p-4 font-semibold text-slate-600">TAKA売上</td>
+                  <td className="p-4 font-bold text-[#5e9bc4]">¥{compareTakaMonthAmount.toLocaleString()}</td>
+                  <td className="p-4 font-bold text-slate-800">¥{takaMonthAmount.toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td className="p-4 font-semibold text-slate-600">NANA売上</td>
+                  <td className="p-4 font-bold text-[#5e9bc4]">¥{compareNanaMonthAmount.toLocaleString()}</td>
+                  <td className="p-4 font-bold text-slate-800">¥{nanaMonthAmount.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">月間目標</td>
