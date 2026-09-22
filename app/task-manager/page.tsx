@@ -315,7 +315,11 @@ export default function TaskManagerPage() {
         repeatGroupId: row.repeat_group_id ? String(row.repeat_group_id) : undefined,
         linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
       }));
-      setTasks(prev => [...added, ...prev]);
+      setTasks(prev => {
+        const existingIds = new Set(prev.map(task => task.id));
+        const uniqueAdded = added.filter(task => !existingIds.has(task.id));
+        return [...uniqueAdded, ...prev];
+      });
     };
 
     ensureRecurringTasksForMonth();
@@ -726,14 +730,24 @@ export default function TaskManagerPage() {
               repeatGroupId: row.repeat_group_id ? String(row.repeat_group_id) : undefined,
               linkedMinutesId: row.linked_minutes_id ? String(row.linked_minutes_id) : undefined,
             }));
-            setTasks(prev => [...occurrenceTasks, ...prev]);
+            setTasks(prev => {
+              const existingIds = new Set(prev.map(task => task.id));
+              const uniqueOccurrences = occurrenceTasks.filter(
+                task => !existingIds.has(task.id)
+              );
+              return [...uniqueOccurrences, ...prev];
+            });
           }
         }
       }
 
       // DBへの繰り返し登録が完了してから親タスクをstateへ追加する。
       // この時点で自動補充が動いても、同一期日はDB確認で除外される。
-      setTasks(prev => [newTaskItem, ...prev]);
+      setTasks(prev =>
+        prev.some(task => task.id === newTaskItem.id)
+          ? prev
+          : [newTaskItem, ...prev]
+      );
     }
 
     setIsTaskModalOpen(false);
