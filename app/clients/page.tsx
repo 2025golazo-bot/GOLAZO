@@ -1865,35 +1865,31 @@ export default function ClientsPage() {
         recoveredClientId = squareClient?.id;
       }
 
-      if (!recoveredClientId && currentStudent.birthdate) {
-        const { data: existingClient, error: findClientError } = await supabase
+      if (!recoveredClientId) {
+        const { data: nameClients, error: nameClientError } = await supabase
           .from('clients')
           .select('id')
           .eq('child_name', currentStudent.name)
-          .eq('birth_date', currentStudent.birthdate)
-          .maybeSingle();
+          .limit(2);
 
-        if (findClientError) {
-          console.error('セッション保存時のSupabase既存顧客検索に失敗しました:', findClientError);
+        if (nameClientError) {
+          console.error('セッション保存時の顧客名検索に失敗しました:', nameClientError);
           alert('Supabaseの顧客情報を確認できなかったため、セッションを保存できませんでした。');
           return;
         }
 
-        recoveredClientId = existingClient?.id;
+        if (nameClients?.length === 1) {
+          recoveredClientId = nameClients[0].id;
+        }
       }
 
       if (!recoveredClientId) {
-        if (!currentStudent.birthdate) {
-          alert('Supabase顧客との紐付けが確認できません。顧客情報に生年月日を登録してください。');
-          return;
-        }
-
         const { data: insertedClient, error: insertClientError } = await supabase
           .from('clients')
           .insert({
             parent_name: currentParent.name || null,
             child_name: currentStudent.name,
-            birth_date: currentStudent.birthdate,
+            birth_date: currentStudent.birthdate || null,
             first_session_date:
               currentStudent.firstLessonDate ||
               new Date().toISOString().split('T')[0],
