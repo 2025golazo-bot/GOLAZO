@@ -119,6 +119,9 @@ export default function SalesPage() {
   );
   const [currentMonthlyTarget, setCurrentMonthlyTarget] = useState<string>('0');
   const [currentYearlyTarget, setCurrentYearlyTarget] = useState<string>('0');
+  const [compareMonthlyTargets, setCompareMonthlyTargets] = useState<number[]>(
+    Array.from({ length: 12 }, () => 0)
+  );
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [isSavingTarget, setIsSavingTarget] = useState(false);
 
@@ -131,6 +134,11 @@ export default function SalesPage() {
   // フィルター・表示期間の状態（過去の売上確認用）
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  // 比較①：初期値は現在年月
+  const [compareYear, setCompareYear] = useState<string>('');
+  const [compareMonth, setCompareMonth] = useState<string>('');
+
+  // 比較②：選択した年月
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
@@ -138,6 +146,9 @@ export default function SalesPage() {
     const now = new Date();
     const savedYear = localStorage.getItem('golazo-sales-selected-year');
     const savedMonth = localStorage.getItem('golazo-sales-selected-month');
+
+    setCompareYear(String(now.getFullYear()));
+    setCompareMonth(String(now.getMonth() + 1));
 
     setSelectedYear(savedYear || String(now.getFullYear()));
     setSelectedMonth(savedMonth || String(now.getMonth() + 1));
@@ -150,15 +161,18 @@ export default function SalesPage() {
     localStorage.setItem('golazo-sales-selected-month', selectedMonth);
   }, [selectedYear, selectedMonth]);
   
-  // 選択年度の1〜12月目標を読み込みます。
-  // 年間目標は1〜12月の月間目標を合計して自動計算します。
+  // 比較①・比較②・現在年度の目標をそれぞれ読み込みます。
+  // 上部固定サマリーは比較年月を変更しても現在年度の目標を維持します。
   useEffect(() => {
     const loadTargets = async () => {
-      const selectedYearNumber = Number(selectedYear);
-      const currentYear = new Date().getFullYear();
-      const currentMonth = new Date().getMonth() + 1;
+      if (!selectedYear || !compareYear || !compareMonth) return;
 
-      const [selectedResult, currentResult] = await Promise.all([
+      const selectedYearNumber = Number(selectedYear);
+      const compareYearNumber = Number(compareYear);
+      const realCurrentYearNumber = new Date().getFullYear();
+      const realCurrentMonthNumber = new Date().getMonth() + 1;
+
+      const [selectedResult, compareResult, currentResult] = await Promise.all([
         supabase
           .from('sales_targets')
           .select('target_month, monthly_target')
@@ -168,13 +182,19 @@ export default function SalesPage() {
         supabase
           .from('sales_targets')
           .select('target_month, monthly_target')
-          .eq('target_year', currentYear)
+          .eq('target_year', compareYearNumber)
+          .order('target_month', { ascending: true }),
+
+        supabase
+          .from('sales_targets')
+          .select('target_month, monthly_target')
+          .eq('target_year', realCurrentYearNumber)
           .order('target_month', { ascending: true }),
       ]);
 
       if (selectedResult.error) {
         console.warn(
-          '比較年度の売上目標の読み込みに失敗しました:',
+          '比較②年度の売上目標の読み込みに失敗しました:',
           selectedResult.error.message
         );
       }
@@ -188,6 +208,23 @@ export default function SalesPage() {
       });
 
       setMonthlyTargets(selectedTargets);
+
+      if (compareResult.error) {
+        console.warn(
+          '比較①年度の売上目標の読み込みに失敗しました:',
+          compareResult.error.message
+        );
+      }
+
+      const compareTargets = Array.from({ length: 12 }, (_, index) => {
+        const row = (compareResult.data || []).find(
+          (item: any) => Number(item.target_month) === index + 1
+        );
+
+        return Number(row?.monthly_target ?? 0);
+      });
+
+      setCompareMonthlyTargets(compareTargets);
 
       if (currentResult.error) {
         console.warn(
@@ -205,21 +242,16 @@ export default function SalesPage() {
       });
 
       setCurrentMonthlyTarget(
-        String(currentTargets[currentMonth - 1] || 0)
+        String(currentTargets[realCurrentMonthNumber - 1] || 0)
       );
 
       setCurrentYearlyTarget(
-        String(
-          currentTargets.reduce(
-            (sum, value) => sum + value,
-            0
-          )
-        )
+        String(currentTargets.reduce((sum, value) => sum + value, 0))
       );
     };
 
     void loadTargets();
-  }, [supabase, selectedYear, selectedMonth]);
+  }, [supabase, selectedYear, compareYear, compareMonth]);
 
   const handleSaveTargets = async () => {
     const normalizedTargets = monthlyTargets.map((value) => {
@@ -272,6 +304,12 @@ export default function SalesPage() {
       );
       setCurrentYearlyTarget(String(yearlyTotal));
     }
+    // 比較①と比較②が同じ年度の場合は、
+    // 保存直後に比較①側の目標・達成率にも反映します。
+    if (Number(selectedYear) === Number(compareYear)) {
+      setCompareMonthlyTargets(normalizedTargets);
+    }
+
     setIsEditingTarget(false);
 
     alert(
@@ -572,6 +610,30 @@ export default function SalesPage() {
 
 
   // --- 選択された年月（過去の売上など）に応じた連動集計 ---
+  // 比較①として選択された年月の集計
+  const comparePeriodSales = sales.filter((item) =>
+    item.date.startsWith(`${compareYear}-${compareMonth.padStart(2, '0')}`)
+  );
+  const comparePeriodAmount = comparePeriodSales.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+
+  const compareYearSales = sales.filter((item) =>
+    item.date.startsWith(compareYear)
+  );
+  const compareYearAmount = compareYearSales.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+
+  const compareTrialCount = comparePeriodSales.filter(
+    (item) => item.category === '体験料'
+  ).length;
+  const compareTicketCount = comparePeriodSales.filter(
+    (item) => item.category === '回数券'
+  ).length;
+
   const selectedPeriodSales = sales.filter((item) =>
     item.date.startsWith(`${selectedYear}-${selectedMonth.padStart(2, '0')}`)
   );
@@ -605,11 +667,19 @@ export default function SalesPage() {
 
   const currentMonthlyTargetNumber = Number(currentMonthlyTarget) || 0;
   const currentYearlyTargetNumber = Number(currentYearlyTarget) || 0;
-  const currentMonthlyProgress = currentMonthlyTargetNumber > 0
-    ? Math.round((realCurrentMonthAmount / currentMonthlyTargetNumber) * 100)
+
+  const compareMonthlyTargetNumber =
+    Number(compareMonthlyTargets[Math.max(0, Number(compareMonth || 1) - 1)] || 0);
+  const compareYearlyTargetNumber = compareMonthlyTargets.reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0
+  );
+
+  const compareMonthlyProgress = compareMonthlyTargetNumber > 0
+    ? Math.round((comparePeriodAmount / compareMonthlyTargetNumber) * 100)
     : 0;
-  const currentYearlyProgress = currentYearlyTargetNumber > 0
-    ? Math.round((realYearlyAmount / currentYearlyTargetNumber) * 100)
+  const compareYearlyProgress = compareYearlyTargetNumber > 0
+    ? Math.round((compareYearAmount / compareYearlyTargetNumber) * 100)
     : 0;
 
   const buildProductSummary = (items: SaleItem[]) => {
@@ -638,7 +708,7 @@ export default function SalesPage() {
   };
 
   const selectedProductSummary = buildProductSummary(selectedPeriodSales);
-  const currentProductSummary = buildProductSummary(realCurrentMonthSales);
+  const currentProductSummary = buildProductSummary(comparePeriodSales);
   const productSummaryNames = Array.from(
     new Set([...Object.keys(currentProductSummary), ...Object.keys(selectedProductSummary)]),
   ).sort((a, b) => a.localeCompare(b, 'ja'));
@@ -655,7 +725,7 @@ export default function SalesPage() {
     return acc;
   }, {});
   const selectedProductNameSummary = countProductNames(selectedPeriodSales);
-  const currentProductNameSummary = countProductNames(realCurrentMonthSales);
+  const currentProductNameSummary = countProductNames(comparePeriodSales);
   const productComparisonNames = Array.from(new Set([...Object.keys(currentProductNameSummary), ...Object.keys(selectedProductNameSummary)])).sort((a, b) => a.localeCompare(b, 'ja'));
 
 
@@ -673,7 +743,7 @@ export default function SalesPage() {
     ),
   ];
 
-  const currentCampaigns = allCampaigns.filter((camp) => camp.yearMonth === `${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`);
+  const currentCampaigns = allCampaigns.filter((camp) => camp.yearMonth === `${compareYear}-${compareMonth.padStart(2, '0')}`);
   const selectedCampaigns = allCampaigns.filter((camp) => camp.yearMonth === `${selectedYear}-${selectedMonth.padStart(2, '0')}`);
 
   // 一覧テーブル用フィルター
@@ -824,9 +894,10 @@ export default function SalesPage() {
     setIsSyncing(true);
     try {
       const currentYear = new Date().getFullYear();
-      const selectedYearNumber = Number(selectedYear);
-      const startYear = Math.min(currentYear, selectedYearNumber);
-      const endYear = Math.max(currentYear, selectedYearNumber);
+      const selectedYearNumber = Number(selectedYear || currentYear);
+      const compareYearNumber = Number(compareYear || currentYear);
+      const startYear = Math.min(currentYear, selectedYearNumber, compareYearNumber);
+      const endYear = Math.max(currentYear, selectedYearNumber, compareYearNumber);
       const startDate = `${startYear}-01-01`;
       const endDate = `${endYear}-12-31`;
 
@@ -1080,37 +1151,70 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 比較年月選択 */}
+        {/* 比較①・比較②の年月選択 */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold text-slate-600">📅 比較する年月:</span>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold"
-            >
-              <option value="2026">2026年</option>
-              <option value="2025">2025年</option>
-            </select>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold"
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={String(m)}>{m}月</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">📅 比較①:</span>
+              <select
+                value={compareYear}
+                onChange={(e) => setCompareYear(e.target.value)}
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold"
+              >
+                <option value="2026">2026年</option>
+                <option value="2025">2025年</option>
+              </select>
+              <select
+                value={compareMonth}
+                onChange={(e) => setCompareMonth(e.target.value)}
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={String(m)}>{m}月</option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-sm font-bold text-slate-400">⇔</span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">比較②:</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold"
+              >
+                <option value="2026">2026年</option>
+                <option value="2025">2025年</option>
+              </select>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={String(m)}>{m}月</option>
+                ))}
+              </select>
+            </div>
           </div>
+
           <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-            現在と <span className="font-bold text-slate-700">{selectedYear}年{selectedMonth}月</span> を比較
+            <span className="font-bold text-slate-700">
+              {compareYear}年{compareMonth}月
+            </span>
+            {' '}と{' '}
+            <span className="font-bold text-slate-700">
+              {selectedYear}年{selectedMonth}月
+            </span>
+            {' '}を比較
           </div>
         </div>
 
-        {/* 現在 vs 比較年月 */}
+        {/* 比較① vs 比較② */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-5 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-800">📊 現在と比較年月の売上・実績比較</h3>
+            <h3 className="text-sm font-bold text-slate-800">📊 比較①と比較②の売上・実績比較</h3>
             <p className="text-xs text-slate-500 mt-1">売上・目標・達成率・体験数・回数券購入を同じ表でシンプルに比較します。</p>
           </div>
 
@@ -1119,52 +1223,52 @@ export default function SalesPage() {
               <thead>
                 <tr className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
                   <th className="p-4 w-[30%]">項目</th>
-                  <th className="p-4 w-[35%]">現在（{realCurrentYear}年{Number(realCurrentMonth)}月）</th>
-                  <th className="p-4 w-[35%]">比較年月（{selectedYear}年{selectedMonth}月）</th>
+                  <th className="p-4 w-[35%]">比較①（{compareYear}年{compareMonth}月）</th>
+                  <th className="p-4 w-[35%]">比較②（{selectedYear}年{selectedMonth}月）</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">月間売上</td>
-                  <td className="p-4 font-bold text-[#5e9bc4]">¥{realCurrentMonthAmount.toLocaleString()}</td>
+                  <td className="p-4 font-bold text-[#5e9bc4]">¥{comparePeriodAmount.toLocaleString()}</td>
                   <td className="p-4 font-bold text-slate-800">¥{selectedPeriodAmount.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">月間目標</td>
-                  <td className="p-4 font-semibold text-slate-800">¥{currentMonthlyTargetNumber.toLocaleString()}</td>
+                  <td className="p-4 font-semibold text-slate-800">¥{compareMonthlyTargetNumber.toLocaleString()}</td>
                   <td className="p-4 font-semibold text-slate-800">¥{monthlyTargetNumber.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">月間達成率</td>
-                  <td className="p-4 font-bold text-[#5e9bc4]">{currentMonthlyProgress}%達成</td>
+                  <td className="p-4 font-bold text-[#5e9bc4]">{compareMonthlyProgress}%達成</td>
                   <td className="p-4 font-bold text-slate-800">{monthlyProgress}%達成</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">年間売上</td>
-                  <td className="p-4 font-bold text-slate-800">¥{realYearlyAmount.toLocaleString()}</td>
+                  <td className="p-4 font-bold text-slate-800">¥{compareYearAmount.toLocaleString()}</td>
                   <td className="p-4 font-bold text-slate-800">¥{selectedYearAmount.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">年間目標</td>
-                  <td className="p-4 font-semibold text-slate-800">¥{currentYearlyTargetNumber.toLocaleString()}</td>
+                  <td className="p-4 font-semibold text-slate-800">¥{compareYearlyTargetNumber.toLocaleString()}</td>
                   <td className="p-4 font-semibold text-slate-800">¥{yearlyTargetNumber.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">年間達成率</td>
-                  <td className="p-4 font-bold text-[#5e9bc4]">{currentYearlyProgress}%達成</td>
+                  <td className="p-4 font-bold text-[#5e9bc4]">{compareYearlyProgress}%達成</td>
                   <td className="p-4 font-bold text-slate-800">{yearlyProgress}%達成</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">体験数</td>
                   <td className="p-4 font-bold text-[#5e9bc4]">
-                    {sales.filter((item) => item.date.startsWith(`${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`) && item.category === '体験料').length} 名
+                    {compareTrialCount} 名
                   </td>
                   <td className="p-4 font-bold text-slate-800">{selectedTrialCount} 名</td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">回数券購入</td>
                   <td className="p-4 font-bold text-[#5e9bc4]">
-                    {sales.filter((item) => item.date.startsWith(`${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`) && item.category === '回数券').length} 件
+                    {compareTicketCount} 件
                   </td>
                   <td className="p-4 font-bold text-slate-800">{selectedTicketCount} 件</td>
                 </tr>
@@ -1250,7 +1354,7 @@ export default function SalesPage() {
           <div>
             <h3 className="text-sm font-bold text-slate-800">🏷️ 販売商品比較</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Squareに登録されている実際の商品・サービス名を、今月と比較年月で並べて比較します。
+              Squareに登録されている実際の商品・サービス名を、比較①と比較②で並べて比較します。
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -1258,8 +1362,8 @@ export default function SalesPage() {
               <thead>
                 <tr className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
                   <th className="p-3">商品名（Square）</th>
-                  <th className="p-3">今月（{realCurrentYear}年{Number(realCurrentMonth)}月）</th>
-                  <th className="p-3">比較年月（{selectedYear}年{selectedMonth}月）</th>
+                  <th className="p-3">比較①（{compareYear}年{compareMonth}月）</th>
+                  <th className="p-3">比較②（{selectedYear}年{selectedMonth}月）</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -1299,10 +1403,10 @@ export default function SalesPage() {
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                 <span>🎉</span> キャンペーン内容・結果比較
               </h3>
-              <p className="text-xs text-slate-500 mt-1">キャンペーンごとに今月と比較年月の詳細を分けて確認します。</p>
+              <p className="text-xs text-slate-500 mt-1">キャンペーンごとに比較①と比較②の詳細を分けて確認します。</p>
             </div>
             <button
-              onClick={() => openNewCampaign(`${realCurrentYear}-${realCurrentMonth.padStart(2, '0')}`)}
+              onClick={() => openNewCampaign(`${compareYear}-${compareMonth.padStart(2, '0')}`)}
               className="bg-[#5e9bc4] hover:bg-[#4d85ab] text-white px-3 py-1.5 rounded-xl font-semibold text-xs transition shadow-sm"
             >
               ＋ キャンペーン追加
@@ -1313,11 +1417,11 @@ export default function SalesPage() {
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
                   <div className="p-4 space-y-2">
-                    <div className="text-xs font-bold text-[#5e9bc4]">今月（{realCurrentYear}年{Number(realCurrentMonth)}月）</div>
+                    <div className="text-xs font-bold text-[#5e9bc4]">比較①（{compareYear}年{compareMonth}月）</div>
                     {currentCampaigns.length > 0 ? (
                       currentCampaigns.map((current) => (
                         <div key={`current-${current.id}`} className="border-b border-slate-100 last:border-b-0 pb-3 last:pb-0 space-y-2">
-                          <div className="text-[11px] font-bold text-[#5e9bc4]">今月キャンペーン</div>
+                          <div className="text-[11px] font-bold text-[#5e9bc4]">比較①キャンペーン</div>
                           <div className="font-bold text-sm text-slate-800">🎯 {current.title}</div>
                           <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{current.targetCount}件</span> ／ 実績：<span className="font-bold">{current.appliedCount}件</span></div>
                           <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{current.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{current.contribution.toLocaleString()}</span></div>
@@ -1345,11 +1449,11 @@ export default function SalesPage() {
                   </div>
 
                   <div className="p-4 space-y-2">
-                    <div className="text-xs font-bold text-slate-700">比較年月（{selectedYear}年{selectedMonth}月）</div>
+                    <div className="text-xs font-bold text-slate-700">比較②（{selectedYear}年{selectedMonth}月）</div>
                     {selectedCampaigns.length > 0 ? (
                       selectedCampaigns.map((selected) => (
                         <div key={`selected-${selected.id}`} className="border-b border-slate-100 last:border-b-0 pb-3 last:pb-0 space-y-2">
-                          <div className="text-[11px] font-bold text-slate-500">比較月キャンペーン</div>
+                          <div className="text-[11px] font-bold text-slate-500">比較②キャンペーン</div>
                           <div className="font-bold text-sm text-slate-800">🎯 {selected.title}</div>
                           <div className="text-xs text-slate-600">目標件数：<span className="font-bold">{selected.targetCount}件</span> ／ 実績：<span className="font-bold">{selected.appliedCount}件</span></div>
                           <div className="text-xs text-slate-600">目標売上：<span className="font-bold">¥{selected.targetSales.toLocaleString()}</span> ／ 実績：<span className="font-bold">¥{selected.contribution.toLocaleString()}</span></div>
