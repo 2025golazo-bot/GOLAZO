@@ -1841,9 +1841,71 @@ export default function ClientsPage() {
       return;
     }
 
-    if (!currentStudent.supabaseClientId) {
-      alert('Supabaseの顧客IDが確認できないため、セッションを保存できません。');
-      return;
+    let supabaseClientId = currentStudent.supabaseClientId;
+
+    if (!supabaseClientId) {
+      let recoveredClientId: string | undefined;
+
+      if (currentStudent.birthdate) {
+        const { data: existingClient, error: findClientError } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('child_name', currentStudent.name)
+          .eq('birth_date', currentStudent.birthdate)
+          .maybeSingle();
+
+        if (findClientError) {
+          console.error('セッション保存時のSupabase既存顧客検索に失敗しました:', findClientError);
+          alert('Supabaseの顧客情報を確認できなかったため、セッションを保存できませんでした。');
+          return;
+        }
+
+        recoveredClientId = existingClient?.id;
+      }
+
+      if (!recoveredClientId) {
+        if (!currentStudent.birthdate) {
+          alert('生年月日が未登録のため、Supabase顧客を作成できません。顧客情報に生年月日を登録してください。');
+          return;
+        }
+
+        const { data: insertedClient, error: insertClientError } = await supabase
+          .from('clients')
+          .insert({
+            parent_name: currentParent.name || null,
+            child_name: currentStudent.name,
+            birth_date: currentStudent.birthdate,
+            first_session_date:
+              currentStudent.firstLessonDate ||
+              new Date().toISOString().split('T')[0],
+            concerns_and_goals:
+              [currentStudent.concern, currentStudent.target]
+                .filter(Boolean)
+                .join('。') || null,
+            memo: currentStudent.memo || null,
+            square_customer_id: currentParent.squareCustomerId || null
+          })
+          .select('id')
+          .single();
+
+        if (insertClientError || !insertedClient?.id) {
+          console.error('セッション保存時のSupabase顧客作成に失敗しました:', insertClientError);
+          alert('Supabaseへの顧客登録に失敗したため、セッションを保存できませんでした。');
+          return;
+        }
+
+        recoveredClientId = insertedClient.id;
+      }
+
+      supabaseClientId = recoveredClientId;
+
+      setStudents(prev =>
+        prev.map(student =>
+          student.id === currentStudent.id
+            ? { ...student, supabaseClientId: recoveredClientId }
+            : student
+        )
+      );
     }
 
     const localSessionId = `ses-${Date.now()}`;
@@ -1851,7 +1913,7 @@ export default function ClientsPage() {
     const { error: sessionInsertError } = await supabase
       .from('session_logs')
       .insert({
-        client_id: currentStudent.supabaseClientId,
+        client_id: supabaseClientId,
         session_date: newSessionDate,
         staff_name: newSessionStaff,
         content: sessionContent,
