@@ -113,13 +113,18 @@ export default function SalesPage() {
   // タスク・議事録から連携されたキャンペーン
   const [linkedCampaigns, setLinkedCampaigns] = useState<CampaignItem[]>([]);
 
-  // 目標売上（手動設定用 State）
-  const [monthlyTarget, setMonthlyTarget] = useState<string>('1000000');
-  const [yearlyTarget, setYearlyTarget] = useState<string>('12000000');
+  // 売上目標：1〜12月の月間目標を保存し、年間目標は合計から自動計算
+  const [monthlyTargets, setMonthlyTargets] = useState<string[]>(
+    Array.from({ length: 12 }, () => '0')
+  );
   const [currentMonthlyTarget, setCurrentMonthlyTarget] = useState<string>('0');
   const [currentYearlyTarget, setCurrentYearlyTarget] = useState<string>('0');
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [isSavingTarget, setIsSavingTarget] = useState(false);
+
+  const yearlyTarget = String(
+    monthlyTargets.reduce((sum, value) => sum + (Number(value) || 0), 0)
+  );
   const [isTrialsLoaded, setIsTrialsLoaded] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
@@ -145,72 +150,102 @@ export default function SalesPage() {
     localStorage.setItem('golazo-sales-selected-month', selectedMonth);
   }, [selectedYear, selectedMonth]);
   
-  // 選択中の年月と「現在」の年月の目標をSupabaseから読み込みます。
+  // 選択年度の1〜12月目標を読み込みます。
+  // 年間目標は1〜12月の月間目標を合計して自動計算します。
   useEffect(() => {
     const loadTargets = async () => {
+      const selectedYearNumber = Number(selectedYear);
       const currentYear = new Date().getFullYear();
       const currentMonth = new Date().getMonth() + 1;
 
       const [selectedResult, currentResult] = await Promise.all([
         supabase
           .from('sales_targets')
-          .select('monthly_target, yearly_target')
-          .eq('target_year', Number(selectedYear))
-          .eq('target_month', Number(selectedMonth))
-          .maybeSingle(),
+          .select('target_month, monthly_target')
+          .eq('target_year', selectedYearNumber)
+          .order('target_month', { ascending: true }),
+
         supabase
           .from('sales_targets')
-          .select('monthly_target, yearly_target')
+          .select('target_month, monthly_target')
           .eq('target_year', currentYear)
-          .eq('target_month', currentMonth)
-          .maybeSingle(),
+          .order('target_month', { ascending: true }),
       ]);
 
       if (selectedResult.error) {
-        console.warn('比較年月の売上目標の読み込みに失敗しました:', selectedResult.error.message);
-      } else if (selectedResult.data) {
-        setMonthlyTarget(String(selectedResult.data.monthly_target ?? 0));
-        setYearlyTarget(String(selectedResult.data.yearly_target ?? 0));
-      } else {
-        setMonthlyTarget('0');
-        setYearlyTarget('0');
+        console.warn(
+          '比較年度の売上目標の読み込みに失敗しました:',
+          selectedResult.error.message
+        );
       }
+
+      const selectedTargets = Array.from({ length: 12 }, (_, index) => {
+        const row = (selectedResult.data || []).find(
+          (item: any) => Number(item.target_month) === index + 1
+        );
+
+        return String(row?.monthly_target ?? 0);
+      });
+
+      setMonthlyTargets(selectedTargets);
 
       if (currentResult.error) {
-        console.warn('現在年月の売上目標の読み込みに失敗しました:', currentResult.error.message);
-      } else if (currentResult.data) {
-        setCurrentMonthlyTarget(String(currentResult.data.monthly_target ?? 0));
-        setCurrentYearlyTarget(String(currentResult.data.yearly_target ?? 0));
-      } else {
-        setCurrentMonthlyTarget('0');
-        setCurrentYearlyTarget('0');
+        console.warn(
+          '現在年度の売上目標の読み込みに失敗しました:',
+          currentResult.error.message
+        );
       }
+
+      const currentTargets = Array.from({ length: 12 }, (_, index) => {
+        const row = (currentResult.data || []).find(
+          (item: any) => Number(item.target_month) === index + 1
+        );
+
+        return Number(row?.monthly_target ?? 0);
+      });
+
+      setCurrentMonthlyTarget(
+        String(currentTargets[currentMonth - 1] || 0)
+      );
+
+      setCurrentYearlyTarget(
+        String(
+          currentTargets.reduce(
+            (sum, value) => sum + value,
+            0
+          )
+        )
+      );
     };
 
-    loadTargets();
+    void loadTargets();
   }, [supabase, selectedYear, selectedMonth]);
 
   const handleSaveTargets = async () => {
-    const monthly = monthlyTarget === '' ? 0 : Number(monthlyTarget);
-    const yearly = yearlyTarget === '' ? 0 : Number(yearlyTarget);
-
-    if (!Number.isFinite(monthly) || !Number.isFinite(yearly) || monthly < 0 || yearly < 0) {
-      alert('目標金額は0円以上の数値で入力してください。');
-      return;
-    }
+    const normalizedTargets = monthlyTargets.map((value) => {
+      const number = value === '' ? 0 : Number(value);
+      return Number.isFinite(number) && number >= 0 ? number : 0;
+    });
 
     setIsSavingTarget(true);
+
+    const yearlyTotal = normalizedTargets.reduce(
+      (sum, value) => sum + value,
+      0
+    );
+
+    const rows = normalizedTargets.map((monthly, index) => ({
+      target_year: Number(selectedYear),
+      target_month: index + 1,
+      monthly_target: monthly,
+      yearly_target: yearlyTotal,
+      updated_at: new Date().toISOString(),
+    }));
 
     const { error } = await supabase
       .from('sales_targets')
       .upsert(
-        {
-          target_year: Number(selectedYear),
-          target_month: Number(selectedMonth),
-          monthly_target: monthly,
-          yearly_target: yearly,
-          updated_at: new Date().toISOString(),
-        },
+        rows,
         { onConflict: 'target_year,target_month' }
       );
 
@@ -218,14 +253,18 @@ export default function SalesPage() {
 
     if (error) {
       console.error('売上目標保存エラー:', error);
-      alert(`売上目標の保存に失敗しました。\n${error.message}`);
+      alert(
+        `売上目標の保存に失敗しました。\n${error.message}`
+      );
       return;
     }
 
-    setMonthlyTarget(String(monthly));
-    setYearlyTarget(String(yearly));
+    setMonthlyTargets(normalizedTargets.map(String));
     setIsEditingTarget(false);
-    alert(`${selectedYear}年${selectedMonth}月の売上目標を保存しました。`);
+
+    alert(
+      `${selectedYear}年の1〜12月目標を保存しました。\n年間目標：¥${yearlyTotal.toLocaleString()}`
+    );
   };
 
   // 手動登録データはSquare連携前のため、ブラウザに保存して再読み込み後も維持します。
@@ -235,7 +274,16 @@ export default function SalesPage() {
       const savedTrials = JSON.parse(localStorage.getItem('golazo_trial_items') || 'null');
 
       if (Array.isArray(savedSales)) {
-        setSales(savedSales.map((item) => ({ ...item, source: item.source || 'manual' })));
+        // 再読み込み時はSquare由来の古いLocalStorageデータを復元しない。
+        // Square売上は初回自動同期でSupabaseから最新データを取得する。
+        // 再読み込み時は「明示的に手動登録」と判定できる売上だけ復元します。
+        // source未設定の古いデータは、過去のSquare同期データが混在している
+        // 可能性があるため復元しません。
+        const manualSales = savedSales
+          .filter((item) => item?.source === 'manual')
+          .map((item) => ({ ...item, source: 'manual' }));
+
+        setSales(manualSales);
       }
       if (Array.isArray(savedTrials)) {
         setTrials(savedTrials);
@@ -533,7 +581,8 @@ export default function SalesPage() {
   const nanaYearAmount = selectedYearSales.filter((item) => item.staff === 'NANA').reduce((sum, item) => sum + item.amount, 0);
 
   // 達成率計算（選択月と選択年を完全に分離）
-  const monthlyTargetNumber = Number(monthlyTarget) || 0;
+  const monthlyTargetNumber =
+    Number(monthlyTargets[Math.max(0, Number(selectedMonth || 1) - 1)] || 0);
   const yearlyTargetNumber = Number(yearlyTarget) || 0;
   const monthlyProgress = monthlyTargetNumber > 0
     ? Math.round((selectedPeriodAmount / monthlyTargetNumber) * 100)
@@ -796,6 +845,51 @@ export default function SalesPage() {
           : item
       );
 
+      // Squareの「体験料」購入者を体験者リストへ自動連携します。
+      setTrials((currentTrials) => {
+        const existingKeys = new Set(
+          currentTrials.map(
+            (trial) => `${trial.date}__${trial.clientName}`
+          )
+        );
+
+        const squareTrialItems = squareSalesWithMemos.filter(
+          (item: SaleItem) => item.category === '体験料'
+        );
+
+        const newTrials: TrialItem[] = squareTrialItems
+          .filter(
+            (item: SaleItem) =>
+              Boolean(item.clientName) &&
+              !existingKeys.has(`${item.date}__${item.clientName}`)
+          )
+          .map((item: SaleItem) => ({
+            id: `square-trial-${item.squareOrderId || item.squarePaymentId || item.id}`,
+            date: item.date,
+            clientName: item.clientName,
+            age: 0,
+            staff:
+              item.staff === 'NANA' || item.staff === 'TAKA'
+                ? item.staff
+                : 'TAKA',
+            hasPurchasedTicket: false,
+            memo: 'Square体験料から自動連携',
+          }));
+
+        if (newTrials.length === 0) {
+          return currentTrials;
+        }
+
+        const nextTrials = [...newTrials, ...currentTrials];
+
+        localStorage.setItem(
+          'golazo_trials',
+          JSON.stringify(nextTrials)
+        );
+
+        return nextTrials;
+      });
+
       setSales((current) => {
         const manualSales = current.filter((item) => item.source !== 'square');
         const next = [...squareSalesWithMemos, ...manualSales];
@@ -814,7 +908,7 @@ export default function SalesPage() {
     } finally {
       setIsSyncing(false);
     }
-  };;;
+  };
 
   // ページ表示時にSquareから最新売上を自動同期します。
   useEffect(() => {
@@ -1070,9 +1164,14 @@ export default function SalesPage() {
         {/* 目標設定 */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-800">🎯 {selectedYear}年{selectedMonth}月の目標設定</h3>
-            <p className="text-xs text-slate-500 mt-1">比較年月の月間・年間目標を登録できます。</p>
+            <h3 className="text-sm font-bold text-slate-800">
+              🎯 {selectedYear}年の売上目標設定
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              1月〜12月の月間目標を入力すると、年間目標は自動で合計されます。
+            </p>
           </div>
+
           <button
             onClick={() => setIsEditingTarget(!isEditingTarget)}
             className="text-xs text-[#5e9bc4] hover:underline font-semibold"
@@ -1082,35 +1181,57 @@ export default function SalesPage() {
         </div>
 
         {isEditingTarget && (
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-3">
-            <label className="text-xs font-semibold text-slate-600">月間目標 (円):</label>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={monthlyTarget}
-              onChange={(e) => setMonthlyTarget(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white"
-            />
-            <label className="text-xs font-semibold text-slate-600">年間目標 (円):</label>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={yearlyTarget}
-              onChange={(e) => setYearlyTarget(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white"
-            />
-            <button
-              onClick={handleSaveTargets}
-              disabled={isSavingTarget}
-              className="bg-[#5e9bc4] text-white px-4 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-60"
-            >
-              {isSavingTarget ? '保存中…' : '保存'}
-            </button>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {monthlyTargets.map((value, index) => (
+                <label
+                  key={index}
+                  className="flex items-center gap-3 text-xs font-semibold text-slate-600"
+                >
+                  <span className="w-10 shrink-0">
+                    {index + 1}月
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={value}
+                    onChange={(e) => {
+                      const next = [...monthlyTargets];
+                      next[index] = e.target.value;
+                      setMonthlyTargets(next);
+                    }}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                  />
+
+                  <span className="text-slate-400">
+                    円
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <div className="text-sm font-bold text-slate-800">
+                年間目標：
+                <span className="text-[#5e9bc4] ml-1">
+                  ¥{Number(yearlyTarget).toLocaleString()}
+                </span>
+              </div>
+
+              <button
+                onClick={handleSaveTargets}
+                disabled={isSavingTarget}
+                className="bg-[#5e9bc4] text-white px-5 py-2 rounded-lg text-xs font-semibold disabled:opacity-60"
+              >
+                {isSavingTarget
+                  ? '保存中…'
+                  : '12か月分を保存'}
+              </button>
+            </div>
           </div>
         )}
-
 
         {/* 販売商品比較 */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
