@@ -322,13 +322,11 @@ export default function ClientsPage() {
   // 再読み込み後も最後に開いていた顧客・タブを復元
   useEffect(() => {
     try {
-      const savedStudentId = localStorage.getItem('golazo-clients-selected-student');
-      const savedParentId = localStorage.getItem('golazo-clients-selected-parent');
       const savedTab = localStorage.getItem('golazo-clients-active-tab');
       const savedSearch = localStorage.getItem('golazo-clients-search-keyword');
 
-      if (savedStudentId) setSelectedStudentId(savedStudentId);
-      if (savedParentId) setSelectedParentId(savedParentId);
+      localStorage.removeItem('golazo-clients-selected-student');
+      localStorage.removeItem('golazo-clients-selected-parent');
 
       if (
         savedTab === 'carte' ||
