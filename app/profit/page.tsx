@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 type ExpenseItem = {
   id?: number;
   category: string;
-  amount: number;
+  amount: number | '';
   sortOrder: number;
 };
 
@@ -603,7 +603,8 @@ export default function ProfitPage() {
   }, [selectedYear, supabase, viewMode]);
 
   const handleAmountChange = (index: number, value: string) => {
-    const amount = Math.max(0, Number(value) || 0);
+    const amount: number | '' =
+      value === '' ? '' : Math.max(0, Number(value) || 0);
 
     setExpenses((current) =>
       current.map((item, itemIndex) =>
