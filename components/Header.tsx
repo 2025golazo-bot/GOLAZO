@@ -18,6 +18,7 @@ export default function Header() {
 
   const navItems = [
     { href: '/sales', label: '売上管理', icon: '📊' },
+    { href: '/profit', label: '利益確認', icon: '💰' },
     { href: '/clients', label: '顧客リスト', icon: '📋' },
     { href: '/task-manager', label: 'タスク・議事録', icon: '📝' },
     { href: '/local-info', label: '近隣情報', icon: '📍' },

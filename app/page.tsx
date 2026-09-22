@@ -12,6 +12,12 @@ const menuItems = [
     description: '売上・決済・取引情報を管理します。',
   },
   {
+    href: '/profit',
+    icon: '💰',
+    title: '利益確認',
+    description: '売上・経費・利益を月ごとに確認します。',
+  },
+  {
     href: '/clients',
     icon: '📋',
     title: '顧客リスト',
