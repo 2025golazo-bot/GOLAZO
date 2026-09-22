@@ -313,7 +313,7 @@ export default function ProfitPage() {
           </p>
 
           <h2 className="text-2xl font-bold text-slate-800">
-            💰 利益確認
+            💰 収支管理
           </h2>
 
           <p className="text-sm text-slate-500 mt-2">

@@ -14,7 +14,7 @@ const menuItems = [
   {
     href: '/profit',
     icon: '💰',
-    title: '利益確認',
+    title: '収支管理',
     description: '売上・経費・利益を月ごとに確認します。',
   },
   {
