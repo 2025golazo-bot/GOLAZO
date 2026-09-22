@@ -316,7 +316,7 @@ export default function ClientsPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('s-001');
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [alertFilter, setAlertFilter] = useState<string>('all');
+  const [alertFilter, setAlertFilter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'carte' | 'tickets' | 'edit_info'>('carte');
 
   // 再読み込み後も最後に開いていた顧客・タブを復元
@@ -2775,7 +2775,7 @@ export default function ClientsPage() {
   });
 
   const shouldShowParentResults =
-    searchKeyword.trim() !== '' || alertFilter !== 'all';
+    searchKeyword.trim() !== '' || alertFilter !== '';
 
   const handleSelectParent = (parentId: string) => {
     const parent = parents.find(p => p.id === parentId);
@@ -2917,6 +2917,7 @@ export default function ClientsPage() {
               onChange={e => setAlertFilter(e.target.value)}
               className="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-[#5e9bc4] outline-none bg-white"
             >
+              <option value="">選択してください</option>
               <option value="all">👥 全顧客を表示</option>
               <option value="alert">🚨 アラートあり</option>
               <option value="no-reservation-30">🚨 1ヶ月未予約</option>
