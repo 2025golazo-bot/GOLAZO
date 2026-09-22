@@ -42,6 +42,26 @@ const prepareImageForUpload = async (file: File): Promise<File> => {
 };
 
 // --- 型定義 ---
+interface ExerciseSet {
+  weight: string;
+  reps: string;
+}
+
+interface SessionExercise {
+  templateId?: string;
+  name: string;
+  sets: ExerciseSet[];
+  memo: string;
+}
+
+interface SessionTemplate {
+  id: string;
+  name: string;
+  category: string;
+  recordType: 'weight_reps' | 'check';
+  sortOrder: number;
+}
+
 interface Session {
   id: string;
   date: string; // YYYY-MM-DD
@@ -49,6 +69,7 @@ interface Session {
   content: string;
   homework: string;
   photo: string | null;
+  exercises?: SessionExercise[];
 }
 
 interface MeasurementAttachment {
@@ -413,7 +434,7 @@ export default function ClientsPage() {
 
         const { data: supabaseSessionLogs, error: sessionLogsError } = await supabase
           .from('session_logs')
-          .select('id, client_id, session_date, staff_name, content, homework, photo_url, local_session_id')
+          .select('id, client_id, session_date, staff_name, content, homework, photo_url, local_session_id, exercises')
           .order('session_date', { ascending: false });
 
         if (sessionLogsError) {
@@ -529,6 +550,9 @@ export default function ClientsPage() {
                   content: log.content || '',
                   homework: log.homework || '',
                   photo: log.photo_url || null,
+                  exercises: Array.isArray(log.exercises)
+                    ? (log.exercises as SessionExercise[])
+                    : [],
                 }));
 
               const mergedSessions = [
@@ -545,6 +569,7 @@ export default function ClientsPage() {
                         content: remote.content,
                         homework: remote.homework,
                         photo: remote.photo,
+                        exercises: remote.exercises,
                       }
                     : session;
                 }),
@@ -871,9 +896,180 @@ export default function ClientsPage() {
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
   const [newSessionPhotoUrl, setNewSessionPhotoUrl] = useState<string | null>(null);
+  const [sessionTemplates, setSessionTemplates] = useState<SessionTemplate[]>([]);
+  const [selectedSessionExercises, setSelectedSessionExercises] = useState<SessionExercise[]>([]);
+  const [newSessionTemplateName, setNewSessionTemplateName] = useState<string>('');
   const [useTicket, setUseTicket] = useState<boolean>(true);
   const [isEditingTicketRemaining, setIsEditingTicketRemaining] = useState(false);
   const [ticketRemainingInput, setTicketRemainingInput] = useState('');
+
+  useEffect(() => {
+    const loadSessionTemplates = async () => {
+      const { data, error } = await supabase
+        .from('session_templates')
+        .select('id, name, category, record_type, sort_order')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('セッション種目の読み込みに失敗しました:', error);
+        return;
+      }
+
+      setSessionTemplates(
+        (data || []).map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category || 'トレーニング',
+          recordType: item.record_type === 'check' ? 'check' : 'weight_reps',
+          sortOrder: item.sort_order || 0,
+        }))
+      );
+    };
+
+    void loadSessionTemplates();
+  }, []);
+
+  const handleAddSessionTemplate = async () => {
+    const name = newSessionTemplateName.trim();
+
+    if (!name) return;
+
+    if (
+      sessionTemplates.some(
+        template => template.name.toLowerCase() === name.toLowerCase()
+      )
+    ) {
+      alert('同じ名前の種目がすでに登録されています。');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('session_templates')
+      .insert({
+        name,
+        category: 'トレーニング',
+        record_type: 'weight_reps',
+        sort_order: sessionTemplates.length,
+      })
+      .select('id, name, category, record_type, sort_order')
+      .single();
+
+    if (error || !data) {
+      console.error('セッション種目の保存に失敗しました:', error);
+      alert('種目の保存に失敗しました。');
+      return;
+    }
+
+    const newTemplate: SessionTemplate = {
+      id: data.id,
+      name: data.name,
+      category: data.category || 'トレーニング',
+      recordType: data.record_type === 'check' ? 'check' : 'weight_reps',
+      sortOrder: data.sort_order || 0,
+    };
+
+    setSessionTemplates(prev => [...prev, newTemplate]);
+    setNewSessionTemplateName('');
+  };
+
+  const toggleSessionExercise = (template: SessionTemplate) => {
+    setSelectedSessionExercises(prev => {
+      const exists = prev.some(
+        exercise => exercise.templateId === template.id
+      );
+
+      if (exists) {
+        return prev.filter(
+          exercise => exercise.templateId !== template.id
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          templateId: template.id,
+          name: template.name,
+          sets:
+            template.recordType === 'weight_reps'
+              ? [{ weight: '', reps: '' }]
+              : [],
+          memo: '',
+        },
+      ];
+    });
+  };
+
+  const addSessionExerciseSet = (templateId: string) => {
+    setSelectedSessionExercises(prev =>
+      prev.map(exercise =>
+        exercise.templateId === templateId
+          ? {
+              ...exercise,
+              sets: [...exercise.sets, { weight: '', reps: '' }],
+            }
+          : exercise
+      )
+    );
+  };
+
+  const removeSessionExerciseSet = (
+    templateId: string,
+    setIndex: number
+  ) => {
+    setSelectedSessionExercises(prev =>
+      prev.map(exercise => {
+        if (exercise.templateId !== templateId) return exercise;
+
+        const nextSets = exercise.sets.filter(
+          (_, index) => index !== setIndex
+        );
+
+        return {
+          ...exercise,
+          sets:
+            nextSets.length > 0
+              ? nextSets
+              : [{ weight: '', reps: '' }],
+        };
+      })
+    );
+  };
+
+  const updateSessionExerciseSet = (
+    templateId: string,
+    setIndex: number,
+    field: 'weight' | 'reps',
+    value: string
+  ) => {
+    setSelectedSessionExercises(prev =>
+      prev.map(exercise => {
+        if (exercise.templateId !== templateId) return exercise;
+
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set, index) =>
+            index === setIndex
+              ? { ...set, [field]: value }
+              : set
+          ),
+        };
+      })
+    );
+  };
+
+  const updateSessionExerciseMemo = (
+    templateId: string,
+    memo: string
+  ) => {
+    setSelectedSessionExercises(prev =>
+      prev.map(exercise =>
+        exercise.templateId === templateId
+          ? { ...exercise, memo }
+          : exercise
+      )
+    );
+  };
 
   const startEditTicketRemaining = () => {
     setTicketRemainingInput(String(currentParent.ticketRemaining));
@@ -1501,7 +1697,14 @@ export default function ClientsPage() {
   const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの受講生のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('受講生を削除しました。'); };
 
   const handleAddSession = async () => {
-    if (!newSessionContent) return;
+    if (!newSessionContent.trim() && selectedSessionExercises.length === 0) {
+      alert('セッション内容を入力するか、種目を1つ以上選択してください。');
+      return;
+    }
+
+    const sessionContent =
+      newSessionContent.trim() ||
+      selectedSessionExercises.map(exercise => exercise.name).join('、');
 
     if (useTicket && currentParent.ticketRemaining <= 0) {
       alert('🎫 回数券残数がありません。回数券を追加購入してから登録してください。');
@@ -1521,10 +1724,11 @@ export default function ClientsPage() {
         client_id: currentStudent.supabaseClientId,
         session_date: newSessionDate,
         staff_name: newSessionStaff,
-        content: newSessionContent,
+        content: sessionContent,
         homework: newSessionHomework || null,
         photo_url: newSessionPhotoUrl,
         local_session_id: localSessionId,
+        exercises: selectedSessionExercises,
       });
 
     if (sessionInsertError) {
@@ -1537,9 +1741,10 @@ export default function ClientsPage() {
       id: localSessionId,
       date: newSessionDate,
       staff: newSessionStaff,
-      content: newSessionContent,
+      content: sessionContent,
       homework: newSessionHomework,
-      photo: newSessionPhotoUrl
+      photo: newSessionPhotoUrl,
+      exercises: selectedSessionExercises
     };
 
     setStudents(prev =>
@@ -1567,6 +1772,7 @@ export default function ClientsPage() {
     setNewSessionContent('');
     setNewSessionHomework('');
     setNewSessionPhotoUrl(null);
+    setSelectedSessionExercises([]);
     alert('セッションを登録しました！');
   };
 
@@ -3361,6 +3567,165 @@ export default function ClientsPage() {
                   </div>
 
 
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-700">
+                        🏋️ セッション種目
+                      </h4>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        保存した種目を選択して、重量・回数・セットを記録できます。
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={newSessionTemplateName}
+                        onChange={e => setNewSessionTemplateName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleAddSessionTemplate();
+                          }
+                        }}
+                        placeholder="例: ベンチプレス"
+                        className="flex-1 border border-slate-300 rounded-lg p-2 text-xs bg-white outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleAddSessionTemplate()}
+                        className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold transition"
+                      >
+                        ＋ 種目を保存
+                      </button>
+                    </div>
+
+                    {sessionTemplates.length > 0 ? (
+                      <div className="space-y-2">
+                        {sessionTemplates.map(template => {
+                          const selectedExercise = selectedSessionExercises.find(
+                            exercise => exercise.templateId === template.id
+                          );
+
+                          return (
+                            <div
+                              key={template.id}
+                              className="rounded-lg border border-slate-200 bg-white p-3"
+                            >
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(selectedExercise)}
+                                  onChange={() => toggleSessionExercise(template)}
+                                  className="rounded text-[#5e9bc4]"
+                                />
+                                <span className="text-xs font-bold text-slate-700">
+                                  {template.name}
+                                </span>
+                              </label>
+
+                              {selectedExercise && template.recordType === 'weight_reps' && (
+                                <div className="mt-3 ml-6 space-y-2">
+                                  {selectedExercise.sets.map((set, setIndex) => (
+                                    <div
+                                      key={`${template.id}-${setIndex}`}
+                                      className="flex flex-wrap items-center gap-2"
+                                    >
+                                      <span className="w-14 text-[11px] font-semibold text-slate-500">
+                                        {setIndex + 1}セット
+                                      </span>
+
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.5"
+                                        inputMode="decimal"
+                                        value={set.weight}
+                                        onChange={e =>
+                                          updateSessionExerciseSet(
+                                            template.id,
+                                            setIndex,
+                                            'weight',
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="0"
+                                        className="w-20 border border-slate-300 rounded-lg p-2 text-xs text-center outline-none"
+                                      />
+                                      <span className="text-xs text-slate-500">kg</span>
+
+                                      <span className="text-xs font-bold text-slate-400">×</span>
+
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        inputMode="numeric"
+                                        value={set.reps}
+                                        onChange={e =>
+                                          updateSessionExerciseSet(
+                                            template.id,
+                                            setIndex,
+                                            'reps',
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder="0"
+                                        className="w-20 border border-slate-300 rounded-lg p-2 text-xs text-center outline-none"
+                                      />
+                                      <span className="text-xs text-slate-500">回</span>
+
+                                      {selectedExercise.sets.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeSessionExerciseSet(
+                                              template.id,
+                                              setIndex
+                                            )
+                                          }
+                                          className="text-[11px] text-rose-500 hover:underline"
+                                        >
+                                          削除
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => addSessionExerciseSet(template.id)}
+                                    className="text-[11px] font-bold text-[#5e9bc4] hover:underline"
+                                  >
+                                    ＋ セット追加
+                                  </button>
+
+                                  <input
+                                    type="text"
+                                    value={selectedExercise.memo}
+                                    onChange={e =>
+                                      updateSessionExerciseMemo(
+                                        template.id,
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="種目メモ（例: フォーム良好）"
+                                    className="w-full border border-slate-300 rounded-lg p-2 text-xs outline-none"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        まだ保存された種目はありません。「＋ 種目を保存」から登録してください。
+                      </p>
+                    )}
+                  </div>
+
+
                   <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
                     セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
                   </button>
@@ -3406,6 +3771,46 @@ export default function ClientsPage() {
                           ) : (
                             <>
                               <p className="text-slate-800 font-medium">{session.content}</p>
+
+                              {session.exercises && session.exercises.length > 0 && (
+                                <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                                  <p className="text-[11px] font-bold text-slate-500">
+                                    🏋️ トレーニング記録
+                                  </p>
+
+                                  {session.exercises.map((exercise, exerciseIndex) => (
+                                    <div
+                                      key={`${session.id}-${exercise.templateId || exerciseIndex}`}
+                                      className="border-t border-slate-100 pt-2 first:border-t-0 first:pt-0"
+                                    >
+                                      <p className="font-bold text-slate-700">
+                                        {exercise.name}
+                                      </p>
+
+                                      {exercise.sets && exercise.sets.length > 0 && (
+                                        <div className="mt-1 space-y-1">
+                                          {exercise.sets.map((set, setIndex) => (
+                                            <p
+                                              key={`${session.id}-${exerciseIndex}-${setIndex}`}
+                                              className="text-slate-600"
+                                            >
+                                              {setIndex + 1}セット：
+                                              {set.weight || '-'}kg × {set.reps || '-'}回
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {exercise.memo && (
+                                        <p className="mt-1 text-[11px] text-slate-500">
+                                          メモ：{exercise.memo}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
                               {session.homework && <p className="text-amber-800 bg-amber-50 p-2 rounded border border-amber-100"><strong>宿題:</strong> {session.homework}</p>}
                               {session.photo && (
                                 <div className="pt-1">
