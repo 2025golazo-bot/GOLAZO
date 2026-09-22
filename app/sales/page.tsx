@@ -643,6 +643,14 @@ export default function SalesPage() {
     .filter((item) => item.staff === 'NANA')
     .reduce((sum, item) => sum + item.amount, 0);
 
+  const compareTakaYearAmount = compareYearSales
+    .filter((item) => item.staff === 'TAKA')
+    .reduce((sum, item) => sum + item.amount, 0);
+
+  const compareNanaYearAmount = compareYearSales
+    .filter((item) => item.staff === 'NANA')
+    .reduce((sum, item) => sum + item.amount, 0);
+
   const selectedPeriodSales = sales.filter((item) =>
     item.date.startsWith(`${selectedYear}-${selectedMonth.padStart(2, '0')}`)
   );
@@ -1243,16 +1251,6 @@ export default function SalesPage() {
                   <td className="p-4 font-bold text-slate-800">¥{selectedPeriodAmount.toLocaleString()}</td>
                 </tr>
                 <tr>
-                  <td className="p-4 font-semibold text-slate-600">TAKA売上</td>
-                  <td className="p-4 font-bold text-[#5e9bc4]">¥{compareTakaMonthAmount.toLocaleString()}</td>
-                  <td className="p-4 font-bold text-slate-800">¥{takaMonthAmount.toLocaleString()}</td>
-                </tr>
-                <tr>
-                  <td className="p-4 font-semibold text-slate-600">NANA売上</td>
-                  <td className="p-4 font-bold text-[#5e9bc4]">¥{compareNanaMonthAmount.toLocaleString()}</td>
-                  <td className="p-4 font-bold text-slate-800">¥{nanaMonthAmount.toLocaleString()}</td>
-                </tr>
-                <tr>
                   <td className="p-4 font-semibold text-slate-600">月間目標</td>
                   <td className="p-4 font-semibold text-slate-800">¥{compareMonthlyTargetNumber.toLocaleString()}</td>
                   <td className="p-4 font-semibold text-slate-800">¥{monthlyTargetNumber.toLocaleString()}</td>
@@ -1276,6 +1274,44 @@ export default function SalesPage() {
                   <td className="p-4 font-semibold text-slate-600">年間達成率</td>
                   <td className="p-4 font-bold text-[#5e9bc4]">{compareYearlyProgress}%達成</td>
                   <td className="p-4 font-bold text-slate-800">{yearlyProgress}%達成</td>
+                </tr>
+                <tr>
+                  <td className="p-4 font-semibold text-slate-600">TAKA売上</td>
+                  <td className="p-4">
+                    <div className="font-bold text-[#5e9bc4]">
+                      月間 ¥{compareTakaMonthAmount.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      年度 ¥{compareTakaYearAmount.toLocaleString()}
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="font-bold text-slate-800">
+                      月間 ¥{takaMonthAmount.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      年度 ¥{takaYearAmount.toLocaleString()}
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-4 font-semibold text-slate-600">NANA売上</td>
+                  <td className="p-4">
+                    <div className="font-bold text-[#5e9bc4]">
+                      月間 ¥{compareNanaMonthAmount.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      年度 ¥{compareNanaYearAmount.toLocaleString()}
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="font-bold text-slate-800">
+                      月間 ¥{nanaMonthAmount.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      年度 ¥{nanaYearAmount.toLocaleString()}
+                    </div>
+                  </td>
                 </tr>
                 <tr>
                   <td className="p-4 font-semibold text-slate-600">体験数</td>
