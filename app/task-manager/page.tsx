@@ -259,7 +259,11 @@ export default function TaskManagerPage() {
         if (!config || !master.repeatGroupId) continue;
 
         for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
-          const dateStr = d.toISOString().slice(0, 10);
+          const dateStr = [
+            d.getFullYear(),
+            String(d.getMonth() + 1).padStart(2, '0'),
+            String(d.getDate()).padStart(2, '0'),
+          ].join('-');
           if (dateStr < master.dueDate) continue;
           if (config.endDate && dateStr > config.endDate) continue;
           const matches = master.repeat === 'weekly'
@@ -676,7 +680,11 @@ export default function TaskManagerPage() {
         const occurrencePayloads: Record<string, unknown>[] = [];
 
         for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const dateStr = d.toISOString().slice(0, 10);
+          const dateStr = [
+            d.getFullYear(),
+            String(d.getMonth() + 1).padStart(2, '0'),
+            String(d.getDate()).padStart(2, '0'),
+          ].join('-');
           if (dateStr === firstDueDate) continue;
           const matches = tFormRepeat === 'weekly'
             ? repeatConfig.days.includes(d.getDay())
