@@ -260,6 +260,18 @@ export default function SalesPage() {
     }
 
     setMonthlyTargets(normalizedTargets.map(String));
+
+    // 現在年度の目標を保存した場合は、
+    // 上部サマリーと比較表「現在」にも保存内容を即時反映する
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    if (Number(selectedYear) === currentYear) {
+      setCurrentMonthlyTarget(
+        String(normalizedTargets[currentMonth - 1] || 0)
+      );
+      setCurrentYearlyTarget(String(yearlyTotal));
+    }
     setIsEditingTarget(false);
 
     alert(
