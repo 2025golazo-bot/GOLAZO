@@ -701,6 +701,21 @@ export default function ClientsPage() {
                   )
                 : 0;
 
+              const remoteSessions = (supabaseSessionLogs || [])
+                .filter(log => log.client_id === client.id)
+                .map(log => ({
+                  id: log.local_session_id || log.id,
+                  date: log.session_date || '',
+                  staff: log.staff_name || 'TAKA',
+                  content: log.content || '',
+                  homework: log.homework || '',
+                  photo: log.photo_url || null,
+                  exercises: Array.isArray(log.exercises)
+                    ? (log.exercises as SessionExercise[])
+                    : [],
+                }))
+                .sort((a, b) => b.date.localeCompare(a.date));
+
               return {
                 id: `s-${Date.now()}-${index}`,
                 parentId: parent.id,
@@ -715,7 +730,7 @@ export default function ClientsPage() {
                 target,
                 memo: client.memo || "",
                 physicalHistory: [],
-                sessions: []
+                sessions: remoteSessions
               };
             })
             .filter((student): student is Student => student !== null) as Student[];
