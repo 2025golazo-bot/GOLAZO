@@ -890,9 +890,19 @@ export default function ProfitPage() {
                           type="number"
                           min="0"
                           value={item.amount}
+                          onFocus={() => {
+                            if (item.amount === 0) {
+                              handleAmountChange(index, '');
+                            }
+                          }}
                           onChange={(e) =>
                             handleAmountChange(index, e.target.value)
                           }
+                          onBlur={() => {
+                            if (item.amount === '') {
+                              handleAmountChange(index, '0');
+                            }
+                          }}
                           className="w-40 border border-slate-300 rounded-xl px-3 py-2 text-right"
                         />
 
