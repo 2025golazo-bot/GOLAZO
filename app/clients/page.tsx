@@ -313,7 +313,7 @@ export default function ClientsPage() {
   const supabase = createClient();
 
   // UI状態
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('s-001');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [alertFilter, setAlertFilter] = useState<string>('');
@@ -3071,7 +3071,14 @@ export default function ClientsPage() {
         )}
 
           {/* メインコンテンツ：カルテ全面表示 */}
-          <div id="client-carte" className="space-y-5">
+          <div
+            id="client-carte"
+            className={
+              selectedParentId || selectedStudentId
+                ? "space-y-5"
+                : "hidden"
+            }
+          >
             {isParentOnlySelected && selectedParent && (
               <div className="bg-white p-5 rounded-xl border border-sky-200 shadow-sm space-y-4">
                 <div className="flex items-start justify-between gap-4">
