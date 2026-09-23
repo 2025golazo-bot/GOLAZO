@@ -1934,11 +1934,7 @@ export default function ClientsPage() {
               `code: ${insertClientError?.code || 'なし'}`,
               `message: ${insertClientError?.message || 'なし'}`,
               `details: ${insertClientError?.details || 'なし'}`,
-              `hint: ${insertClientError?.hint || 'なし'}`,
-              `raw birthdate: ${JSON.stringify(currentStudent.birthdate)}`,
-              `raw firstLessonDate: ${JSON.stringify(currentStudent.firstLessonDate)}`,
-              `send birth_date: ${JSON.stringify(clientInsertPayload.birth_date)}`,
-              `send first_session_date: ${JSON.stringify(clientInsertPayload.first_session_date)}`
+              `hint: ${insertClientError?.hint || 'なし'}`
             ].join('\\n')
           );
           return;
