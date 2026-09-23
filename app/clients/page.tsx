@@ -709,13 +709,17 @@ export default function ClientsPage() {
             linkedStudents.map(student => `${student.name}__${student.birthdate}`)
           );
 
-          const newSupabaseStudents = (supabaseClients || [])
-            .filter(client => {
-              const key = `${client.child_name}__${client.birth_date}`;
-              return !existingStudentKeys.has(key);
-            })
-            .map((client, index): Student | null => {
-              const parent = (savedParents ? JSON.parse(savedParents) : parents).find((parent: Parent) => parent.name === client.parent_name);
+          const newSupabaseStudents = await Promise.all(
+            (supabaseClients || [])
+              .filter(client => {
+                const key = `${client.child_name}__${client.birth_date}`;
+                return !existingStudentKeys.has(key);
+              })
+              .map(async (client, index): Promise<Student | null> => {
+              const parent = loadedParents?.find((parent: Parent) =>
+                String(parent.name || '').trim() ===
+                String(client.parent_name || '').trim()
+              );
 
               if (!parent) {
                 console.warn(
@@ -765,6 +769,61 @@ export default function ClientsPage() {
                 }))
                 .sort((a, b) => b.date.localeCompare(a.date));
 
+              const { data: clientMeasurements, error: clientMeasurementsError } =
+                await supabase
+                  .from('measurements')
+                  .select(
+                    'measurement_date, weight, body_fat, muscle_mass, posture_image_1_url, posture_image_2_url, posture_image_3_url, physical_check_image_url, injury_zero_image_url, ear_before_right_image_url, ear_after_right_image_url, ear_before_left_image_url, ear_after_left_image_url'
+                  )
+                  .eq('client_id', client.id)
+                  .order('measurement_date', { ascending: true });
+
+              if (clientMeasurementsError) {
+                console.error(
+                  'Supabase新規顧客の測定データ読み込みに失敗しました:',
+                  client.id,
+                  clientMeasurementsError
+                );
+              }
+
+              const remotePhysicalHistory: PhysicalData[] =
+                (clientMeasurements || []).map(saved => ({
+                  id: `supabase-${client.id}-${saved.measurement_date}`,
+                  date: saved.measurement_date,
+                  weight: Number(saved.weight ?? 0),
+                  fat: Number(saved.body_fat ?? 0),
+                  muscle: Number(saved.muscle_mass ?? 0),
+                  note: '定期計測',
+                  posturePhotos: {
+                    front: saved.posture_image_1_url ?? null,
+                    side: saved.posture_image_2_url ?? null,
+                    back: saved.posture_image_3_url ?? null,
+                  },
+                  physicalCheckFiles: saved.physical_check_image_url
+                    ? [{
+                        id: `physical-check-${saved.measurement_date}`,
+                        name: 'フィジカルチェック測定結果',
+                        type: 'image/*',
+                        dataUrl: saved.physical_check_image_url,
+                      }]
+                    : [],
+                  injuryZeroFiles: saved.injury_zero_image_url
+                    ? [{
+                        id: `injury-zero-${saved.measurement_date}`,
+                        name: 'ケガゼロ測定結果',
+                        type: 'image/*',
+                        dataUrl: saved.injury_zero_image_url,
+                      }]
+                    : [],
+                  earAcupuncturePhotos: {
+                    beforeRight: saved.ear_before_right_image_url ?? null,
+                    afterRight: saved.ear_after_right_image_url ?? null,
+                    beforeLeft: saved.ear_before_left_image_url ?? null,
+                    afterLeft: saved.ear_after_left_image_url ?? null,
+                  },
+                  testPhotos: [],
+                }));
+
               return {
                 id: `s-${Date.now()}-${index}`,
                 parentId: parent.id,
@@ -778,15 +837,17 @@ export default function ClientsPage() {
                 concern,
                 target,
                 memo: client.memo || "",
-                physicalHistory: [],
+                physicalHistory: remotePhysicalHistory,
                 sessions: remoteSessions
               };
             })
-            .filter((student): student is Student => student !== null) as Student[];
+          );
 
-          const validNewSupabaseStudents = newSupabaseStudents.filter(
+          const filteredNewSupabaseStudents = newSupabaseStudents.filter(
             (student): student is Student => student !== null
           );
+
+          const validNewSupabaseStudents = filteredNewSupabaseStudents;
 
           if (validNewSupabaseStudents.length > 0) {
             console.log(
