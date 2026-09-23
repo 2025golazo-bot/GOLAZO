@@ -1858,8 +1858,9 @@ export default function ClientsPage() {
     if (!supabaseClientId) {
       let recoveredClientId: string | undefined;
       const squareCustomerId =
-        currentStudent.squareCustomerId ||
-        currentParent.squareCustomerId;
+        currentStudent.isRepresentative
+          ? (currentStudent.squareCustomerId || currentParent.squareCustomerId)
+          : currentStudent.squareCustomerId;
 
       if (squareCustomerId) {
         const { data: squareClient, error: squareClientError } = await supabase
@@ -1910,7 +1911,9 @@ export default function ClientsPage() {
                 .filter(Boolean)
                 .join('。') || null,
             memo: currentStudent.memo || null,
-            square_customer_id: currentParent.squareCustomerId || null
+            square_customer_id: currentStudent.isRepresentative
+              ? (currentStudent.squareCustomerId || currentParent.squareCustomerId || null)
+              : null
           })
           .select('id')
           .single();
@@ -2941,7 +2944,9 @@ export default function ClientsPage() {
               .filter(Boolean)
               .join('。') || null,
             memo: currentStudent.memo || null,
-            square_customer_id: currentParent.squareCustomerId || null
+            square_customer_id: currentStudent.isRepresentative
+              ? (currentStudent.squareCustomerId || currentParent.squareCustomerId || null)
+              : null
           })
           .select('id')
           .single();
