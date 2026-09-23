@@ -578,70 +578,119 @@ export default function ClientsPage() {
                 ),
               ].sort((a, b) => b.date.localeCompare(a.date));
 
-              const mergedPhysicalHistory = student.physicalHistory.map(physical => {
-                const saved = measurementMap.get(physical.date);
+              const mergedPhysicalHistory = [
+                ...student.physicalHistory.map(physical => {
+                  const saved = measurementMap.get(physical.date);
 
-                if (!saved) return physical;
+                  if (!saved) return physical;
 
-                return {
-                  ...physical,
-                  weight: Number(saved.weight ?? physical.weight ?? 0),
-                  fat: Number(saved.body_fat ?? physical.fat ?? 0),
-                  muscle: Number(saved.muscle_mass ?? physical.muscle ?? 0),
-                  posturePhotos: {
-                    front:
-                      saved.posture_image_1_url ??
-                      physical.posturePhotos?.front ??
-                      null,
-                    side:
-                      saved.posture_image_2_url ??
-                      physical.posturePhotos?.side ??
-                      null,
-                    back:
-                      saved.posture_image_3_url ??
-                      physical.posturePhotos?.back ??
-                      null,
-                  },
-                  physicalCheckFiles: saved.physical_check_image_url
-                    ? [
-                        {
-                          id: `physical-check-${physical.date}`,
-                          name: 'フィジカルチェック測定結果',
-                          type: 'image/*',
-                          dataUrl: saved.physical_check_image_url,
-                        },
-                      ]
-                    : physical.physicalCheckFiles || [],
-                  injuryZeroFiles: saved.injury_zero_image_url
-                    ? [
-                        {
-                          id: `injury-zero-${physical.date}`,
-                          name: 'ケガゼロ測定結果',
-                          type: 'image/*',
-                          dataUrl: saved.injury_zero_image_url,
-                        },
-                      ]
-                    : physical.injuryZeroFiles || [],
-                  earAcupuncturePhotos: {
-                    beforeRight:
-                      saved.ear_before_right_image_url ??
-                      physical.earAcupuncturePhotos?.beforeRight ??
-                      null,
-                    afterRight:
-                      saved.ear_after_right_image_url ??
-                      physical.earAcupuncturePhotos?.afterRight ??
-                      null,
-                    beforeLeft:
-                      saved.ear_before_left_image_url ??
-                      physical.earAcupuncturePhotos?.beforeLeft ??
-                      null,
-                    afterLeft:
-                      saved.ear_after_left_image_url ??
-                      physical.earAcupuncturePhotos?.afterLeft ??
-                      null,
-                  }
-                };
-              });
+                  return {
+                    ...physical,
+                    weight: Number(saved.weight ?? physical.weight ?? 0),
+                    fat: Number(saved.body_fat ?? physical.fat ?? 0),
+                    muscle: Number(saved.muscle_mass ?? physical.muscle ?? 0),
+                    posturePhotos: {
+                      front:
+                        saved.posture_image_1_url ??
+                        physical.posturePhotos?.front ??
+                        null,
+                      side:
+                        saved.posture_image_2_url ??
+                        physical.posturePhotos?.side ??
+                        null,
+                      back:
+                        saved.posture_image_3_url ??
+                        physical.posturePhotos?.back ??
+                        null,
+                    },
+                    physicalCheckFiles: saved.physical_check_image_url
+                      ? [
+                          {
+                            id: `physical-check-${physical.date}`,
+                            name: 'フィジカルチェック測定結果',
+                            type: 'image/*',
+                            dataUrl: saved.physical_check_image_url,
+                          },
+                        ]
+                      : physical.physicalCheckFiles || [],
+                    injuryZeroFiles: saved.injury_zero_image_url
+                      ? [
+                          {
+                            id: `injury-zero-${physical.date}`,
+                            name: 'ケガゼロ測定結果',
+                            type: 'image/*',
+                            dataUrl: saved.injury_zero_image_url,
+                          },
+                        ]
+                      : physical.injuryZeroFiles || [],
+                    earAcupuncturePhotos: {
+                      beforeRight:
+                        saved.ear_before_right_image_url ??
+                        physical.earAcupuncturePhotos?.beforeRight ??
+                        null,
+                      afterRight:
+                        saved.ear_after_right_image_url ??
+                        physical.earAcupuncturePhotos?.afterRight ??
+                        null,
+                      beforeLeft:
+                        saved.ear_before_left_image_url ??
+                        physical.earAcupuncturePhotos?.beforeLeft ??
+                        null,
+                      afterLeft:
+                        saved.ear_after_left_image_url ??
+                        physical.earAcupuncturePhotos?.afterLeft ??
+                        null,
+                    }
+                  };
+                }),
+                ...(supabaseMeasurements || [])
+                  .filter(
+                    saved =>
+                      !student.physicalHistory.some(
+                        physical => physical.date === saved.measurement_date
+                      )
+                  )
+                  .map(saved => ({
+                    id: `supabase-${matchedClient.id}-${saved.measurement_date}`,
+                    date: saved.measurement_date,
+                    weight: Number(saved.weight ?? 0),
+                    fat: Number(saved.body_fat ?? 0),
+                    muscle: Number(saved.muscle_mass ?? 0),
+                    note: '定期計測',
+                    posturePhotos: {
+                      front: saved.posture_image_1_url ?? null,
+                      side: saved.posture_image_2_url ?? null,
+                      back: saved.posture_image_3_url ?? null,
+                    },
+                    physicalCheckFiles: saved.physical_check_image_url
+                      ? [
+                          {
+                            id: `physical-check-${saved.measurement_date}`,
+                            name: 'フィジカルチェック測定結果',
+                            type: 'image/*',
+                            dataUrl: saved.physical_check_image_url,
+                          },
+                        ]
+                      : [],
+                    injuryZeroFiles: saved.injury_zero_image_url
+                      ? [
+                          {
+                            id: `injury-zero-${saved.measurement_date}`,
+                            name: 'ケガゼロ測定結果',
+                            type: 'image/*',
+                            dataUrl: saved.injury_zero_image_url,
+                          },
+                        ]
+                      : [],
+                    earAcupuncturePhotos: {
+                      beforeRight: saved.ear_before_right_image_url ?? null,
+                      afterRight: saved.ear_after_right_image_url ?? null,
+                      beforeLeft: saved.ear_before_left_image_url ?? null,
+                      afterLeft: saved.ear_after_left_image_url ?? null,
+                    },
+                    testPhotos: [],
+                  })),
+              ].sort((a, b) => a.date.localeCompare(b.date));
 
               return {
                 ...student,
