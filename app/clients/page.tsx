@@ -1774,7 +1774,7 @@ export default function ClientsPage() {
           first_session_date: new Date().toISOString().split('T')[0],
           concerns_and_goals: null,
           memo: childFormMemo.trim() || null,
-          square_customer_id: parent?.squareCustomerId || null
+          square_customer_id: null
         })
         .select('id')
         .single();
