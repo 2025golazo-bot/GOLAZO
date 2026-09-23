@@ -1897,30 +1897,32 @@ export default function ClientsPage() {
       }
 
       if (!recoveredClientId) {
+        const clientInsertPayload = {
+          parent_name: currentParent.name || null,
+          child_name: currentStudent.name,
+          birth_date:
+            /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.birthdate) &&
+            !currentStudent.birthdate.startsWith('0000-')
+              ? currentStudent.birthdate
+              : null,
+          first_session_date:
+            /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.firstLessonDate) &&
+            !currentStudent.firstLessonDate.startsWith('0000-')
+              ? currentStudent.firstLessonDate
+              : null,
+          concerns_and_goals:
+            [currentStudent.concern, currentStudent.target]
+              .filter(Boolean)
+              .join('。') || null,
+          memo: currentStudent.memo || null,
+          square_customer_id: currentStudent.isRepresentative
+            ? (currentStudent.squareCustomerId || currentParent.squareCustomerId || null)
+            : null
+        };
+
         const { data: insertedClient, error: insertClientError } = await supabase
           .from('clients')
-          .insert({
-            parent_name: currentParent.name || null,
-            child_name: currentStudent.name,
-            birth_date:
-              /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.birthdate) &&
-              !currentStudent.birthdate.startsWith('0000-')
-                ? currentStudent.birthdate
-                : null,
-            first_session_date:
-              /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.firstLessonDate) &&
-              !currentStudent.firstLessonDate.startsWith('0000-')
-                ? currentStudent.firstLessonDate
-                : null,
-            concerns_and_goals:
-              [currentStudent.concern, currentStudent.target]
-                .filter(Boolean)
-                .join('。') || null,
-            memo: currentStudent.memo || null,
-            square_customer_id: currentStudent.isRepresentative
-              ? (currentStudent.squareCustomerId || currentParent.squareCustomerId || null)
-              : null
-          })
+          .insert(clientInsertPayload)
           .select('id')
           .single();
 
@@ -1932,7 +1934,11 @@ export default function ClientsPage() {
               `code: ${insertClientError?.code || 'なし'}`,
               `message: ${insertClientError?.message || 'なし'}`,
               `details: ${insertClientError?.details || 'なし'}`,
-              `hint: ${insertClientError?.hint || 'なし'}`
+              `hint: ${insertClientError?.hint || 'なし'}`,
+              `raw birthdate: ${JSON.stringify(currentStudent.birthdate)}`,
+              `raw firstLessonDate: ${JSON.stringify(currentStudent.firstLessonDate)}`,
+              `send birth_date: ${JSON.stringify(clientInsertPayload.birth_date)}`,
+              `send first_session_date: ${JSON.stringify(clientInsertPayload.first_session_date)}`
             ].join('\\n')
           );
           return;
