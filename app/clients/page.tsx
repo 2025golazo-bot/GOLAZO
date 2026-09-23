@@ -1902,7 +1902,11 @@ export default function ClientsPage() {
           .insert({
             parent_name: currentParent.name || null,
             child_name: currentStudent.name,
-            birth_date: currentStudent.birthdate || null,
+            birth_date:
+              /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.birthdate) &&
+              !currentStudent.birthdate.startsWith('0000-')
+                ? currentStudent.birthdate
+                : null,
             first_session_date:
               /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.firstLessonDate) &&
               !currentStudent.firstLessonDate.startsWith('0000-')
@@ -2948,7 +2952,11 @@ export default function ClientsPage() {
           .insert({
             parent_name: currentParent.name || null,
             child_name: currentStudent.name,
-            birth_date: currentStudent.birthdate || null,
+            birth_date:
+              /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.birthdate) &&
+              !currentStudent.birthdate.startsWith('0000-')
+                ? currentStudent.birthdate
+                : null,
             first_session_date:
               /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.firstLessonDate) &&
               !currentStudent.firstLessonDate.startsWith('0000-')
