@@ -1920,7 +1920,15 @@ export default function ClientsPage() {
 
         if (insertClientError || !insertedClient?.id) {
           console.error('セッション保存時のSupabase顧客作成に失敗しました:', insertClientError);
-          alert('Supabaseへの顧客登録に失敗したため、セッションを保存できませんでした。');
+          alert(
+            [
+              'Supabaseへの顧客登録に失敗しました。',
+              `code: ${insertClientError?.code || 'なし'}`,
+              `message: ${insertClientError?.message || 'なし'}`,
+              `details: ${insertClientError?.details || 'なし'}`,
+              `hint: ${insertClientError?.hint || 'なし'}`
+            ].join('\\n')
+          );
           return;
         }
 
