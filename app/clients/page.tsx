@@ -489,7 +489,7 @@ export default function ClientsPage() {
             normalizedIndexedStudents.map(async student => {
               const matchedClient = supabaseClients?.find(client =>
                 client.child_name === student.name &&
-                client.birth_date === student.birthdate
+                (client.birth_date || '') === (student.birthdate || '')
               );
 
               console.log(
@@ -712,7 +712,7 @@ export default function ClientsPage() {
           const newSupabaseStudents = await Promise.all(
             (supabaseClients || [])
               .filter(client => {
-                const key = `${client.child_name}__${client.birth_date}`;
+                const key = `${client.child_name}__${client.birth_date || ''}`;
                 return !existingStudentKeys.has(key);
               })
               .map(async (client, index): Promise<Student | null> => {
@@ -867,7 +867,7 @@ export default function ClientsPage() {
             const linkedStudents = parsedStudents.map(student => {
               const matchedClient = supabaseClients?.find(client =>
                 client.child_name === student.name &&
-                client.birth_date === student.birthdate
+                (client.birth_date || '') === (student.birthdate || '')
               );
 
               if (!matchedClient) return student;
