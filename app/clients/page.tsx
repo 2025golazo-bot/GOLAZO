@@ -1904,8 +1904,10 @@ export default function ClientsPage() {
             child_name: currentStudent.name,
             birth_date: currentStudent.birthdate || null,
             first_session_date:
-              currentStudent.firstLessonDate ||
-              new Date().toISOString().split('T')[0],
+              /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.firstLessonDate) &&
+              !currentStudent.firstLessonDate.startsWith('0000-')
+                ? currentStudent.firstLessonDate
+                : null,
             concerns_and_goals:
               [currentStudent.concern, currentStudent.target]
                 .filter(Boolean)
@@ -2947,7 +2949,11 @@ export default function ClientsPage() {
             parent_name: currentParent.name || null,
             child_name: currentStudent.name,
             birth_date: currentStudent.birthdate || null,
-            first_session_date: currentStudent.firstLessonDate || new Date().toISOString().split('T')[0],
+            first_session_date:
+              /^\d{4}-\d{2}-\d{2}$/.test(currentStudent.firstLessonDate) &&
+              !currentStudent.firstLessonDate.startsWith('0000-')
+                ? currentStudent.firstLessonDate
+                : null,
             concerns_and_goals: [currentStudent.concern, currentStudent.target]
               .filter(Boolean)
               .join('。') || null,
