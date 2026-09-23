@@ -2376,6 +2376,11 @@ export default function ClientsPage() {
       }
 
       if (type === 'posture' && keyName) {
+        if (!targetDate) {
+          alert('先に計測日を追加してから姿勢写真を登録してください。');
+          return;
+        }
+
         void (async () => {
           try {
             if (!currentStudent.supabaseClientId) {
