@@ -431,6 +431,11 @@ export default function SalesPage() {
         let actualSales = 0;
 
         if (productName) {
+          const campaignProductNames = productName
+            .split(' / ')
+            .map((name) => name.trim())
+            .filter(Boolean);
+
           (squareSales || []).forEach((sale: any) => {
             const saleDate = String(sale.date || '');
 
@@ -446,16 +451,32 @@ export default function SalesPage() {
               ? sale.product_line_items
               : [];
 
-            lineItems.forEach((line: any) => {
-              const lineName = String(line.name || '').trim();
+            const matchedLines = campaignProductNames.map((campaignName) =>
+              lineItems.find(
+                (line: any) =>
+                  String(line.name || '').trim() === campaignName
+              )
+            );
 
-              if (lineName !== productName) {
-                return;
-              }
+            if (
+              matchedLines.length !== campaignProductNames.length ||
+              matchedLines.some((line) => !line)
+            ) {
+              return;
+            }
 
-              actualCount += Number(line.quantity) || 0;
-              actualSales += Number(line.amount) || 0;
-            });
+            if (campaignProductNames.length === 1) {
+              const matchedLine = matchedLines[0];
+              actualCount += Number(matchedLine.quantity) || 0;
+              actualSales += Number(matchedLine.amount) || 0;
+              return;
+            }
+
+            actualCount += 1;
+            actualSales += matchedLines.reduce(
+              (sum, line) => sum + (Number(line.amount) || 0),
+              0
+            );
           });
         }
 
