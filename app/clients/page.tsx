@@ -705,13 +705,29 @@ export default function ClientsPage() {
             })
           );
 
+          const existingSupabaseClientIds = new Set(
+            linkedStudents
+              .map(student => String(student.supabaseClientId || '').trim())
+              .filter(Boolean)
+          );
+
           const existingStudentKeys = new Set(
-            linkedStudents.map(student => `${student.name}__${student.birthdate}`)
+            linkedStudents.map(
+              student => `${student.name}__${student.birthdate || ''}`
+            )
           );
 
           const newSupabaseStudents = await Promise.all(
             (supabaseClients || [])
               .filter(client => {
+                const clientId = String(client.id || '').trim();
+
+                // Supabase clients.id を最優先で重複判定する
+                if (clientId && existingSupabaseClientIds.has(clientId)) {
+                  return false;
+                }
+
+                // 旧データとの互換用に名前＋生年月日でも判定する
                 const key = `${client.child_name}__${client.birth_date || ''}`;
                 return !existingStudentKeys.has(key);
               })
