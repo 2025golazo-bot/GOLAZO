@@ -487,7 +487,7 @@ export default function ClientsPage() {
 
           const linkedStudents = await Promise.all(
             normalizedIndexedStudents.map(async student => {
-              const matchedClient = supabaseClients?.find(client =>
+              const matchedClient = supabaseClients?.find(client => client.id === student.supabaseClientId) || supabaseClients?.find(client =>
                 client.child_name === student.name &&
                 (client.birth_date || '') === (student.birthdate || '')
               );
@@ -881,7 +881,7 @@ export default function ClientsPage() {
             const parsedStudents = JSON.parse(savedStudents) as Student[];
 
             const linkedStudents = parsedStudents.map(student => {
-              const matchedClient = supabaseClients?.find(client =>
+              const matchedClient = supabaseClients?.find(client => client.id === student.supabaseClientId) || supabaseClients?.find(client =>
                 client.child_name === student.name &&
                 (client.birth_date || '') === (student.birthdate || '')
               );
