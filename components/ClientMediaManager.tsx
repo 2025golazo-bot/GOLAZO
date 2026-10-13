@@ -247,7 +247,7 @@ export default function ClientMediaManager({
                   <img
                     src={item.url}
                     alt={item.file_name}
-                    className="w-full h-28 object-cover rounded-lg"
+                    className="w-full h-auto max-h-72 object-contain rounded-lg bg-slate-50"
                   />
                 </a>
               )}
