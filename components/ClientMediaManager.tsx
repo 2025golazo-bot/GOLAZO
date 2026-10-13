@@ -178,8 +178,14 @@ export default function ClientMediaManager({
               disabled={uploading}
               className="hidden"
               onChange={event => {
-                void uploadFiles(event.target.files);
+                const selectedFiles = event.target.files;
+                if (!selectedFiles?.length) return;
+
+                const transfer = new DataTransfer();
+                Array.from(selectedFiles).forEach(file => transfer.items.add(file));
+
                 event.target.value = '';
+                void uploadFiles(transfer.files);
               }}
             />
           </label>
