@@ -3485,10 +3485,14 @@ export default function ClientsPage() {
     if (!currentStudent.birthdate) return;
     if (!window.confirm('生年月日を削除しますか？')) return;
 
-    const id = currentStudent.supabaseClientId;
+    let id = currentStudent.supabaseClientId;
     if (!id) {
-      alert('顧客IDがないため削除できません。');
-      return;
+      try {
+        id = await resolvePhotoClientId();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : '顧客IDを確認できませんでした。');
+        return;
+      }
     }
 
     const { error } = await supabase
