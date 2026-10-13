@@ -3490,7 +3490,18 @@ export default function ClientsPage() {
       try {
         id = await resolvePhotoClientId();
       } catch (error) {
-        alert(error instanceof Error ? error.message : '顧客IDを確認できませんでした。');
+        const message = error instanceof Error ? error.message : '';
+        if (!message.includes('対応するSupabase顧客が見つかりません')) {
+          alert('顧客情報を確認できないため削除を中止しました。');
+          return;
+        }
+        setStudents(prev => prev.map(student =>
+          student.id === currentStudent.id
+            ? { ...student, birthdate: '', age: 0 }
+            : student
+        ));
+        setEditForm(prev => ({ ...prev, birthdate: '' }));
+        alert('生年月日を削除しました（ローカル保存）。');
         return;
       }
     }
