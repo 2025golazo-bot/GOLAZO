@@ -20,8 +20,10 @@ type DisplayItem = MediaItem & {
 
 export default function ClientMediaManager({
   clientId,
+  onEnable,
 }: {
   clientId?: string;
+  onEnable?: () => Promise<string>;
 }) {
   const [items, setItems] = useState<DisplayItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -29,6 +31,7 @@ export default function ClientMediaManager({
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [enabling, setEnabling] = useState(false);
 
   const uploadFiles = useCallback(async (files: FileList | null) => {
     if (!clientId || !files?.length || uploading) return;
@@ -187,9 +190,34 @@ export default function ClientMediaManager({
       )}
 
       {!clientId ? (
-        <p className="text-xs text-slate-500">
-          Supabaseに登録された顧客の写真・動画を管理できます。
-        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">
+            写真・動画の保存を始めるには、顧客情報の確認が必要です。
+          </p>
+          {onEnable && (
+            <button
+              type="button"
+              disabled={enabling}
+              onClick={async () => {
+                setEnabling(true);
+                setError('');
+                try {
+                  await onEnable();
+                } catch (err) {
+                  setError(
+                    err instanceof Error ? err.message : '有効化に失敗しました'
+                  );
+                } finally {
+                  setEnabling(false);
+                }
+              }}
+              className="rounded-lg border border-[#5e9bc4] px-3 py-1.5 text-xs font-semibold text-[#5e9bc4] disabled:opacity-50"
+            >
+              {enabling ? '確認中...' : '写真・動画を有効化'}
+            </button>
+          )}
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
       ) : loading ? (
         <p className="text-xs text-slate-500">読み込み中...</p>
       ) : error ? (

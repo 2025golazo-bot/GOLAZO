@@ -2516,14 +2516,106 @@ export default function ClientsPage() {
     }
   };
 
-  // 既存顧客の写真保存時だけ、Supabase clients.id を安全に復旧する。
-  // 同名・情報不一致の場合は誤った顧客への保存を防ぐため停止する。
+  // 写真・動画用の顧客IDを安全に確認する
   const resolvePhotoClientId = async (): Promise<string> => {
     if (currentStudent.supabaseClientId) return currentStudent.supabaseClientId;
 
     const name = currentStudent.name.trim();
-    if (!name) throw new Error('受講生名が未登録のため写真を保存できません。');
+    if (!name) throw new Error('氏名が未登録です。');
 
+    const birthdate = currentStudent.birthdate.trim();
+    const parentName = currentParent.name.trim();
+    const squareId = (
+      currentStudent.isRepresentative
+        ? currentStudent.squareCustomerId || currentParent.squareCustomerId
+        : currentStudent.squareCustomerId
+    )?.trim() || '';
+
+    const saveId = (id: string) => {
+      setStudents(prev => prev.map(student =>
+        student.id === currentStudent.id
+          ? { ...student, supabaseClientId: id }
+          : student
+      ));
+      return id;
+    };
+
+    // Square代表者本人の場合
+    if (currentStudent.isRepresentative && squareId) {
+      const { data: linked, error: linkedError } = await supabase
+        .from('clients')
+        .select('id, child_name, parent_name, birth_date')
+        .eq('square_customer_id', squareId)
+        .limit(2);
+
+      if (linkedError) throw linkedError;
+
+      if ((linked || []).length > 1) {
+        throw new Error('Square顧客IDの重複があります。管理者に確認してください。');
+      }
+
+      if (linked?.length === 1) {
+        const client = linked[0];
+
+        if (
+          client.child_name.trim() !== name ||
+          (client.parent_name && client.parent_name.trim() !== parentName) ||
+          (birthdate && client.birth_date && client.birth_date !== birthdate)
+        ) {
+          throw new Error(
+            'Square顧客IDに紐づくSupabase顧客の情報が一致しません。自動連携を停止しました。'
+          );
+        }
+
+        return saveId(client.id);
+      }
+
+      // 同名の既存顧客がいる場合は自動で新規作成しない
+      const { data: sameNames, error: nameError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('child_name', name)
+        .limit(1);
+
+      if (nameError) throw nameError;
+
+      if (sameNames?.length) {
+        throw new Error(
+          '同名のSupabase顧客が存在します。重複防止のため自動登録を停止しました。'
+        );
+      }
+
+      const confirmed = window.confirm(
+        `${name} 様の写真・動画管理を有効化します。\n` +
+        'Supabaseに新しい顧客情報を登録します。よろしいですか？'
+      );
+
+      if (!confirmed) {
+        throw new Error('登録をキャンセルしました。');
+      }
+
+      const { data: created, error: insertError } = await supabase
+        .from('clients')
+        .insert({
+          square_customer_id: squareId,
+          parent_name: parentName || name,
+          child_name: name,
+          birth_date: birthdate || null,
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        throw new Error(
+          '顧客登録に失敗しました。権限または重複登録を確認してください: ' +
+          insertError.message
+        );
+      }
+
+      return saveId(created.id);
+    }
+
+    // 代表者以外は既存の照合ルールを維持
     const { data, error } = await supabase
       .from('clients')
       .select('id, child_name, birth_date, parent_name, square_customer_id')
@@ -2531,35 +2623,28 @@ export default function ClientsPage() {
       .limit(101);
 
     if (error) throw error;
+
     if ((data || []).length > 100) {
       throw new Error('同名の顧客が多いため、自動紐づけを停止しました。');
     }
 
-    const birthdate = currentStudent.birthdate.trim();
-    const parentName = currentParent.name.trim();
-    const squareId = (currentStudent.isRepresentative
-      ? currentStudent.squareCustomerId || currentParent.squareCustomerId
-      : currentStudent.squareCustomerId) || '';
-
     const matches = (data || []).filter(client => {
-      // 双方に登録された情報が食い違う場合は候補から除外する。
       if (birthdate && client.birth_date && birthdate !== client.birth_date) return false;
       if (parentName && client.parent_name && parentName !== String(client.parent_name).trim()) return false;
       if (squareId && client.square_customer_id && squareId !== client.square_customer_id) return false;
-      return Boolean((birthdate && client.birth_date && birthdate === client.birth_date) || (squareId && client.square_customer_id && squareId === client.square_customer_id));
+      return Boolean(
+        (birthdate && client.birth_date && birthdate === client.birth_date) ||
+        (squareId && client.square_customer_id && squareId === client.square_customer_id)
+      );
     });
 
     if (matches.length !== 1) {
       throw new Error(matches.length === 0
-        ? '対応するSupabase顧客が見つかりません。Squareの代表者情報だけでは写真を保存できません。'
+        ? '対応するSupabase顧客が見つかりません。'
         : '同名の顧客が複数いるため、安全に紐づけできません。');
     }
 
-    const id: string = matches[0].id;
-    setStudents(prev => prev.map(student =>
-      student.id === currentStudent.id ? { ...student, supabaseClientId: id } : student
-    ));
-    return id;
+    return saveId(matches[0].id);
   };
 
   const handleFileUpload = (
@@ -4453,17 +4538,10 @@ export default function ClientsPage() {
                 </div>
 
                 {/* 顧客別写真・動画管理 */}
-                <ClientMediaManager clientId={currentStudent.supabaseClientId} />
-                {!currentStudent.supabaseClientId && (
-                  <button type="button"
-                    onClick={async () => {
-                      try { await resolvePhotoClientId(); }
-                      catch (e) { alert(e instanceof Error ? e.message : '確認失敗'); }
-                    }}
-                    className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg">
-                    顧客情報を確認して写真・動画を有効化
-                  </button>
-                )}
+                <ClientMediaManager
+                  clientId={currentStudent.supabaseClientId}
+                  onEnable={resolvePhotoClientId}
+                />
 
                 {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
