@@ -4541,6 +4541,12 @@ export default function ClientsPage() {
                 <ClientMediaManager
                   clientId={currentStudent.supabaseClientId}
                   onEnable={resolvePhotoClientId}
+                  sessions={currentStudent.sessions.map(session => ({
+                    id: session.id,
+                    date: session.date,
+                    staff: session.staff,
+                    content: session.content,
+                  }))}
                 />
 
                 {/* 時系列セッション履歴 */}
