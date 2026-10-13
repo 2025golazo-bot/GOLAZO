@@ -811,6 +811,24 @@ export default function SalesPage() {
     : 0;
 
   // 各種ハンドラー
+  const handleStaffChange = async (item: SaleItem, staff: SaleItem['staff']) => {
+    if (item.staff === staff) return;
+    if (item.source === 'square') {
+      const { data, error } = await supabase.from('square_sales')
+        .update({ staff }).eq('id', String(item.id)).select('id');
+      if (error || data?.length !== 1) {
+        console.error('担当者保存エラー:', error);
+        alert('担当者を保存できませんでした');
+        return;
+      }
+    }
+    setSales(current => {
+      const next = current.map(s => s.id === item.id ? { ...s, staff } : s);
+      localStorage.setItem('golazo_sales_items', JSON.stringify(next));
+      return next;
+    });
+  };
+
   const handleMemoChange = (id: number, newMemo: string) => {
     setSales((current) => {
       const next = current.map((item) =>
@@ -1733,9 +1751,15 @@ export default function SalesPage() {
                         </span>
                       </td>
                       <td className="p-4 text-xs font-semibold text-slate-600">
-                        <span className={`px-2 py-0.5 rounded-md ${item.staff === 'TAKA' ? 'bg-sky-50 text-sky-700' : 'bg-pink-50 text-pink-700'}`}>
-                          {item.staff}
-                        </span>
+                        <select
+                          value={item.staff}
+                          onChange={(e) => void handleStaffChange(item, e.target.value as SaleItem['staff'])}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                        >
+                          <option value="未設定">未設定</option>
+                          <option value="TAKA">TAKA</option>
+                          <option value="NANA">NANA</option>
+                        </select>
                       </td>
                       <td className="p-4 font-bold text-slate-800">¥{item.amount.toLocaleString()}</td>
                       <td className="p-4 text-xs text-slate-600">{item.paymentMethod}{item.source === 'square' && <span className="ml-2 text-[10px] text-emerald-600 font-bold">Square自動</span>}</td>

@@ -49,7 +49,7 @@ type StoredSquareSale = {
   team_member_id?: string | null;
 };
 
-const SQUARE_API_VERSION = '2026-08-19';
+const SQUARE_API_VERSION = '2026-09-16';
 const SQUARE_BASE_URL = 'https://connect.squareup.com';
 
 const jsonHeaders = () => ({
@@ -371,7 +371,6 @@ async function updateStoredSalesWithoutOverwritingMemos(sales: StoredSquareSale[
           category: sale.category,
           amount: sale.amount,
           payment_method: sale.payment_method,
-          staff: sale.staff,
           product_name: sale.product_name || null,
           product_names: sale.product_names || [],
           product_line_items: sale.product_line_items || [],
