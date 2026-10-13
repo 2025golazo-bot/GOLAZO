@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 type MediaItem = {
@@ -26,6 +26,77 @@ export default function ClientMediaManager({
   const [items, setItems] = useState<DisplayItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const uploadFiles = useCallback(async (files: FileList | null) => {
+    if (!clientId || !files?.length || uploading) return;
+
+    setUploading(true);
+    setError('');
+    setUploadMessage('');
+
+    const supabase = createClient();
+    let completed = 0;
+
+    try {
+      const { data: auth, error: authError } =
+        await supabase.auth.getUser();
+
+      if (authError || !auth.user) {
+        throw new Error('ログイン情報を確認できません');
+      }
+
+      for (const file of Array.from(files)) {
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+
+        if (!isImage && !isVideo) {
+          throw new Error('写真・動画以外のファイルは登録できません');
+        }
+
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${clientId}/${crypto.randomUUID()}-${safeName}`;
+
+        const { error: storageError } = await supabase.storage
+          .from('client-media')
+          .upload(path, file, {
+            contentType: file.type,
+            upsert: false,
+          });
+
+        if (storageError) throw storageError;
+
+        const { error: dbError } = await supabase
+          .from('client_media')
+          .insert({
+            client_id: clientId,
+            storage_path: path,
+            file_name: file.name,
+            media_type: isImage ? 'image' : 'video',
+            category: 'session',
+          });
+
+        if (dbError) {
+          await supabase.storage.from('client-media').remove([path]);
+          throw dbError;
+        }
+
+        completed++;
+      }
+
+      setUploadMessage(`${completed}件の写真・動画を保存しました`);
+    } catch (err) {
+      setError(
+        `${completed}件保存済み。` +
+        (err instanceof Error ? err.message : 'アップロードに失敗しました')
+      );
+    } finally {
+      setUploading(false);
+      setRefreshKey(value => value + 1);
+    }
+  }, [clientId, uploading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +156,35 @@ export default function ClientMediaManager({
     return () => {
       cancelled = true;
     };
-  }, [clientId]);
+  }, [clientId, refreshKey]);
 
   return (
     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
       <h3 className="font-bold text-slate-800 text-sm">
         📷 写真・動画管理
       </h3>
+
+      {clientId && (
+        <div className="space-y-2">
+          <label className="inline-block cursor-pointer rounded-lg bg-[#5e9bc4] px-4 py-2 text-sm font-bold text-white">
+            {uploading ? 'アップロード中...' : '＋ 写真・動画を追加'}
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              disabled={uploading}
+              className="hidden"
+              onChange={event => {
+                void uploadFiles(event.target.files);
+                event.target.value = '';
+              }}
+            />
+          </label>
+          {uploadMessage && (
+            <p className="text-xs text-green-700">{uploadMessage}</p>
+          )}
+        </div>
+      )}
 
       {!clientId ? (
         <p className="text-xs text-slate-500">
