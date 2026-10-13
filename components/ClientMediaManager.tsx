@@ -33,8 +33,8 @@ export default function ClientMediaManager({
   const [refreshKey, setRefreshKey] = useState(0);
   const [enabling, setEnabling] = useState(false);
 
-  const uploadFiles = useCallback(async (files: FileList | null) => {
-    if (!clientId || !files?.length || uploading) return;
+  const uploadFiles = useCallback(async (files: File[]) => {
+    if (!clientId || files.length === 0 || uploading) return;
 
     setUploading(true);
     setError('');
@@ -51,7 +51,7 @@ export default function ClientMediaManager({
         throw new Error('ログイン情報を確認できません');
       }
 
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         const isImage = file.type.startsWith('image/');
         const isVideo = file.type.startsWith('video/');
 
@@ -181,11 +181,9 @@ export default function ClientMediaManager({
                 const selectedFiles = event.target.files;
                 if (!selectedFiles?.length) return;
 
-                const transfer = new DataTransfer();
-                Array.from(selectedFiles).forEach(file => transfer.items.add(file));
-
+                const files = Array.from(selectedFiles);
                 event.target.value = '';
-                void uploadFiles(transfer.files);
+                void uploadFiles(files);
               }}
             />
           </label>
