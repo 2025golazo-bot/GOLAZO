@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import Header from '@/components/Header';
+import ClientMediaManager from '@/components/ClientMediaManager';
 import { createClient } from '@/lib/supabase/client';
 import { heicTo } from 'heic-to';
 
@@ -4450,6 +4451,9 @@ export default function ClientsPage() {
                     セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
                   </button>
                 </div>
+
+                {/* 顧客別写真・動画管理 */}
+                <ClientMediaManager clientId={currentStudent.supabaseClientId} />
 
                 {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
