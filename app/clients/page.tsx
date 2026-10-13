@@ -664,8 +664,8 @@ export default function ClientsPage() {
                 return {
                   ...student,
                   supabaseClientId: matchedClient.id,
-                  birthdate: matchedClient.birth_date || student.birthdate,
-                  age: ageFromBirthdate(matchedClient.birth_date || student.birthdate),
+                  birthdate: (matchedClient.birth_date || ''),
+                  age: ageFromBirthdate((matchedClient.birth_date || '')),
                   name: matchedClient.child_name,
                   concern,
                   target,
@@ -839,8 +839,8 @@ export default function ClientsPage() {
               return {
                 ...student,
                 supabaseClientId: matchedClient.id,
-                birthdate: matchedClient.birth_date || student.birthdate,
-                age: ageFromBirthdate(matchedClient.birth_date || student.birthdate),
+                birthdate: (matchedClient.birth_date || ''),
+                age: ageFromBirthdate((matchedClient.birth_date || '')),
                 name: matchedClient.child_name,
                 concern,
                 target,
@@ -3480,6 +3480,36 @@ export default function ClientsPage() {
     );
   };
 
+
+  const handleDeleteBirthdate = async () => {
+    if (!currentStudent.birthdate) return;
+    if (!window.confirm('生年月日を削除しますか？')) return;
+
+    const id = currentStudent.supabaseClientId;
+    if (!id) {
+      alert('顧客IDがないため削除できません。');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('clients')
+      .update({ birth_date: null })
+      .eq('id', id);
+
+    if (error) {
+      alert('削除に失敗しました。');
+      return;
+    }
+
+    setStudents(prev => prev.map(s =>
+      s.id === currentStudent.id
+        ? { ...s, birthdate: '', age: 0 }
+        : s
+    ));
+    setEditForm(prev => ({ ...prev, birthdate: '' }));
+    alert('生年月日を削除しました。');
+  };
+
   const handleSaveInfo = async () => {
     if (!editForm.name.trim()) return alert('受講生のお名前を入力してください。');
     if (!isValidBirthdate(editForm.birthdate)) return alert('生年月日を正しく入力してください。');
@@ -5169,10 +5199,14 @@ export default function ClientsPage() {
                   </div>
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">生年月日（必須）</label>
-                    <input type="date" required max={new Date().toISOString().slice(0, 10)}
+                    <input id="birthdate-edit" type="date" required max={new Date().toISOString().slice(0, 10)}
                       value={editForm.birthdate}
                       onChange={e => setEditForm({ ...editForm, birthdate: e.target.value })}
                       className="w-full border border-slate-300 rounded-lg p-2.5 outline-none" />
+                    <div className="flex gap-2 mt-2">
+                      <button type="button" onClick={() => document.getElementById('birthdate-edit')?.focus()} className="bg-[#5e9bc4] text-white rounded px-3 py-2">✏️ 修正</button>
+                      <button type="button" onClick={handleDeleteBirthdate} disabled={!currentStudent.birthdate} className="bg-red-50 text-red-600 rounded px-3 py-2 disabled:opacity-40">🗑 削除</button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">フリガナ</label>
