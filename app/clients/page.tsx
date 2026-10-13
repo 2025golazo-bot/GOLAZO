@@ -4454,6 +4454,16 @@ export default function ClientsPage() {
 
                 {/* 顧客別写真・動画管理 */}
                 <ClientMediaManager clientId={currentStudent.supabaseClientId} />
+                {!currentStudent.supabaseClientId && (
+                  <button type="button"
+                    onClick={async () => {
+                      try { await resolvePhotoClientId(); }
+                      catch (e) { alert(e instanceof Error ? e.message : '確認失敗'); }
+                    }}
+                    className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg">
+                    顧客情報を確認して写真・動画を有効化
+                  </button>
+                )}
 
                 {/* 時系列セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
