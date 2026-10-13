@@ -2331,6 +2331,52 @@ export default function ClientsPage() {
     }
   };
 
+  // 既存顧客の写真保存時だけ、Supabase clients.id を安全に復旧する。
+  // 同名・情報不一致の場合は誤った顧客への保存を防ぐため停止する。
+  const resolvePhotoClientId = async (): Promise<string> => {
+    if (currentStudent.supabaseClientId) return currentStudent.supabaseClientId;
+
+    const name = currentStudent.name.trim();
+    if (!name) throw new Error('受講生名が未登録のため写真を保存できません。');
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id, child_name, birth_date, parent_name, square_customer_id')
+      .eq('child_name', name)
+      .limit(101);
+
+    if (error) throw error;
+    if ((data || []).length > 100) {
+      throw new Error('同名の顧客が多いため、自動紐づけを停止しました。');
+    }
+
+    const birthdate = currentStudent.birthdate.trim();
+    const parentName = currentParent.name.trim();
+    const squareId = (currentStudent.isRepresentative
+      ? currentStudent.squareCustomerId || currentParent.squareCustomerId
+      : currentStudent.squareCustomerId) || '';
+
+    const matches = (data || []).filter(client => {
+      // 双方に登録された情報が食い違う場合は候補から除外する。
+      if (birthdate && client.birth_date && birthdate !== client.birth_date) return false;
+      if (parentName && client.parent_name && parentName !== String(client.parent_name).trim()) return false;
+      if (squareId && client.square_customer_id && squareId !== client.square_customer_id) return false;
+      return Boolean((birthdate && client.birth_date && birthdate === client.birth_date) || (squareId && client.square_customer_id && squareId === client.square_customer_id));
+    });
+
+    if (matches.length !== 1) {
+      throw new Error(matches.length === 0
+        ? '対応するSupabase顧客が見つかりません。Squareの代表者情報だけでは写真を保存できません。'
+        : '同名の顧客が複数いるため、安全に紐づけできません。');
+    }
+
+    const id: string = matches[0].id;
+    setStudents(prev => prev.map(student =>
+      student.id === currentStudent.id ? { ...student, supabaseClientId: id } : student
+    ));
+    return id;
+  };
+
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
     targetDate: string,
@@ -2344,9 +2390,7 @@ export default function ClientsPage() {
       if (type === 'physicalCheck' || type === 'injuryZero') {
         void (async () => {
           try {
-            if (!currentStudent.supabaseClientId) {
-              throw new Error('Supabaseの顧客IDが確認できません。');
-            }
+            const photoClientId = await resolvePhotoClientId();
 
             const uploadFile = await prepareImageForUpload(file);
 
@@ -2374,7 +2418,7 @@ export default function ClientsPage() {
                 : 'injury_zero_image_url';
 
             const storagePath =
-              `clients/${currentStudent.supabaseClientId}/measurements/${targetDate}/${photoName}-${crypto.randomUUID()}.${ext}`;
+              `clients/${photoClientId}/measurements/${targetDate}/${photoName}-${crypto.randomUUID()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
               .from('client-photos')
@@ -2398,7 +2442,7 @@ export default function ClientsPage() {
               await supabase
                 .from('measurements')
                 .select('id')
-                .eq('client_id', currentStudent.supabaseClientId)
+                .eq('client_id', photoClientId)
                 .eq('measurement_date', targetDate)
                 .maybeSingle();
 
@@ -2417,7 +2461,7 @@ export default function ClientsPage() {
               const { error: insertMeasurementError } = await supabase
                 .from('measurements')
                 .insert({
-                  client_id: currentStudent.supabaseClientId,
+                  client_id: photoClientId,
                   measurement_date: targetDate,
                   [photoColumn]: data.publicUrl,
                 });
@@ -2509,9 +2553,7 @@ export default function ClientsPage() {
 
         void (async () => {
           try {
-            if (!currentStudent.supabaseClientId) {
-              throw new Error('Supabaseの顧客IDが確認できません。');
-            }
+            const photoClientId = await resolvePhotoClientId();
 
             const uploadFile = await prepareImageForUpload(file);
 
@@ -2531,7 +2573,7 @@ export default function ClientsPage() {
                   : 'jpg';
 
             const storagePath =
-              `clients/${currentStudent.supabaseClientId}/measurements/${targetDate}/posture-${keyName}-${crypto.randomUUID()}.${ext}`;
+              `clients/${photoClientId}/measurements/${targetDate}/posture-${keyName}-${crypto.randomUUID()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
               .from('client-photos')
@@ -2562,7 +2604,7 @@ export default function ClientsPage() {
               await supabase
                 .from('measurements')
                 .select('id')
-                .eq('client_id', currentStudent.supabaseClientId)
+                .eq('client_id', photoClientId)
                 .eq('measurement_date', targetDate)
                 .maybeSingle();
 
@@ -2585,7 +2627,7 @@ export default function ClientsPage() {
               const { error: insertMeasurementError } = await supabase
                 .from('measurements')
                 .insert({
-                  client_id: currentStudent.supabaseClientId,
+                  client_id: photoClientId,
                   measurement_date: targetDate,
                   [postureColumn]: data.publicUrl,
                 });
@@ -2685,9 +2727,7 @@ export default function ClientsPage() {
     if (!file) return;
     void (async () => {
       try {
-        if (!currentStudent.supabaseClientId) {
-          throw new Error('Supabaseの顧客IDが確認できません。');
-        }
+        const photoClientId = await resolvePhotoClientId();
 
         const uploadFile = await prepareImageForUpload(file);
 
@@ -2706,7 +2746,7 @@ export default function ClientsPage() {
               : 'jpg';
 
         const storagePath =
-          `clients/${currentStudent.supabaseClientId}/measurements/${targetDate}/ear-${keyName}-${crypto.randomUUID()}.${ext}`;
+          `clients/${photoClientId}/measurements/${targetDate}/ear-${keyName}-${crypto.randomUUID()}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
           .from('client-photos')
@@ -2741,7 +2781,7 @@ export default function ClientsPage() {
           await supabase
             .from('measurements')
             .select('id')
-            .eq('client_id', currentStudent.supabaseClientId)
+            .eq('client_id', photoClientId)
             .eq('measurement_date', targetDate)
             .maybeSingle();
 
@@ -2764,7 +2804,7 @@ export default function ClientsPage() {
           const { error: insertMeasurementError } = await supabase
             .from('measurements')
             .insert({
-              client_id: currentStudent.supabaseClientId,
+              client_id: photoClientId,
               measurement_date: targetDate,
               [earColumn]: data.publicUrl,
             });
