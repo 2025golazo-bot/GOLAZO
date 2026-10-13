@@ -41,6 +41,23 @@ const prepareImageForUpload = async (file: File): Promise<File> => {
   );
 };
 
+// 生年月日は YYYY-MM-DD の実在する日付のみ有効とする。
+const isValidBirthdate = (value?: string | null): boolean => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 &&
+    date.getDate() === day && date <= new Date();
+};
+
+const ageFromBirthdate = (value: string): number => {
+  if (!isValidBirthdate(value)) return 0;
+  const [year, month, day] = value.split('-').map(Number);
+  const now = new Date();
+  return now.getFullYear() - year -
+    (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day) ? 1 : 0);
+};
+
 // --- 型定義 ---
 interface ExerciseSet {
   weight: string;
@@ -444,9 +461,67 @@ export default function ClientsPage() {
         }
 
         const savedParents = localStorage.getItem('golazo-clients-parents-v2');
+
+
+        const { data: supabaseParents, error: supabaseParentsError } = await supabase
+          .from('parents')
+          .select(
+            'local_parent_id, square_customer_id, name, kana, phone, email, birthday, square_updated_at, ticket_remaining, tickets_history, square_purchase_history, square_ticket_applied_order_ids, square_ticket_sync_initialized, square_ticket_sync_customer_id, group_linked'
+          )
+          .order('created_at', { ascending: true });
+
+        if (supabaseParentsError) {
+          console.error(
+            'Supabase代表者データの読み込みに失敗しました:',
+            supabaseParentsError
+          );
+        } else {
+          console.log(
+            'Supabase parents 読み込み成功:',
+            supabaseParents?.length ?? 0,
+            '件'
+          );
+        }
+
         let loadedParents: Parent[] | null = null;
 
-        if (savedParents) {
+        if (!supabaseParentsError && supabaseParents && supabaseParents.length > 0) {
+          loadedParents = supabaseParents.map(parent => {
+            const squareId = String(parent.square_customer_id || '').trim();
+            const localParentId = String(parent.local_parent_id || '').trim();
+
+            return {
+              id: localParentId || (squareId ? `p-square-${squareId}` : ''),
+              squareCustomerId: squareId || undefined,
+              name: parent.name || '',
+              kana: parent.kana || '',
+              phone: parent.phone || '',
+              email: parent.email || undefined,
+              birthday: parent.birthday || undefined,
+              squareUpdatedAt: parent.square_updated_at || undefined,
+              ticketRemaining: Number(parent.ticket_remaining ?? 0),
+              ticketsHistory: Array.isArray(parent.tickets_history)
+                ? parent.tickets_history
+                : [],
+              squarePurchaseHistory: Array.isArray(parent.square_purchase_history)
+                ? parent.square_purchase_history
+                : [],
+              squareTicketAppliedOrderIds: Array.isArray(
+                parent.square_ticket_applied_order_ids
+              )
+                ? parent.square_ticket_applied_order_ids
+                : [],
+              squareTicketSyncInitialized: Boolean(
+                parent.square_ticket_sync_initialized
+              ),
+              squareTicketSyncCustomerId:
+                parent.square_ticket_sync_customer_id || undefined,
+              groupLinked: Boolean(parent.group_linked),
+            };
+          });
+
+          setParents(loadedParents);
+        } else if (savedParents) {
           const parsedParents = JSON.parse(savedParents) as Parent[];
 
           loadedParents = parsedParents.map(parent => {
@@ -461,21 +536,88 @@ export default function ClientsPage() {
           });
 
           setParents(loadedParents);
+
+          const parentsToMigrate = loadedParents.filter(parent => {
+            const squareId = String(parent.squareCustomerId || '').trim();
+
+            return (
+              !['p-101', 'p-102'].includes(parent.id) &&
+              !['CUS_TEST_001', 'CUS_TEST_002'].includes(squareId)
+            );
+          });
+
+          if (parentsToMigrate.length > 0) {
+            const migrationRows = parentsToMigrate.map(parent => ({
+              local_parent_id: parent.id,
+              square_customer_id:
+                String(parent.squareCustomerId || '').trim() || null,
+              name: parent.name,
+              kana: parent.kana || null,
+              phone: parent.phone || null,
+              email: parent.email || null,
+              birthday: parent.birthday || null,
+              square_updated_at: parent.squareUpdatedAt || null,
+              ticket_remaining: parent.ticketRemaining ?? 0,
+              tickets_history: parent.ticketsHistory || [],
+              square_purchase_history: parent.squarePurchaseHistory || [],
+              square_ticket_applied_order_ids:
+                parent.squareTicketAppliedOrderIds || [],
+              square_ticket_sync_initialized:
+                parent.squareTicketSyncInitialized || false,
+              square_ticket_sync_customer_id:
+                parent.squareTicketSyncCustomerId || null,
+              group_linked: parent.groupLinked || false,
+              updated_at: new Date().toISOString(),
+            }));
+
+            const { error: parentMigrationError } = await supabase
+              .from('parents')
+              .insert(migrationRows);
+
+            if (parentMigrationError) {
+              console.error(
+                'Supabase代表者データの初回移行に失敗しました:',
+                parentMigrationError
+              );
+            } else {
+              console.log(
+                'Supabase代表者データの初回移行成功:',
+                migrationRows.length,
+                '件'
+              );
+            }
+          }
         }
 
         const indexedStudents = await loadStudentsFromIndexedDB();
 
         if (cancelled) return;
 
-        if (indexedStudents) {
-          const normalizedIndexedStudents = indexedStudents.map(student => {
-            const parent = loadedParents?.find(parent =>
-              parent.squareCustomerId &&
-              (
-                student.parentId === `square-${parent.squareCustomerId}` ||
-                student.parentId === `p-square-${parent.squareCustomerId}`
-              )
+        const baseStudents = indexedStudents || [];
+
+        {
+          const normalizedIndexedStudents = baseStudents.map(student => {
+            const matchedClient = supabaseClients?.find(client => client.id === student.supabaseClientId) || supabaseClients?.find(client =>
+              client.child_name === student.name &&
+              (client.birth_date || '') === (student.birthdate || '')
             );
+
+            const parent = loadedParents?.find(parent => {
+              const squareMatched =
+                parent.squareCustomerId &&
+                (
+                  student.parentId === `square-${parent.squareCustomerId}` ||
+                  student.parentId === `p-square-${parent.squareCustomerId}` ||
+                  student.parentId === parent.squareCustomerId
+                );
+
+              const nameMatched =
+                matchedClient &&
+                String(matchedClient.parent_name || '').trim() ===
+                String(parent.name || '').trim();
+
+              return Boolean(squareMatched || nameMatched);
+            });
 
             if (!parent) return student;
 
@@ -522,6 +664,8 @@ export default function ClientsPage() {
                 return {
                   ...student,
                   supabaseClientId: matchedClient.id,
+                  birthdate: matchedClient.birth_date || student.birthdate,
+                  age: ageFromBirthdate(matchedClient.birth_date || student.birthdate),
                   name: matchedClient.child_name,
                   concern,
                   target,
@@ -695,6 +839,8 @@ export default function ClientsPage() {
               return {
                 ...student,
                 supabaseClientId: matchedClient.id,
+                birthdate: matchedClient.birth_date || student.birthdate,
+                age: ageFromBirthdate(matchedClient.birth_date || student.birthdate),
                 name: matchedClient.child_name,
                 concern,
                 target,
@@ -872,45 +1018,45 @@ export default function ClientsPage() {
             );
           }
 
-          setStudents([...linkedStudents, ...validNewSupabaseStudents]);
-        } else {
-          // 旧localStorageデータがあれば初回だけIndexedDBへ移行
-          const savedStudents = localStorage.getItem('golazo-clients-students-v2');
+          const finalStudents = [
+            ...linkedStudents,
+            ...validNewSupabaseStudents,
+          ];
 
-          if (savedStudents) {
-            const parsedStudents = JSON.parse(savedStudents) as Student[];
+          console.log(
+            '===== Supabase連携後の受講生カルテ =====',
+            finalStudents.map(student => ({
+              name: student.name,
+              birthdate: student.birthdate,
+              parentId: student.parentId,
+              supabaseClientId: student.supabaseClientId || null,
+            }))
+          );
 
-            const linkedStudents = parsedStudents.map(student => {
-              const matchedClient = supabaseClients?.find(client => client.id === student.supabaseClientId) || supabaseClients?.find(client =>
-                client.child_name === student.name &&
-                (client.birth_date || '') === (student.birthdate || '')
-              );
+          setStudents(finalStudents);
 
-              if (!matchedClient) return student;
+          try {
+            await saveStudentsToIndexedDB(finalStudents);
+            console.log(
+              'Supabase連携後の受講生カルテをIndexedDBへ保存しました:',
+              finalStudents.length,
+              '件'
+            );
+          } catch (migrationError) {
+            console.error(
+              '受講生カルテのIndexedDB保存に失敗しました:',
+              migrationError
+            );
+          }
 
-              const parts = (matchedClient.concerns_and_goals || "").split("。");
-              const concern = parts[0] || "";
-              const target = parts.slice(1).join("。").replace(/^\s+/, "");
-
-              return {
-                ...student,
-                supabaseClientId: matchedClient.id,
-                name: matchedClient.child_name,
-                concern,
-                target,
-                memo: matchedClient.memo || ""
-              };
-            });
-
-            setStudents(linkedStudents);
-
-            try {
-              await saveStudentsToIndexedDB(linkedStudents);
-              localStorage.removeItem('golazo-clients-students-v2');
-              console.log('顧客データをIndexedDBへ移行しました');
-            } catch (migrationError) {
-              console.error('IndexedDBへの初回移行に失敗しました:', migrationError);
-            }
+          // 旧localStorageデータが残っている場合は、今回のSupabase連携後データを正として削除
+          try {
+            localStorage.removeItem('golazo-clients-students-v2');
+          } catch (storageError) {
+            console.error(
+              '旧受講生localStorageデータの削除に失敗しました:',
+              storageError
+            );
           }
         }
       } catch (error) {
@@ -1379,6 +1525,7 @@ export default function ClientsPage() {
 
   const [editForm, setEditForm] = useState({
     name: currentStudent.name,
+    birthdate: currentStudent.birthdate || '',
     kana: currentStudent.kana,
     phone: currentParent.phone,
     concern: currentStudent.concern,
@@ -1394,6 +1541,7 @@ export default function ClientsPage() {
 
     setEditForm({
       name: currentStudent.name,
+      birthdate: currentStudent.birthdate || '',
       kana: currentStudent.kana,
       phone: currentParent.phone,
       concern: currentStudent.concern,
@@ -1405,6 +1553,7 @@ export default function ClientsPage() {
     activeTab,
     currentStudent.id,
     currentStudent.name,
+    currentStudent.birthdate,
     currentStudent.kana,
     currentStudent.concern,
     currentStudent.target,
@@ -1505,12 +1654,28 @@ export default function ClientsPage() {
         return nextParents;
       });
 
+      // Square顧客IDが一致する「代表者本人のカルテ」に限り生年月日を反映。
+      // 保護者の生年月日を子どものカルテへ転記しない。
+      const squareBirthdays = new Map<string, string>();
+      for (const customer of customers) {
+        const id = String(customer?.id || '').trim();
+        const birthday = String(customer?.birthday || '').trim();
+        if (id && isValidBirthdate(birthday)) squareBirthdays.set(id, birthday);
+      }
+      if (squareBirthdays.size > 0) {
+        setStudents(prev => prev.map(student => {
+          if (!student.isRepresentative || !student.squareCustomerId) return student;
+          const birthday = squareBirthdays.get(student.squareCustomerId);
+          return birthday ? { ...student, birthdate: birthday, age: ageFromBirthdate(birthday) } : student;
+        }));
+      }
+
       // Square顧客は代表者（Parent）として管理し、
       // Square同期では代表者本人をStudentとして新規作成しません。
       // 既存のStudentデータは削除・変更しません。
       if (showAlert) {
         alert(
-          `Square顧客情報を受講生一覧へ同期しました。\n取得: ${customers.length}名\n受講生一覧へ反映しました。`
+          `Square顧客情報を同期しました。\n取得: ${customers.length}名\n生年月日も代表者情報に反映しました。`
         );
       }
     } catch (error) {
@@ -1788,6 +1953,7 @@ export default function ClientsPage() {
     if (target) {
       setEditForm({
         name: target.name,
+        birthdate: target.birthdate || '',
         kana: target.kana,
         phone: parents.find(p => p.id === target.parentId)?.phone || '',
         concern: target.concern,
@@ -1865,8 +2031,20 @@ export default function ClientsPage() {
     const name = childFormName.trim();
     if (!name) return alert('受講生のお名前を入力してください。');
     if (!childFormParentId) return alert('代表者を選択してください。');
+    if (!isValidBirthdate(childFormBirthdate)) return alert('生年月日を正しく入力してください。');
 
     if (editingChildId) {
+      const editingStudent = students.find(s => s.id === editingChildId);
+      if (editingStudent?.supabaseClientId) {
+        const { error } = await supabase.from('clients')
+          .update({ child_name: name, birth_date: childFormBirthdate, memo: childFormMemo.trim() || null })
+          .eq('id', editingStudent.supabaseClientId);
+        if (error) {
+          console.error('受講生生年月日の保存に失敗しました:', error);
+          alert('Supabaseへの保存に失敗しました。');
+          return;
+        }
+      }
       setStudents(prev =>
         prev.map(s =>
           s.id === editingChildId
@@ -1876,6 +2054,7 @@ export default function ClientsPage() {
                 name,
                 kana: childFormKana.trim(),
                 birthdate: childFormBirthdate,
+                age: ageFromBirthdate(childFormBirthdate),
                 memo: childFormMemo
               }
             : s
@@ -1891,7 +2070,8 @@ export default function ClientsPage() {
 
     const parent = parents.find(p => p.id === childFormParentId);
 
-    const { data: insertedClient, error: insertError } = await supabase
+
+      const { data: insertedClient, error: insertError } = await supabase
         .from('clients')
         .insert({
           parent_name: parent?.name || null,
@@ -2060,7 +2240,11 @@ export default function ClientsPage() {
               `code: ${insertClientError?.code || 'なし'}`,
               `message: ${insertClientError?.message || 'なし'}`,
               `details: ${insertClientError?.details || 'なし'}`,
-              `hint: ${insertClientError?.hint || 'なし'}`
+              `hint: ${insertClientError?.hint || 'なし'}`,
+              `raw birthdate: ${JSON.stringify(currentStudent.birthdate)}`,
+              `raw firstLessonDate: ${JSON.stringify(currentStudent.firstLessonDate)}`,
+              `send birth_date: ${JSON.stringify(clientInsertPayload.birth_date)}`,
+              `send first_session_date: ${JSON.stringify(clientInsertPayload.first_session_date)}`
             ].join('\\n')
           );
           return;
@@ -3297,10 +3481,12 @@ export default function ClientsPage() {
   };
 
   const handleSaveInfo = async () => {
+    if (!editForm.name.trim()) return alert('受講生のお名前を入力してください。');
+    if (!isValidBirthdate(editForm.birthdate)) return alert('生年月日を正しく入力してください。');
     const supabaseClientId = currentStudent.supabaseClientId;
     if (supabaseClientId) {
       const concernsAndGoals = [editForm.concern.trim(), editForm.target.trim()].filter(Boolean).join('。');
-      const { error } = await supabase.from('clients').update({ child_name: editForm.name.trim(), concerns_and_goals: concernsAndGoals || null, memo: editForm.memo.trim() || null }).eq('id', supabaseClientId);
+      const { error } = await supabase.from('clients').update({ child_name: editForm.name.trim(), birth_date: editForm.birthdate, concerns_and_goals: concernsAndGoals || null, memo: editForm.memo.trim() || null }).eq('id', supabaseClientId);
       if (error) {
         console.error('Supabase基本情報の保存に失敗しました:', error);
         alert('Supabaseへの保存に失敗しました。入力内容は画面上に反映しませんでした。');
@@ -3308,7 +3494,7 @@ export default function ClientsPage() {
       }
     }
     setStudents(prev =>
-      prev.map(s => (s.id === currentStudent.id ? { ...s, name: editForm.name, kana: editForm.kana, concern: editForm.concern, target: editForm.target, memo: editForm.memo } : s))
+      prev.map(s => (s.id === currentStudent.id ? { ...s, name: editForm.name, birthdate: editForm.birthdate, age: ageFromBirthdate(editForm.birthdate), kana: editForm.kana, concern: editForm.concern, target: editForm.target, memo: editForm.memo } : s))
     );
     setParents(prev =>
       prev.map(p => (p.id === currentParent.id ? { ...p, phone: editForm.phone } : p))
@@ -3607,6 +3793,9 @@ export default function ClientsPage() {
                           isSelected ? 'text-[#5e9bc4]' : 'text-slate-800'
                         }`}>
                           {student.name}
+                          {!isValidBirthdate(student.birthdate) && (
+                            <span className="block text-[10px] font-bold text-amber-700 mt-1">⚠️ 生年月日未登録</span>
+                          )}
                         </span>
 
                         {isSelected && (
@@ -3657,6 +3846,9 @@ export default function ClientsPage() {
                 <div className="flex justify-between items-start gap-2">
                   <span className="font-bold text-slate-800">
                     👤 {parent.name}
+                    {!isValidBirthdate(parent.birthday) && (
+                      <span className="block text-[10px] text-amber-700 mt-1">⚠️ 生年月日未登録</span>
+                    )}
                   </span>
                   <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
                     メンバー未登録
@@ -3710,6 +3902,9 @@ export default function ClientsPage() {
                     <h2 className="text-2xl font-bold text-slate-800 mt-1">
                       {selectedParent.name}
                     </h2>
+                    {!isValidBirthdate(selectedParent.birthday) && (
+                      <p className="text-xs font-bold text-amber-700 mt-2">⚠️ 生年月日未登録（Square側で登録後、同期してください）</p>
+                    )}
                     {selectedParent.kana && (
                       <p className="text-xs text-slate-500 mt-1">
                         {selectedParent.kana}
@@ -3778,9 +3973,12 @@ export default function ClientsPage() {
                   <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                     {currentStudent.name}
                     <span className="text-sm font-normal text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
-                      {currentStudent.age}歳
+                      {isValidBirthdate(currentStudent.birthdate) ? `${ageFromBirthdate(currentStudent.birthdate)}歳` : '年齢未登録'}
                     </span>
                   </h2>
+                  {!isValidBirthdate(currentStudent.birthdate) && (
+                    <p className="mt-2 text-xs font-bold text-amber-700">⚠️ 生年月日未登録：基本情報の編集から登録してください</p>
+                  )}
 
                   <div className="mt-2">
                     <span className="bg-sky-50 text-[#5e9bc4] border border-sky-200 font-bold px-3 py-1.5 rounded-full flex items-center gap-1 w-fit text-xs">
@@ -4970,6 +5168,13 @@ export default function ClientsPage() {
                     />
                   </div>
                   <div>
+                    <label className="block text-slate-500 font-semibold mb-1">生年月日（必須）</label>
+                    <input type="date" required max={new Date().toISOString().slice(0, 10)}
+                      value={editForm.birthdate}
+                      onChange={e => setEditForm({ ...editForm, birthdate: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 outline-none" />
+                  </div>
+                  <div>
                     <label className="block text-slate-500 font-semibold mb-1">フリガナ</label>
                     <input
                       type="text"
@@ -5082,7 +5287,7 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日</label><input type="date" value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
+        {isChildFormOpen && (<div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5"><h3 className="font-bold text-sm border-b pb-3">{editingChildId ? '✏️ グループメンバー情報を編集' : '＋ グループメンバーを追加'}</h3><div className="space-y-3 pt-4 text-xs"><div><label className="block text-slate-500 font-semibold mb-1">代表者</label><select value={childFormParentId} onChange={e=>setChildFormParentId(e.target.value)} className="w-full border rounded-lg p-2.5">{parents.map(p=><option key={p.id} value={p.id}>{p.name} 様</option>)}</select></div><div><label className="block text-slate-500 font-semibold mb-1">名前</label><input value={childFormName} onChange={e=>setChildFormName(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">フリガナ</label><input value={childFormKana} onChange={e=>setChildFormKana(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">生年月日（必須）</label><input type="date" required max={new Date().toISOString().slice(0, 10)} value={childFormBirthdate} onChange={e=>setChildFormBirthdate(e.target.value)} className="w-full border rounded-lg p-2.5" /></div><div><label className="block text-slate-500 font-semibold mb-1">メモ</label><textarea value={childFormMemo} onChange={e=>setChildFormMemo(e.target.value)} className="w-full border rounded-lg p-2.5 h-20" /></div></div><div className="flex justify-end gap-2 pt-4"><button type="button" onClick={()=>setIsChildFormOpen(false)} className="bg-slate-200 px-4 py-2 rounded-lg text-xs font-bold">キャンセル</button><button type="button" onClick={handleSaveChild} className="bg-[#5e9bc4] text-white px-4 py-2 rounded-lg text-xs font-bold">💾 保存</button></div></div></div>)}
       </main>
     </div>
   );
