@@ -3417,17 +3417,12 @@ export default function ClientsPage() {
         return;
       }
 
-      try {
-        const latestPhotos = await loadNasMeasurementPhotos(clientId);
-        if (currentStudent?.supabaseClientId === clientId) {
-          setNasMeasurementPhotos(latestPhotos);
-        }
-      } catch (refreshError) {
-        console.error('削除後の写真一覧更新エラー:', refreshError);
-        alert(
-          '写真の更新は完了しました。表示が古い場合は画面を再読み込みしてください。'
+      // 削除成功後、取得済みの一覧から古い写真だけを除外する。
+      // NASやSupabaseへの再取得は行わない。
+      if (currentStudent?.supabaseClientId === clientId) {
+        setNasMeasurementPhotos(
+          photos.filter(photo => photo.id !== previousPhoto.id)
         );
-        return;
       }
 
       alert('写真を更新しました。古い写真もNASから削除しました。');
