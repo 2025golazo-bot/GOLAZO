@@ -8,39 +8,88 @@ import { createClient } from '@/lib/supabase/client';
 import { heicTo } from 'heic-to';
 
 // HEIC / HEIFだけJPEGへ変換し、それ以外は元ファイルをそのまま返す
-const prepareImageForUpload = async (file: File): Promise<File> => {
-  const lowerName = file.name.toLowerCase();
-
+const prepareImageForUpload = async (
+  file: File,
+  category?: 'posture' | 'ear' | 'measurement'
+): Promise<File> => {
   const isHeic =
-    lowerName.endsWith('.heic') ||
-    lowerName.endsWith('.heif') ||
+    /\.(heic|heif)$/i.test(file.name) ||
     file.type === 'image/heic' ||
     file.type === 'image/heif';
 
-  if (!isHeic) {
-    return file;
-  }
+  let source: Blob = file;
 
-  const converted = await heicTo({
-    blob: file,
-    type: 'image/jpeg',
-    quality: 0.9,
-  });
-
-  if (!(converted instanceof Blob)) {
-    throw new Error('HEIC写真をJPEGへ変換できませんでした。');
-  }
-
-  const baseName = file.name.replace(/\.(heic|heif)$/i, '');
-
-  return new File(
-    [converted],
-    `${baseName}.jpg`,
-    {
+  if (isHeic) {
+    const converted = await heicTo({
+      blob: file,
       type: 'image/jpeg',
-      lastModified: Date.now(),
+      quality: 0.9,
+    });
+
+    if (!(converted instanceof Blob)) {
+      throw new Error('HEIC写真をJPEGへ変換できませんでした。');
     }
-  );
+    source = converted;
+  }
+
+  // 通常のセッション写真は、既存の変換方式を維持する。
+  if (!category) {
+    if (!isHeic) return file;
+    return new File(
+      [source],
+      file.name.replace(/\.(heic|heif)$/i, '.jpg'),
+      { type: 'image/jpeg', lastModified: Date.now() }
+    );
+  }
+
+  const maxDimension = category === 'measurement' ? 2400 : 1600;
+  const quality = category === 'measurement' ? 0.9 : 0.82;
+
+  try {
+    const bitmap = await createImageBitmap(source);
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(bitmap.width, bitmap.height)
+    );
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('画像処理を開始できません');
+
+    // 白背景を敷いてからJPEGへ変換する。
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const optimized = await new Promise<Blob | null>(resolve => {
+      canvas.toBlob(resolve, 'image/jpeg', quality);
+    });
+
+    if (!optimized) throw new Error('画像の変換に失敗しました');
+
+    const result = new File(
+      [optimized],
+      file.name.replace(/\.[^.]+$/, '') + '.jpg',
+      { type: 'image/jpeg', lastModified: Date.now() }
+    );
+
+    if (!isHeic && result.size >= file.size) return file;
+    return result;
+  } catch (error) {
+    console.warn('写真軽量化をスキップ:', error);
+
+    if (!isHeic) return file;
+
+    return new File(
+      [source],
+      file.name.replace(/\.(heic|heif)$/i, '.jpg'),
+      { type: 'image/jpeg', lastModified: Date.now() }
+    );
+  }
 };
 
 // 生年月日は YYYY-MM-DD の実在する日付のみ有効とする。
@@ -3279,7 +3328,7 @@ export default function ClientsPage() {
     }
 
     const clientId = await resolvePhotoClientId();
-    const uploadFile = await prepareImageForUpload(file);
+    const uploadFile = await prepareImageForUpload(file, category);
 
     const formData = new FormData();
     formData.append('clientId', clientId);
