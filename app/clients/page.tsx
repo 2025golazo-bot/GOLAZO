@@ -4315,15 +4315,29 @@ export default function ClientsPage() {
                   </div>
 
 
-                  <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-700">
-                        🏋️ セッション種目
-                      </h4>
-                      <p className="mt-1 text-[11px] text-slate-400">
-                        保存した種目を選択して、重量・回数・セットを記録できます。
-                      </p>
-                    </div>
+                  <details className="group rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-700">
+                          🏋️ セッション種目
+                          {selectedSessionExercises.length > 0 && (
+                            <span className="ml-2 text-[#5e9bc4]">
+                              {selectedSessionExercises.length}種目選択中
+                            </span>
+                          )}
+                        </h4>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          クリックして種目を選択・編集
+                        </p>
+                      </div>
+                      <span className="text-[#5e9bc4] text-xs font-bold group-open:hidden">
+                        ▼ 開く
+                      </span>
+                      <span className="text-[#5e9bc4] text-xs font-bold hidden group-open:inline">
+                        ▲ 閉じる
+                      </span>
+                    </summary>
+                    <div className="mt-4 space-y-3">
 
                     <div className="flex flex-col sm:flex-row gap-2">
                       <input
@@ -4529,7 +4543,8 @@ export default function ClientsPage() {
                         まだ保存された種目はありません。「＋ 種目を保存」から登録してください。
                       </p>
                     )}
-                  </div>
+                    </div>
+                  </details>
 
 
                   <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
@@ -4549,10 +4564,10 @@ export default function ClientsPage() {
                   }))}
                 />
 
-                {/* 時系列セッション履歴 */}
+                {/* セッション履歴 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📅</span> 時系列セッション履歴</h3>
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📅</span> セッション履歴</h3>
                     <div className="flex items-center gap-2 text-xs bg-slate-50 p-1.5 rounded-lg border border-slate-200">
                       <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="border rounded p-1 font-bold text-[#5e9bc4]">
                         <option value="ALL">全年度</option>
