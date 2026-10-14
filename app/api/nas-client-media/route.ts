@@ -106,15 +106,34 @@ export async function POST(request: Request) {
 
     const sessionId = form.get("sessionId");
     const takenDate = form.get("takenDate");
+    const categoryInput = form.get("category");
+    const category =
+      categoryInput === null ? "session" : categoryInput;
+    const photoTypeInput = form.get("photoType");
+
+    const allowedPhotoTypes: Record<string, string[]> = {
+      session: [],
+      posture: ["front", "side", "back"],
+      ear: ["beforeRight", "afterRight", "beforeLeft", "afterLeft"],
+      measurement: ["physicalCheck", "injuryZero"],
+    };
+
+    const photoType =
+      category === "session" ? null : photoTypeInput;
 
     if (
-      typeof sessionId !== "string" ||
-      !sessionId.trim() ||
+      typeof category !== "string" ||
+      !["session", "posture", "ear", "measurement"].includes(category) ||
+      (category !== "session" &&
+        (typeof photoType !== "string" ||
+          !allowedPhotoTypes[category]?.includes(photoType))) ||
       typeof takenDate !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(takenDate)
+      !/^\d{4}-\d{2}-\d{2}$/.test(takenDate) ||
+      (category === "session" &&
+        (typeof sessionId !== "string" || !sessionId.trim()))
     ) {
       return NextResponse.json(
-        { ok: false, error: "セッション情報が不正です" },
+        { ok: false, error: "写真の登録情報が不正です" },
         { status: 400 }
       );
     }
@@ -182,8 +201,10 @@ export async function POST(request: Request) {
         storage_path: storagePath,
         file_name: file.name,
         media_type: "image",
-        category: "session",
-        session_id: sessionId,
+        category,
+        photo_type: photoType,
+        session_id:
+          category === "session" ? sessionId : null,
         taken_date: takenDate,
       })
       .select("id")

@@ -1,7 +1,8 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef} from 'react';
 import Header from '@/components/Header';
+import MeasurementTrendChart from '@/components/MeasurementTrendChart';
 import ClientMediaManager from '@/components/ClientMediaManager';
 import { createClient } from '@/lib/supabase/client';
 import { heicTo } from 'heic-to';
@@ -95,6 +96,16 @@ interface MeasurementAttachment {
   name: string;
   type: string;
   dataUrl: string;
+}
+
+interface NasMeasurementPhoto {
+  id: string;
+  client_id: string;
+  storage_path: string;
+  category: 'posture' | 'ear' | 'measurement';
+  photo_type: string;
+  taken_date: string;
+  created_at: string;
 }
 
 interface PhysicalData {
@@ -1152,8 +1163,8 @@ export default function ClientsPage() {
   const [beforeDate, setBeforeDate] = useState<string>(physicalDates[0] || '2026-06-01');
   const [afterDate, setAfterDate] = useState<string>(physicalDates[physicalDates.length - 1] || '2026-09-01');
 
-  const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate) || currentStudent.physicalHistory[0];
-  const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate) || currentStudent.physicalHistory[currentStudent.physicalHistory.length - 1];
+  const beforePhysical = currentStudent.physicalHistory.find(m => m.date === beforeDate);
+  const afterPhysical = currentStudent.physicalHistory.find(m => m.date === afterDate);
 
   // 顧客を切り替えたとき、Before / Afterの測定日をその顧客の履歴へ自動追従させる
   useEffect(() => {
@@ -1170,6 +1181,19 @@ export default function ClientsPage() {
   }, [currentStudent.id]);
 
   const [newMeasureDate, setNewMeasureDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  // 新規セッション記録内の定期測定入力
+  const [sessionMeasureDate, setSessionMeasureDate] = useState<string>('');
+  const [sessionMeasureWeight, setSessionMeasureWeight] = useState<string>('');
+  const [sessionMeasureFat, setSessionMeasureFat] = useState<string>('');
+  const [sessionMeasureMuscle, setSessionMeasureMuscle] = useState<string>('');
+  const [isSavingSessionMeasure, setIsSavingSessionMeasure] = useState(false);
+  const [sessionPostureDate, setSessionPostureDate] = useState<string>('');
+  const [isUploadingMeasurementPhoto, setIsUploadingMeasurementPhoto] = useState(false);
+  const [nasMeasurementPhotos, setNasMeasurementPhotos] = useState<NasMeasurementPhoto[]>([]);
+  const [isLoadingNasMeasurementPhotos, setIsLoadingNasMeasurementPhotos] = useState(false);
+
+
+
 
   // 測定履歴編集用ステート
   const [editingMeasureId, setEditingMeasureId] = useState<string | null>(null);
@@ -1184,6 +1208,10 @@ export default function ClientsPage() {
   const [newSessionContent, setNewSessionContent] = useState<string>('');
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
   const [newSessionPhotoUrl, setNewSessionPhotoUrl] = useState<string | null>(null);
+  const [pendingSessionPhotos, setPendingSessionPhotos] = useState<File[]>([]);
+  const [pendingPhotoSessionId, setPendingPhotoSessionId] = useState<string | null>(null);
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  const savingSessionRef = useRef(false);
   const [sessionTemplates, setSessionTemplates] = useState<SessionTemplate[]>([]);
   const [selectedSessionExercises, setSelectedSessionExercises] = useState<SessionExercise[]>([]);
   const [newSessionTemplateName, setNewSessionTemplateName] = useState<string>('');
@@ -1950,6 +1978,8 @@ export default function ClientsPage() {
   const handleSelectStudent = (id: string) => {
     setSelectedParentId(null);
     setSelectedStudentId(id);
+    setNasMeasurementPhotos([]);
+    setIsLoadingNasMeasurementPhotos(false);
     const target = students.find(s => s.id === id);
     if (target) {
       setEditForm({
@@ -2145,7 +2175,80 @@ export default function ClientsPage() {
 
   const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの受講生のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('受講生を削除しました。'); };
 
+  const [retryingSessionPhotos, setRetryingSessionPhotos] = useState(false);
+
+  const handleRetrySessionPhotos = async () => {
+    if (!pendingPhotoSessionId || pendingSessionPhotos.length === 0 || retryingSessionPhotos) return;
+
+    const session = currentStudent.sessions.find(
+      item => item.id === pendingPhotoSessionId
+    );
+
+    if (!session || !currentStudent.supabaseClientId) {
+      alert('写真の登録先セッションを確認できません。');
+      return;
+    }
+
+    setRetryingSessionPhotos(true);
+    const failedPhotos: File[] = [];
+    let savedCount = 0;
+
+    try {
+      for (const file of pendingSessionPhotos) {
+        try {
+          if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(file.type)) {
+            throw new Error('対応していない写真形式です');
+          }
+          if (file.size === 0 || file.size > 4 * 1024 * 1024) {
+            throw new Error('写真は1枚4MB以下にしてください');
+          }
+
+          const formData = new FormData();
+          formData.append('clientId', currentStudent.supabaseClientId);
+          formData.append('sessionId', session.id);
+          formData.append('takenDate', session.date);
+          formData.append('file', file);
+
+          const response = await fetch('/api/nas-client-media', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const result = await response.json().catch(() => null);
+
+          if (!response.ok || !result?.ok) {
+            throw new Error(result?.error || 'NASへの保存に失敗しました');
+          }
+
+          savedCount++;
+        } catch (error) {
+          console.error('NAS写真再送エラー:', file.name, error);
+          failedPhotos.push(file);
+        }
+      }
+
+      setPendingSessionPhotos(failedPhotos);
+
+      if (failedPhotos.length === 0) {
+        setPendingPhotoSessionId(null);
+        alert(`写真${savedCount}枚をNASに保存しました！`);
+      } else {
+        alert(`写真${savedCount}枚保存、${failedPhotos.length}枚未保存です。再送できます。`);
+      }
+    } finally {
+      setRetryingSessionPhotos(false);
+    }
+  };
+
   const handleAddSession = async () => {
+    if (savingSessionRef.current) return;
+    savingSessionRef.current = true;
+    setIsSavingSession(true);
+    try {
+    if (pendingPhotoSessionId) {
+      alert('前回のセッションは登録済みです。未保存の写真を先に再送してください。');
+      return;
+    }
     if (!newSessionContent.trim() && selectedSessionExercises.length === 0) {
       alert('セッション内容を入力するか、種目を1つ以上選択してください。');
       return;
@@ -2322,7 +2425,59 @@ export default function ClientsPage() {
     setNewSessionHomework('');
     setNewSessionPhotoUrl(null);
     setSelectedSessionExercises([]);
-    alert('セッションを登録しました！');
+
+    if (pendingSessionPhotos.length > 0) {
+      const failedPhotos: File[] = [];
+      let savedCount = 0;
+
+      for (const file of pendingSessionPhotos) {
+        try {
+          if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(file.type)) {
+            throw new Error('対応していない写真形式です');
+          }
+          if (file.size === 0 || file.size > 4 * 1024 * 1024) {
+            throw new Error('写真は1枚4MB以下にしてください');
+          }
+
+          const formData = new FormData();
+          formData.append('clientId', supabaseClientId!);
+          formData.append('sessionId', localSessionId);
+          formData.append('takenDate', newSessionDate);
+          formData.append('file', file);
+
+          const response = await fetch('/api/nas-client-media', {
+            method: 'POST',
+            body: formData,
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok || !result?.ok) {
+            throw new Error(result?.error || 'NASへの保存に失敗しました');
+          }
+          savedCount++;
+        } catch (error) {
+          console.error('NAS写真保存エラー:', file.name, error);
+          failedPhotos.push(file);
+        }
+      }
+
+      setPendingSessionPhotos(failedPhotos);
+      setPendingPhotoSessionId(failedPhotos.length > 0 ? localSessionId : null);
+
+      if (failedPhotos.length > 0) {
+        alert(
+          `セッションは登録しました。写真${savedCount}枚保存、${failedPhotos.length}枚未保存です。` +
+          '未保存の写真は選択状態に残しています。'
+        );
+      } else {
+        alert(`セッションと写真${savedCount}枚をNASに保存しました！`);
+      }
+    } else {
+      alert('セッションを登録しました！');
+    }
+    } finally {
+      savingSessionRef.current = false;
+      setIsSavingSession(false);
+    }
   };
 
   const handleSaveEditSession = async (sessionId: string) => {
@@ -2973,6 +3128,227 @@ export default function ClientsPage() {
     e.target.value = '';
   };
 
+  const loadNasMeasurementPhotos = async (
+    clientId: string
+  ): Promise<NasMeasurementPhoto[]> => {
+    const { data, error } = await supabase
+      .from('client_media')
+      .select('id, client_id, storage_path, category, photo_type, taken_date, created_at')
+      .eq('client_id', clientId)
+      .in('category', ['posture', 'ear', 'measurement'])
+      .like('storage_path', 'nas:%')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error('NAS写真情報の読み込みに失敗しました');
+    }
+
+    return (data || []).filter(
+      (item): item is NasMeasurementPhoto =>
+        typeof item.photo_type === 'string' &&
+        typeof item.taken_date === 'string' &&
+        ['posture', 'ear', 'measurement'].includes(item.category)
+    );
+  };
+
+  useEffect(() => {
+    const clientId = currentStudent?.supabaseClientId;
+
+    let cancelled = false;
+
+    setNasMeasurementPhotos([]);
+
+    if (!clientId) {
+      setIsLoadingNasMeasurementPhotos(false);
+      return;
+    }
+
+    setIsLoadingNasMeasurementPhotos(true);
+
+    loadNasMeasurementPhotos(clientId)
+      .then(photos => {
+        if (!cancelled) {
+          setNasMeasurementPhotos(photos);
+        }
+      })
+      .catch(error => {
+        if (!cancelled) {
+          console.error('NAS写真情報の読み込みエラー:', error);
+          setNasMeasurementPhotos([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingNasMeasurementPhotos(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStudent?.supabaseClientId]);
+
+  const findNasMeasurementPhoto = (
+    date: string,
+    category: 'posture' | 'ear' | 'measurement',
+    photoType: string
+  ): NasMeasurementPhoto | undefined => {
+    if (
+      isLoadingNasMeasurementPhotos ||
+      !currentStudent?.supabaseClientId
+    ) {
+      return undefined;
+    }
+
+    return nasMeasurementPhotos.find(photo =>
+      photo.client_id === currentStudent.supabaseClientId &&
+      photo.taken_date === date &&
+      photo.category === category &&
+      photo.photo_type === photoType
+    );
+  };
+
+  const getNasMeasurementPhotoUrl = (
+    photo: NasMeasurementPhoto
+  ): string =>
+    '/api/nas-client-media/view?path=' +
+    encodeURIComponent(photo.storage_path);
+
+  const deleteNasMeasurementPhoto = async (
+    photo: NasMeasurementPhoto
+  ): Promise<boolean> => {
+    if (!confirm("この写真をNASから削除しますか？")) {
+      return false;
+    }
+
+    if (isUploadingMeasurementPhoto) {
+      alert("別の写真を処理中です。少し待ってからお試しください。");
+      return false;
+    }
+
+    setIsUploadingMeasurementPhoto(true);
+
+    try {
+      const clientId = await resolvePhotoClientId();
+
+      if (clientId !== photo.client_id) {
+        throw new Error("顧客情報が一致しないため削除を中止しました。");
+      }
+
+      const response = await fetch("/api/nas-client-media/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaId: photo.id,
+          clientId,
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "写真の削除に失敗しました。");
+      }
+
+      const photos = await loadNasMeasurementPhotos(clientId);
+      setNasMeasurementPhotos(photos);
+
+      alert("写真を削除しました。");
+      return true;
+    } catch (error) {
+      console.error("NAS写真削除エラー:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "写真の削除に失敗しました。"
+      );
+      return false;
+    } finally {
+      setIsUploadingMeasurementPhoto(false);
+    }
+  };
+
+  const uploadMeasurementPhotoToNas = async (
+    file: File,
+    category: 'posture' | 'ear' | 'measurement',
+    photoType: string,
+    takenDate: string
+  ) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(takenDate)) {
+      throw new Error('登録日を確認してください');
+    }
+
+    const clientId = await resolvePhotoClientId();
+    const uploadFile = await prepareImageForUpload(file);
+
+    const formData = new FormData();
+    formData.append('clientId', clientId);
+    formData.append('category', category);
+    formData.append('photoType', photoType);
+    formData.append('takenDate', takenDate);
+    formData.append('file', uploadFile);
+
+    const response = await fetch('/api/nas-client-media', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || 'NASへの写真保存に失敗しました');
+    }
+
+    return result as {
+      ok: true;
+      id: string;
+      storagePath: string;
+    };
+  };
+
+  const handleNasMeasurementPhotoUpload = async (
+    file: File,
+    category: 'posture' | 'ear' | 'measurement',
+    photoType: string,
+    takenDate: string
+  ) => {
+    if (isUploadingMeasurementPhoto) return;
+
+    setIsUploadingMeasurementPhoto(true);
+
+    try {
+      const clientId = await resolvePhotoClientId();
+
+      await uploadMeasurementPhotoToNas(
+        file,
+        category,
+        photoType,
+        takenDate
+      );
+
+      try {
+        const photos = await loadNasMeasurementPhotos(clientId);
+        if (currentStudent?.supabaseClientId === clientId) {
+          setNasMeasurementPhotos(photos);
+          setIsLoadingNasMeasurementPhotos(false);
+        }
+        alert('写真をNASに保存しました');
+      } catch (refreshError) {
+        console.error('NAS写真一覧の更新エラー:', refreshError);
+        alert('写真はNASに保存されましたが、一覧の更新に失敗しました。画面を再読み込みしてください。');
+      }
+    } catch (error) {
+      console.error('NAS写真保存エラー:', error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : '写真の保存に失敗しました'
+      );
+    } finally {
+      setIsUploadingMeasurementPhoto(false);
+    }
+  };
+
   const handleUpdateEarAcupuncturePhoto = (targetDate: string, keyName: 'beforeRight' | 'afterRight' | 'beforeLeft' | 'afterLeft', dataUrl: string | null) => {
     setStudents(prev =>
       prev.map(s => {
@@ -3364,6 +3740,125 @@ export default function ClientsPage() {
         return { ...s, physicalHistory: updatedHistory };
       })
     );
+  };
+
+  // 新規セッション記録内の測定結果を単独保存
+  const handleSaveSessionMeasurement = async () => {
+    if (isSavingSessionMeasure) return;
+
+    const date = sessionMeasureDate || newSessionDate;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        Number.isNaN(Date.parse(date))) {
+      alert('正しい測定日を入力してください。');
+      return;
+    }
+
+    const entries = [
+      { key: 'weight', db: 'weight', raw: sessionMeasureWeight },
+      { key: 'fat', db: 'body_fat', raw: sessionMeasureFat },
+      { key: 'muscle', db: 'muscle_mass', raw: sessionMeasureMuscle },
+    ] as const;
+
+    const filled = entries.filter(item => item.raw.trim() !== '');
+    if (filled.length === 0) {
+      alert('測定値を1つ以上入力してください。');
+      return;
+    }
+
+    if (filled.some(item =>
+      !Number.isFinite(Number(item.raw)) || Number(item.raw) <= 0
+    )) {
+      alert('測定値には0より大きい数値を入力してください。');
+      return;
+    }
+
+    setIsSavingSessionMeasure(true);
+
+    try {
+      // 既存の顧客IDを使用。曖昧な顧客検索や自動作成は行わない。
+      const clientId = currentStudent.supabaseClientId;
+      if (!clientId) {
+        alert('Supabase顧客IDがありません。先に顧客情報の連携を確認してください。');
+        return;
+      }
+
+      const payload: Record<string, number> = {};
+      for (const item of filled) {
+        payload[item.db] = Number(item.raw);
+      }
+
+      const { data: existing, error: findError } = await supabase
+        .from('measurements')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('measurement_date', date)
+        .maybeSingle();
+
+      if (findError) throw findError;
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from('measurements')
+          .update(payload)
+          .eq('id', existing.id)
+          .eq('client_id', clientId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('measurements')
+          .insert({
+            client_id: clientId,
+            measurement_date: date,
+            ...payload,
+          });
+        if (error) throw error;
+      }
+
+      setStudents(prev => prev.map(student => {
+        if (student.id !== currentStudent.id) return student;
+
+        const previous = student.physicalHistory.find(m => m.date === date);
+        const updated = previous
+          ? {
+              ...previous,
+              weight: payload.weight ?? previous.weight,
+              fat: payload.body_fat ?? previous.fat,
+              muscle: payload.muscle_mass ?? previous.muscle,
+            }
+          : {
+              id: `m-${Date.now()}`,
+              date,
+              weight: payload.weight ?? 0,
+              fat: payload.body_fat ?? 0,
+              muscle: payload.muscle_mass ?? 0,
+              note: '定期計測',
+              posturePhotos: { front: null, side: null, back: null },
+              physicalCheckFiles: [],
+              injuryZeroFiles: [],
+              testPhotos: [],
+            };
+
+        return {
+          ...student,
+          physicalHistory: [
+            ...student.physicalHistory.filter(m => m.date !== date),
+            updated,
+          ].sort((a, b) => a.date.localeCompare(b.date)),
+        };
+      }));
+
+      setAfterDate(date);
+      setSessionMeasureDate('');
+      setSessionMeasureWeight('');
+      setSessionMeasureFat('');
+      setSessionMeasureMuscle('');
+      alert('測定結果を保存しました。');
+    } catch (error) {
+      console.error('新規測定結果の保存に失敗しました:', error);
+      alert('測定結果を保存できませんでした。');
+    } finally {
+      setIsSavingSessionMeasure(false);
+    }
   };
 
   const handleSavePhysicalMeasurements = async () => {
@@ -4275,10 +4770,10 @@ export default function ClientsPage() {
             {activeTab === 'carte' && (
               <div className="space-y-6">
 
-                {/* 新規セッション記録の追加 */}
+                {/* 新規セッション記録 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-3">
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✍️</span> 新規セッション記録の追加</h3>
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>✍️</span> 新規セッション記録</h3>
                     <div className="flex items-center gap-2 text-xs">
                       <label className="flex items-center gap-1 font-semibold text-slate-600 cursor-pointer">
                         <input
@@ -4300,8 +4795,8 @@ export default function ClientsPage() {
                     <div>
                       <label className="block text-slate-500 mb-1 font-semibold">担当トレーナー</label>
                       <select value={newSessionStaff} onChange={e => setNewSessionStaff(e.target.value as 'TAKA' | 'NANA')} className="w-full border border-slate-300 rounded-lg p-2 font-bold text-[#5e9bc4] outline-none">
-                        <option value="TAKA">TAKA (藤田 渉仁)</option>
-                        <option value="NANA">NANA (藤田 奈々)</option>
+                        <option value="TAKA">TAKA</option>
+                        <option value="NANA">NANA</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
@@ -4547,7 +5042,337 @@ export default function ClientsPage() {
                   </details>
 
 
-                  <button onClick={handleAddSession} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm">
+                  <details className="group rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                      <span>📸 写真・動画 {pendingSessionPhotos.length > 0 ? `（写真${pendingSessionPhotos.length}枚選択中）` : ''}</span>
+                      <span className="text-[#5e9bc4] group-open:hidden">▼ 開く</span>
+                      <span className="hidden text-[#5e9bc4] group-open:inline">▲ 閉じる</span>
+                    </summary>
+                    <div className="mt-4 space-y-2">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/heic"
+                        multiple
+                        onChange={e => {
+                          const files = Array.from(e.target.files || []);
+                          setPendingSessionPhotos(files);
+                        }}
+                        className="block w-full text-xs text-slate-600"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        写真は1枚4MB以下。動画はNAS保存対応後に追加できます。
+                      </p>
+                      <p className="text-[11px] text-amber-700">
+                        セッション登録後、写真をNASに自動保存します。保存に失敗した写真は再送できます。
+                      </p>
+                    </div>
+                  </details>
+
+                  {pendingPhotoSessionId && (
+                    <button
+                      type="button"
+                      disabled={retryingSessionPhotos}
+                      onClick={() => void handleRetrySessionPhotos()}
+                      className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      {retryingSessionPhotos
+                        ? '写真を再送しています...'
+                        : `📸 未保存の写真${pendingSessionPhotos.length}枚を再送する`}
+                    </button>
+                  )}
+
+                  {/* 新規セッション内の定期測定入力欄 */}
+                  <details className="group rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                      <span>📊 定期測定</span>
+                      <span className="text-[#5e9bc4] group-open:hidden">▼ 開く</span>
+                      <span className="hidden text-[#5e9bc4] group-open:inline">▲ 閉じる</span>
+                    </summary>
+                    <div className="mt-4 space-y-3 text-xs">
+                      <p className="text-slate-500">
+                        測定結果を入力します。保存機能は次のステップで接続します。
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label className="space-y-1">
+                          <span className="block font-semibold text-slate-600">測定日</span>
+                          <input
+                            type="date"
+                            value={sessionMeasureDate || newSessionDate} onChange={e => setSessionMeasureDate(e.target.value)}
+                            className="w-full rounded-lg border border-slate-300 bg-white p-2"
+                          />
+                        </label>
+                        {[
+                          { label: '体重（kg）', placeholder: '例：60.5', value: sessionMeasureWeight, setter: setSessionMeasureWeight },
+                          { label: '体脂肪率（%）', placeholder: '例：22.0', value: sessionMeasureFat, setter: setSessionMeasureFat },
+                          { label: '筋肉量（kg）', placeholder: '例：38.5', value: sessionMeasureMuscle, setter: setSessionMeasureMuscle }
+                        ].map(item => (
+                          <label key={item.label} className="space-y-1">
+                            <span className="block font-semibold text-slate-600">{item.label}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              placeholder={item.placeholder}
+                              value={item.value}
+                              onChange={e => item.setter(e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 bg-white p-2"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveSessionMeasurement}
+                        disabled={isSavingSessionMeasure}
+                        className="mt-3 rounded-lg bg-[#5e9bc4] px-4 py-2 font-semibold text-white disabled:opacity-50"
+                      >
+                        {isSavingSessionMeasure ? '保存中...' : '💾 測定結果を保存'}
+                      </button>
+                    </div>
+                  </details>
+
+                  {/* 新規セッション内の耳ツボ写真登録欄 */}
+                  <details className="group rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                        <span>👂 耳ツボ写真</span>
+                        <span className="text-[#5e9bc4] group-open:hidden">▼ 開く</span>
+                        <span className="hidden text-[#5e9bc4] group-open:inline">▲ 閉じる</span>
+                      </summary>
+                    <div className="mt-4 space-y-3 text-xs">
+  <label className="block space-y-1">
+    <span className="block font-semibold text-slate-600">写真の登録日</span>
+    <input
+      type="date"
+      value={sessionPostureDate || newSessionDate}
+      onChange={e => setSessionPostureDate(e.target.value)}
+      className="w-full max-w-xs rounded-lg border border-slate-300 bg-white p-2"
+    />
+  </label>
+  <div className="grid grid-cols-2 gap-3">
+    {[
+      { key: 'beforeRight' as const, label: '右耳 Before' },
+      { key: 'afterRight' as const, label: '右耳 After' },
+      { key: 'beforeLeft' as const, label: '左耳 Before' },
+      { key: 'afterLeft' as const, label: '左耳 After' }
+    ].map(item => {
+      const photo = findNasMeasurementPhoto(
+        sessionPostureDate || newSessionDate,
+        'ear',
+        item.key
+      );
+
+      return (
+        <div
+          key={item.key}
+          className="rounded-lg border border-slate-300 bg-white p-3 text-center"
+        >
+          <span className="block font-semibold text-slate-700">
+            {item.label}
+          </span>
+
+          {photo && (
+            <div className="mt-2 space-y-2">
+              <img
+                src={getNasMeasurementPhotoUrl(photo)}
+                alt={item.label}
+                className="mx-auto h-28 w-full rounded border object-contain"
+              />
+              <button
+                type="button"
+                disabled={isUploadingMeasurementPhoto}
+                onClick={() => void deleteNasMeasurementPhoto(photo)}
+                className="text-xs font-bold text-rose-600 disabled:opacity-50"
+              >
+                写真を削除
+              </button>
+            </div>
+          )}
+
+          <label className="mt-3 block cursor-pointer font-bold text-[#5e9bc4]">
+            {photo ? '写真を更新' : '＋ 写真を選択'}
+            <input
+              type="file"
+              accept="image/*"
+              disabled={isUploadingMeasurementPhoto}
+              className="hidden"
+              onChange={async e => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                await handleNasMeasurementPhotoUpload(
+                  file,
+                  'ear',
+                  item.key,
+                  sessionPostureDate || newSessionDate
+                );
+              }}
+            />
+          </label>
+        </div>
+      );
+    })}
+  </div>
+</div>
+</details>
+
+                  {/* 新規セッション内の姿勢・測定シート登録欄 */}
+                  <details className="group rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                      <span>🧍 姿勢＆測定シート</span>
+                      <span className="text-[#5e9bc4] group-open:hidden">▼ 開く</span>
+                      <span className="hidden text-[#5e9bc4] group-open:inline">▲ 閉じる</span>
+                    </summary>
+                    <div className="mt-4 space-y-3 text-xs text-slate-600">
+                      <label className="block space-y-1">
+                        <span className="block font-semibold">登録日</span>
+                        <input
+                          type="date"
+                          value={sessionPostureDate || newSessionDate}
+                          onChange={e => setSessionPostureDate(e.target.value)}
+                          className="w-full max-w-xs rounded-lg border border-slate-300 bg-white p-2"
+                        />
+                      </label>
+                      <div className="space-y-2">
+                        <p className="font-bold">📸 姿勢写真</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {[
+                            { key: 'front' as const, label: '正面' },
+                            { key: 'side' as const, label: '側面' },
+                            { key: 'back' as const, label: '背面' }
+                          ].map(item => (
+                            <div key={item.key} className="rounded-lg border border-slate-300 bg-white p-3 text-center">
+  <span className="block font-semibold">{item.label}</span>
+  {(() => {
+    const photo = findNasMeasurementPhoto(
+      sessionPostureDate || newSessionDate,
+      'posture',
+      item.key
+    );
+
+    return photo ? (
+      <div className="mt-2">
+        <img
+          src={getNasMeasurementPhotoUrl(photo)}
+          alt={item.label}
+          className="mx-auto h-28 w-full rounded border object-contain"
+        />
+        <button
+          type="button"
+          disabled={isUploadingMeasurementPhoto}
+          onClick={() => void deleteNasMeasurementPhoto(photo)}
+          className="mt-2 text-xs font-bold text-rose-600 disabled:opacity-50"
+        >
+          写真を削除
+        </button>
+      </div>
+    ) : null;
+  })()}
+<label
+                              
+                              className="block cursor-pointer text-xs font-bold text-[#5e9bc4] mt-2"
+                            >
+                              <span className="block font-semibold">{item.label}</span>
+                              <span className="mt-2 block text-[#5e9bc4]">
+                                {findNasMeasurementPhoto(
+                                    sessionPostureDate || newSessionDate,
+                                    'posture',
+                                    item.key
+                                  ) ? '写真を更新' : '＋ 写真を選択'}
+                              </span>
+                              <input
+                                type="file"
+                                  disabled={isUploadingMeasurementPhoto}
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async e => {
+                                  const file = e.target.files?.[0];
+                                  e.target.value = '';
+                                  if (!file) return;
+                                  await handleNasMeasurementPhotoUpload(
+                                    file,
+                                    'posture',
+                                    item.key,
+                                    sessionPostureDate || newSessionDate
+                                  );
+                                }}
+                              />
+                            </label>
+</div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          { type: 'physicalCheck' as const, label: 'フィジカルチェック測定シート' },
+                          { type: 'injuryZero' as const, label: 'ケガゼロ測定シート' }
+                        ].map(item => (
+                          <div key={item.type} className="rounded-lg border border-slate-300 bg-white p-3 text-center">
+  <span className="block font-semibold">{item.label}</span>
+  {(() => {
+    const photo = findNasMeasurementPhoto(
+      sessionPostureDate || newSessionDate,
+      'measurement',
+      item.type
+    );
+
+    return photo ? (
+      <div className="mt-2">
+        <img
+          src={getNasMeasurementPhotoUrl(photo)}
+          alt={item.label}
+          className="mx-auto h-28 w-full rounded border object-contain"
+        />
+        <button
+          type="button"
+          disabled={isUploadingMeasurementPhoto}
+          onClick={() => void deleteNasMeasurementPhoto(photo)}
+          className="mt-2 text-xs font-bold text-rose-600 disabled:opacity-50"
+        >
+          写真を削除
+        </button>
+      </div>
+    ) : null;
+  })()}
+<label
+                            
+                            className="mt-2 block cursor-pointer text-xs font-bold text-[#5e9bc4]"
+                          >
+                            <span className="block font-semibold">{item.label}</span>
+                            <span className="mt-2 block text-[#5e9bc4]">
+                              {findNasMeasurementPhoto(
+      sessionPostureDate || newSessionDate,
+      'measurement',
+      item.type
+    ) ? '写真を更新' : '＋ 写真を選択'}
+                            </span>
+                            <input
+                              type="file"
+                                  disabled={isUploadingMeasurementPhoto}
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async e => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                if (!file) return;
+                                await handleNasMeasurementPhotoUpload(
+                                  file,
+                                  'measurement',
+                                  item.type,
+                                  sessionPostureDate || newSessionDate
+                                );
+                              }}
+                            />
+                          </label>
+</div>
+                        ))}
+                      </div>
+                      <p className="text-slate-400">
+                        写真の登録機能は次のステップで接続します。
+                      </p>
+                    </div>
+                  </details>
+
+                  <button onClick={handleAddSession} disabled={isSavingSession || retryingSessionPhotos || Boolean(pendingPhotoSessionId)} className="w-full bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                     セッションを登録する {useTicket ? '(回数券1回消化)' : '(都度・回数券なし)'}
                   </button>
                 </div>
@@ -4674,18 +5499,30 @@ export default function ClientsPage() {
 
                 {/* 3ヶ月定期計測・写真比較 */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
+                  <details className="group">
+                    <summary className="cursor-pointer list-none rounded-xl border border-[#5e9bc4]/30 bg-[#5e9bc4]/10 p-4 hover:bg-[#5e9bc4]/15 transition-colors">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+                            📊 定期測定・姿勢＆測定シート
+                          </h3>
+                          <p className="text-xs text-slate-600 font-normal">
+                            過去の測定結果・姿勢写真を比較する
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#4d85ab] border border-[#5e9bc4]/30">
+                          <span className="group-open:hidden">▼ 開く</span>
+                          <span className="hidden group-open:inline">▲ 閉じる</span>
+                        </span>
+                      </div>
+                    </summary>
+                    <div className="space-y-6 pt-5">
                   <div className="border-b pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5"><span>📊</span> 3ヶ月定期計測・姿勢 & 測定シート比較</h3>
-                      <p className="text-[11px] text-slate-400">計測データの追加・数値編集・写真の差し替えおよび削除が可能</p>
+                      <p className="text-[11px] text-slate-400">登録済みの測定結果・姿勢写真・耳ツボ写真をBefore／Afterで比較できます</p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <input type="date" value={newMeasureDate} onChange={e => setNewMeasureDate(e.target.value)} className="border rounded px-2.5 py-1 text-xs" />
-                      <button onClick={handleAddNewMeasureDate} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition whitespace-nowrap">
-                        ＋ 新規計測日を追加
-                      </button>
-                    </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100 text-xs">
@@ -4693,18 +5530,37 @@ export default function ClientsPage() {
                       <div className="flex items-center gap-1 flex-1">
                         <span className="font-bold text-slate-600 bg-slate-200 px-2 py-1 rounded">Before</span>
                         <select value={beforeDate} onChange={e => setBeforeDate(e.target.value)} className="border rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1">
-                          {physicalDates.map(d => <option key={d} value={d}>{d}</option>)}
+                          {Array.from(new Set([
+                              ...physicalDates,
+                              ...nasMeasurementPhotos
+                                .filter(photo => photo.client_id === currentStudent?.supabaseClientId)
+                                .map(photo => photo.taken_date)
+                            ]))
+                              .sort((a, b) => a.localeCompare(b))
+                              .map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </div>
                       <span className="font-bold text-slate-400">vs</span>
                       <div className="flex items-center gap-1 flex-1">
                         <span className="font-bold text-white bg-[#5e9bc4] px-2 py-1 rounded">After</span>
                         <select value={afterDate} onChange={e => setAfterDate(e.target.value)} className="border rounded p-1.5 font-bold text-[#5e9bc4] bg-white flex-1">
-                          {physicalDates.map(d => <option key={d} value={d}>{d}</option>)}
+                          {Array.from(new Set([
+                              ...physicalDates,
+                              ...nasMeasurementPhotos
+                                .filter(photo => photo.client_id === currentStudent?.supabaseClientId)
+                                .map(photo => photo.taken_date)
+                            ]))
+                              .sort((a, b) => a.localeCompare(b))
+                              .map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </div>
                     </div>
                   </div>
+
+                  {/* 測定結果の推移グラフ */}
+                  <MeasurementTrendChart
+                    measurements={currentStudent.physicalHistory}
+                  />
 
                   {/* 比較テーブル・計測データ */}
                   <div className="overflow-x-auto">
@@ -4721,68 +5577,32 @@ export default function ClientsPage() {
                         <tr>
                           <td className="p-2.5 font-bold text-slate-700">体重 (kg)</td>
                           <td className="p-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={beforePhysical?.weight === 0 ? '' : beforePhysical?.weight ?? ''}
-                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'weight', e.target.value === '' ? 0 : Number(e.target.value))}
-                              className="w-20 border rounded p-1"
-                            />
+                            <span className="font-semibold text-slate-700">{beforePhysical?.weight == null || beforePhysical.weight === 0 ? '未測定' : beforePhysical.weight}</span>
                           </td>
                           <td className="p-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={afterPhysical?.weight === 0 ? '' : afterPhysical?.weight ?? ''}
-                              onChange={e => handleUpdatePhysicalValue(afterDate, 'weight', e.target.value === '' ? 0 : Number(e.target.value))}
-                              className="w-20 border rounded p-1"
-                            />
+                            <span className="font-semibold text-slate-700">{afterPhysical?.weight == null || afterPhysical.weight === 0 ? '未測定' : afterPhysical.weight}</span>
                           </td>
-                          <td className="p-2.5">{calcDiff(afterPhysical?.weight, beforePhysical?.weight, 'kg', false)}</td>
+                          <td className="p-2.5">{beforePhysical?.weight == null || afterPhysical?.weight == null ? '未測定' : calcDiff(afterPhysical.weight, beforePhysical.weight, 'kg', false)}</td>
                         </tr>
                         <tr>
                           <td className="p-2.5 font-bold text-slate-700">体脂肪率 (%)</td>
                           <td className="p-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={beforePhysical?.fat === 0 ? '' : beforePhysical?.fat ?? ''}
-                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'fat', e.target.value === '' ? 0 : Number(e.target.value))}
-                              className="w-20 border rounded p-1"
-                            />
+                            <span className="font-semibold text-slate-700">{beforePhysical?.fat == null || beforePhysical.fat === 0 ? '未測定' : beforePhysical.fat}</span>
                           </td>
                           <td className="p-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={afterPhysical?.fat === 0 ? '' : afterPhysical?.fat ?? ''}
-                              onChange={e => handleUpdatePhysicalValue(afterDate, 'fat', e.target.value === '' ? 0 : Number(e.target.value))}
-                              className="w-20 border rounded p-1"
-                            />
+                            <span className="font-semibold text-slate-700">{afterPhysical?.fat == null || afterPhysical.fat === 0 ? '未測定' : afterPhysical.fat}</span>
                           </td>
-                          <td className="p-2.5">{calcDiff(afterPhysical?.fat, beforePhysical?.fat, '%', false)}</td>
+                          <td className="p-2.5">{beforePhysical?.fat == null || afterPhysical?.fat == null ? '未測定' : calcDiff(afterPhysical.fat, beforePhysical.fat, '%', false)}</td>
                         </tr>
                         <tr>
                           <td className="p-2.5 font-bold text-slate-700">筋肉量 (kg)</td>
                           <td className="p-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={beforePhysical?.muscle === 0 ? '' : beforePhysical?.muscle ?? ''}
-                              onChange={e => handleUpdatePhysicalValue(beforeDate, 'muscle', e.target.value === '' ? 0 : Number(e.target.value))}
-                              className="w-20 border rounded p-1"
-                            />
+                            <span className="font-semibold text-slate-700">{beforePhysical?.muscle == null || beforePhysical.muscle === 0 ? '未測定' : beforePhysical.muscle}</span>
                           </td>
                           <td className="p-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={afterPhysical?.muscle === 0 ? '' : afterPhysical?.muscle ?? ''}
-                              onChange={e => handleUpdatePhysicalValue(afterDate, 'muscle', e.target.value === '' ? 0 : Number(e.target.value))}
-                              className="w-20 border rounded p-1"
-                            />
+                            <span className="font-semibold text-slate-700">{afterPhysical?.muscle == null || afterPhysical.muscle === 0 ? '未測定' : afterPhysical.muscle}</span>
                           </td>
-                          <td className="p-2.5">{calcDiff(afterPhysical?.muscle, beforePhysical?.muscle, 'kg', true)}</td>
+                          <td className="p-2.5">{beforePhysical?.muscle == null || afterPhysical?.muscle == null ? '未測定' : calcDiff(afterPhysical.muscle, beforePhysical.muscle, 'kg', true)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -4803,32 +5623,59 @@ export default function ClientsPage() {
                             {[
                               { title: 'Before', date: beforeDate, data: beforePhysical?.posturePhotos?.[key] },
                               { title: 'After', date: afterDate, data: afterPhysical?.posturePhotos?.[key] }
-                            ].map(item => (
+                            ].map(item => {
+                              const nasPhoto = findNasMeasurementPhoto(item.date, 'posture', key);
+                              const displayUrl = nasPhoto
+                                ? getNasMeasurementPhotoUrl(nasPhoto)
+                                : item.data;
+
+                              return (
                               <div key={`${key}-${item.title}`} className="bg-white rounded-lg border p-2">
                                 <div className="text-[10px] font-bold text-slate-500 mb-1">{item.title}</div>
-                                {item.data ? (
+                                {displayUrl ? (
                                   <div className="relative">
-                                    <img src={item.data} alt={`${label} ${item.title}`} className="w-full h-28 object-contain rounded border bg-slate-50" />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeletePosturePhoto(item.date, key)}
-                                      className="absolute top-1 right-1 bg-rose-500 text-white rounded-full w-5 h-5 text-xs"
-                                    >×</button>
+                                    <img src={displayUrl} alt={`${label} ${item.title}`} className="w-full h-28 object-contain rounded border bg-slate-50" />
+                                    <div className="flex gap-1 mt-2">
+                                      <label className="flex-1 text-center text-[10px] font-bold text-white bg-[#5e9bc4] rounded px-2 py-2 cursor-pointer">
+                                        写真を差し替え
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          disabled={isUploadingMeasurementPhoto}
+                                          onChange={async e => {
+                                            const file = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (!file) return;
+                                            await handleNasMeasurementPhotoUpload(
+                                              file,
+                                              'posture',
+                                              key,
+                                              item.date
+                                            );
+                                          }}
+                                        />
+                                      </label>
+                                      {nasPhoto && (
+                                        <button
+                                          type="button"
+                                          disabled={isUploadingMeasurementPhoto}
+                                          onClick={() => deleteNasMeasurementPhoto(nasPhoto)}
+                                          className="flex-1 text-[10px] font-bold text-rose-600 border border-rose-200 bg-rose-50 rounded px-2 py-2 disabled:opacity-50"
+                                        >
+                                          写真を削除
+                                        </button>
+                                      )}
+                                    </div>
+                                    
                                   </div>
                                 ) : (
                                   <div className="h-28 flex items-center justify-center text-[10px] text-slate-400 border border-dashed rounded">未登録</div>
                                 )}
-                                <label className="mt-2 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2 py-1.5 rounded cursor-pointer">
-                                  {item.data ? '写真を差し替え' : '写真を追加'}
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={e => handleFileUpload(e, item.date, 'posture', key)}
-                                  />
-                                </label>
+                                
                               </div>
-                            ))}
+                            );
+                            })}
                           </div>
                         </div>
                       ))}
@@ -4873,9 +5720,9 @@ export default function ClientsPage() {
                                 {beforeDate}
                               </div>
 
-                              {beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] ? (
+                              {(findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey) || beforePhysical?.earAcupuncturePhotos?.[side.beforeKey]) ? (
                                 <img
-                                  src={beforePhysical.earAcupuncturePhotos[side.beforeKey] || ''}
+                                  src={findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey)!) : (beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] || '')}
                                   alt={`Before ${side.side}耳 施術前`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
@@ -4885,25 +5732,9 @@ export default function ClientsPage() {
                                 </div>
                               )}
 
-                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
-                                {beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] ? '写真を差し替え' : '写真を追加'}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={e => handleEarAcupuncturePhotoUpload(e, beforeDate, side.beforeKey)}
-                                />
-                              </label>
+                              
 
-                              {beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteEarAcupuncturePhoto(beforeDate, side.beforeKey)}
-                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
-                                >
-                                  削除
-                                </button>
-                              )}
+                              
                             </div>
 
                             {/* Before：施術後 */}
@@ -4915,9 +5746,9 @@ export default function ClientsPage() {
                                 {beforeDate}
                               </div>
 
-                              {beforePhysical?.earAcupuncturePhotos?.[side.afterKey] ? (
+                              {(findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey) || beforePhysical?.earAcupuncturePhotos?.[side.afterKey]) ? (
                                 <img
-                                  src={beforePhysical.earAcupuncturePhotos[side.afterKey] || ''}
+                                  src={findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey)!) : (beforePhysical?.earAcupuncturePhotos?.[side.afterKey] || '')}
                                   alt={`Before ${side.side}耳 施術後`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
@@ -4927,25 +5758,9 @@ export default function ClientsPage() {
                                 </div>
                               )}
 
-                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
-                                {beforePhysical?.earAcupuncturePhotos?.[side.afterKey] ? '写真を差し替え' : '写真を追加'}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={e => handleEarAcupuncturePhotoUpload(e, beforeDate, side.afterKey)}
-                                />
-                              </label>
+                              
 
-                              {beforePhysical?.earAcupuncturePhotos?.[side.afterKey] && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteEarAcupuncturePhoto(beforeDate, side.afterKey)}
-                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
-                                >
-                                  削除
-                                </button>
-                              )}
+                              
                             </div>
 
                             {/* After：施術前 */}
@@ -4957,9 +5772,9 @@ export default function ClientsPage() {
                                 {afterDate}
                               </div>
 
-                              {afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] ? (
+                              {(findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey) || afterPhysical?.earAcupuncturePhotos?.[side.beforeKey]) ? (
                                 <img
-                                  src={afterPhysical.earAcupuncturePhotos[side.beforeKey] || ''}
+                                  src={findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey)!) : (afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] || '')}
                                   alt={`After ${side.side}耳 施術前`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
@@ -4969,25 +5784,9 @@ export default function ClientsPage() {
                                 </div>
                               )}
 
-                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
-                                {afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] ? '写真を差し替え' : '写真を追加'}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={e => handleEarAcupuncturePhotoUpload(e, afterDate, side.beforeKey)}
-                                />
-                              </label>
+                              
 
-                              {afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteEarAcupuncturePhoto(afterDate, side.beforeKey)}
-                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
-                                >
-                                  削除
-                                </button>
-                              )}
+                              
                             </div>
 
                             {/* After：施術後 */}
@@ -4999,9 +5798,9 @@ export default function ClientsPage() {
                                 {afterDate}
                               </div>
 
-                              {afterPhysical?.earAcupuncturePhotos?.[side.afterKey] ? (
+                              {(findNasMeasurementPhoto(afterDate, 'ear', side.afterKey) || afterPhysical?.earAcupuncturePhotos?.[side.afterKey]) ? (
                                 <img
-                                  src={afterPhysical.earAcupuncturePhotos[side.afterKey] || ''}
+                                  src={findNasMeasurementPhoto(afterDate, 'ear', side.afterKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(afterDate, 'ear', side.afterKey)!) : (afterPhysical?.earAcupuncturePhotos?.[side.afterKey] || '')}
                                   alt={`After ${side.side}耳 施術後`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
@@ -5011,25 +5810,9 @@ export default function ClientsPage() {
                                 </div>
                               )}
 
-                              <label className="mt-1 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[9px] px-1.5 py-1 rounded cursor-pointer">
-                                {afterPhysical?.earAcupuncturePhotos?.[side.afterKey] ? '写真を差し替え' : '写真を追加'}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={e => handleEarAcupuncturePhotoUpload(e, afterDate, side.afterKey)}
-                                />
-                              </label>
+                              
 
-                              {afterPhysical?.earAcupuncturePhotos?.[side.afterKey] && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteEarAcupuncturePhoto(afterDate, side.afterKey)}
-                                  className="w-full mt-1 text-[9px] text-rose-500 hover:underline"
-                                >
-                                  削除
-                                </button>
-                              )}
+                              
                             </div>
 
                           </div>
@@ -5078,7 +5861,15 @@ export default function ClientsPage() {
                               )}
                             </div>
 
-                            {section.beforeFiles.length > 0 ? (
+                            {findNasMeasurementPhoto(beforeDate, 'measurement', section.type) ? (
+                              <div className="border rounded-lg bg-white overflow-hidden">
+                                <img
+                                  src={getNasMeasurementPhotoUrl(findNasMeasurementPhoto(beforeDate, 'measurement', section.type)!)}
+                                  alt={`${section.title} Before`}
+                                  className="w-full h-36 object-contain bg-slate-100"
+                                />
+                              </div>
+                            ) : section.beforeFiles.length > 0 ? (
                               <div className="space-y-2">
                                 {section.beforeFiles.map(file => (
                                   <div key={file.id} className="border rounded-lg bg-white overflow-hidden">
@@ -5094,13 +5885,7 @@ export default function ClientsPage() {
                                         📄 {file.name}
                                       </a>
                                     )}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteMeasurementFile(beforeDate, section.type, file.id)}
-                                      className="w-full text-[10px] text-rose-500 hover:underline py-1.5 border-t"
-                                    >
-                                      削除
-                                    </button>
+                                    
                                   </div>
                                 ))}
                               </div>
@@ -5110,16 +5895,7 @@ export default function ClientsPage() {
                               </div>
                             )}
 
-                            <label className="mt-2 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2 py-1.5 rounded cursor-pointer">
-                              ＋ Beforeファイルを追加
-                              <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                multiple
-                                className="hidden"
-                                onChange={e => handleFileUpload(e, beforeDate, section.type)}
-                              />
-                            </label>
+                            
                           </div>
 
                           {/* After */}
@@ -5133,7 +5909,15 @@ export default function ClientsPage() {
                               )}
                             </div>
 
-                            {section.afterFiles.length > 0 ? (
+                            {findNasMeasurementPhoto(afterDate, 'measurement', section.type) ? (
+                              <div className="border rounded-lg bg-white overflow-hidden">
+                                <img
+                                  src={getNasMeasurementPhotoUrl(findNasMeasurementPhoto(afterDate, 'measurement', section.type)!)}
+                                  alt={`${section.title} After`}
+                                  className="w-full h-36 object-contain bg-slate-100"
+                                />
+                              </div>
+                            ) : section.afterFiles.length > 0 ? (
                               <div className="space-y-2">
                                 {section.afterFiles.map(file => (
                                   <div key={file.id} className="border rounded-lg bg-white overflow-hidden">
@@ -5149,13 +5933,7 @@ export default function ClientsPage() {
                                         📄 {file.name}
                                       </a>
                                     )}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteMeasurementFile(afterDate, section.type, file.id)}
-                                      className="w-full text-[10px] text-rose-500 hover:underline py-1.5 border-t"
-                                    >
-                                      削除
-                                    </button>
+                                    
                                   </div>
                                 ))}
                               </div>
@@ -5165,16 +5943,7 @@ export default function ClientsPage() {
                               </div>
                             )}
 
-                            <label className="mt-2 block text-center bg-[#5e9bc4] hover:bg-sky-600 text-white font-bold text-[10px] px-2 py-1.5 rounded cursor-pointer">
-                              ＋ Afterファイルを追加
-                              <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                multiple
-                                className="hidden"
-                                onChange={e => handleFileUpload(e, afterDate, section.type)}
-                              />
-                            </label>
+                            
                           </div>
                         </div>
 
@@ -5190,25 +5959,11 @@ export default function ClientsPage() {
                   </p>
                 </div>
 
-                {/* 測定内容の保存・削除 */}
-                  <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSavePhysicalMeasurements}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition"
-                    >
-                      💾 測定内容を保存
-                    </button>
+                    </div>
+                  </details>
 
-                    <button
-                      type="button"
-                      onClick={handleDeleteSelectedPhysicalMeasurement}
-                      disabled={!afterDate || currentStudent.physicalHistory.length <= 1}
-                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-4 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      🗑 この測定を削除
-                    </button>
-                  </div>
+                {/* 測定内容の保存・削除 */}
+                  
 
                 </div>
 
