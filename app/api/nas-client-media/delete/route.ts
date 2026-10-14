@@ -113,14 +113,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const perfStart = Date.now();
     const client = new UgosClient({ uglinkid, fetch: safeFetch });
     await client.login({ username, password });
+    const perfLogin = Date.now();
 
     const nasPath = `${NAS_FOLDER}/${match[1]}`;
 
-    if (await client.exists(nasPath)) {
+    const fileExists = await client.exists(nasPath);
+    const perfExists = Date.now();
+    if (fileExists) {
       await client.trash(nasPath);
     }
+    const perfTrash = Date.now();
 
     const { data: deleted, error: deleteError } = await supabase
       .from("client_media")
@@ -139,6 +144,14 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    console.info("[NAS_DELETE_TIMING]", JSON.stringify({
+      loginMs: perfLogin - perfStart,
+      existsMs: perfExists - perfLogin,
+      trashMs: perfTrash - perfExists,
+      dbMs: Date.now() - perfTrash,
+      totalMs: Date.now() - perfStart,
+    }));
 
     return NextResponse.json({ ok: true });
   } catch (error) {
