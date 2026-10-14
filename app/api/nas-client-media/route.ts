@@ -111,6 +111,12 @@ export async function POST(request: Request) {
       categoryInput === null ? "session" : categoryInput;
     const photoTypeInput = form.get("photoType");
 
+    // 写真更新時に限り、古い写真のIDを受け取る。
+    // この段階では古い写真の削除は実行しない。
+    const previousMediaIdInput = form.get("previousMediaId");
+    const previousMediaId =
+      previousMediaIdInput === null ? null : previousMediaIdInput;
+
     const allowedPhotoTypes: Record<string, string[]> = {
       session: [],
       posture: ["front", "side", "back"],
@@ -120,6 +126,21 @@ export async function POST(request: Request) {
 
     const photoType =
       category === "session" ? null : photoTypeInput;
+
+    const mediaIdPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (
+      previousMediaId !== null &&
+      (typeof previousMediaId !== "string" ||
+        !mediaIdPattern.test(previousMediaId) ||
+        category === "session")
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "更新前の写真IDが不正です" },
+        { status: 400 }
+      );
+    }
 
     if (
       typeof category !== "string" ||
@@ -136,6 +157,36 @@ export async function POST(request: Request) {
         { ok: false, error: "写真の登録情報が不正です" },
         { status: 400 }
       );
+    }
+
+    // 更新前の写真をサーバー側で照合する。
+    // この段階では削除は行わない。
+    if (typeof previousMediaId === "string") {
+      const { data: previousMedia, error: previousError } = await supabase
+        .from("client_media")
+        .select("id, client_id, category, photo_type, taken_date, storage_path")
+        .eq("id", previousMediaId)
+        .eq("client_id", clientId)
+        .maybeSingle();
+
+      if (
+        previousError ||
+        !previousMedia ||
+        previousMedia.category !== category ||
+        previousMedia.photo_type !== photoType ||
+        previousMedia.taken_date !== takenDate ||
+        !/^nas:[0-9a-f-]{36}-[0-9a-f-]{36}\.(jpg|png|webp|heic)$/i.test(
+          previousMedia.storage_path
+        )
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "更新前の写真情報が一致しません。更新を中止しました",
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const uglinkid = process.env.NAS_UGLINK_ID;
@@ -234,6 +285,75 @@ export async function POST(request: Request) {
       throw new Error("写真のデータベース登録に失敗しました");
     }
 
+    // 新しい写真の保存・照合・DB登録が成功した後だけ実行。
+    let previousPhotoDeleted = false;
+    let previousPhotoDeleteWarning = false;
+
+    if (typeof previousMediaId === "string") {
+      try {
+        // 削除直前にも同じ顧客・日付・写真種類か再確認する。
+        const { data: previous, error: previousError } = await supabase
+          .from("client_media")
+          .select("id, client_id, category, photo_type, taken_date, storage_path")
+          .eq("id", previousMediaId)
+          .eq("client_id", clientId)
+          .maybeSingle();
+
+        const match =
+          typeof previous?.storage_path === "string"
+            ? previous.storage_path.match(
+                /^nas:([0-9a-f-]{36}-[0-9a-f-]{36}\.(jpg|png|webp|heic))$/i
+              )
+            : null;
+
+        if (
+          previousError ||
+          !previous ||
+          !match ||
+          previous.category !== category ||
+          previous.photo_type !== photoType ||
+          previous.taken_date !== takenDate ||
+          previous.id === record.id
+        ) {
+          previousPhotoDeleteWarning = true;
+        } else {
+          const oldPath = `${NAS_FOLDER}/${match[1]}`;
+
+          // 新しい写真とは別ファイルであることを確認。
+          if (oldPath === path) {
+            previousPhotoDeleteWarning = true;
+          } else {
+            if (!(await client.exists(oldPath))) {
+              // NASに古い写真がなければ、DBの削除も行わない。
+              previousPhotoDeleteWarning = true;
+            } else {
+              await client.trash(oldPath);
+
+              const { data: deleted, error: deleteError } = await supabase
+                .from("client_media")
+                .delete()
+                .eq("id", previous.id)
+                .eq("client_id", clientId)
+                .eq("storage_path", previous.storage_path)
+                .select("id");
+
+              if (deleteError || !deleted?.length) {
+                previousPhotoDeleteWarning = true;
+              } else {
+                previousPhotoDeleted = true;
+              }
+            }
+          }
+        }
+      } catch (deleteError) {
+        console.error(
+          "Old NAS photo cleanup failed:",
+          deleteError instanceof Error ? deleteError.message : "unknown"
+        );
+        previousPhotoDeleteWarning = true;
+      }
+    }
+
     console.info("[NAS_UPLOAD_TIMING]", JSON.stringify({
       loginMs: perfLogin - perfStart,
       uploadMs: perfUpload - perfLogin,
@@ -250,6 +370,8 @@ export async function POST(request: Request) {
       id: record.id,
       fileName: file.name,
       mediaType: "image",
+      previousPhotoDeleted,
+      previousPhotoDeleteWarning,
     });
   } catch (error) {
     console.error(

@@ -3321,9 +3321,10 @@ export default function ClientsPage() {
     file: File,
     category: 'posture' | 'ear' | 'measurement',
     photoType: string,
-    takenDate: string
+    takenDate: string,
+    previousMediaId?: string
   ) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(takenDate)) {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(takenDate)) {
       throw new Error('登録日を確認してください');
     }
 
@@ -3336,6 +3337,10 @@ export default function ClientsPage() {
     formData.append('photoType', photoType);
     formData.append('takenDate', takenDate);
     formData.append('file', uploadFile);
+
+    if (previousMediaId) {
+      formData.append('previousMediaId', previousMediaId);
+    }
 
     const response = await fetch('/api/nas-client-media', {
       method: 'POST',
@@ -3352,6 +3357,8 @@ export default function ClientsPage() {
       ok: true;
       id: string;
       storagePath: string;
+      previousPhotoDeleted?: boolean;
+      previousPhotoDeleteWarning?: boolean;
     };
   };
 
@@ -3374,10 +3381,9 @@ export default function ClientsPage() {
       const clientId = await resolvePhotoClientId();
 
       if (currentStudent?.supabaseClientId !== clientId) {
-        throw new Error('顧客情報の確認が必要です。画面を再読み込みしてください。');
+        throw new Error('顧客情報を確認できません。画面を再読み込みしてください。');
       }
 
-      // アップロード前の写真だけを削除候補として記録する。
       const previousPhoto = nasMeasurementPhotos.find(photo =>
         photo.client_id === clientId &&
         photo.taken_date === takenDate &&
@@ -3385,96 +3391,55 @@ export default function ClientsPage() {
         photo.photo_type === photoType
       );
 
-      // 最初に新しい写真をNASへ保存する。
       const saved = await uploadMeasurementPhotoToNas(
         file,
         category,
         photoType,
-        takenDate
+        takenDate,
+        previousPhoto?.id
       );
 
-      let photos: NasMeasurementPhoto[];
-
+      // サーバーで保存・削除が完了してから一覧を再取得。
       try {
-        photos = await loadNasMeasurementPhotos(clientId);
-      } catch (refreshError) {
-        console.error('NAS写真一覧の更新エラー:', refreshError);
-        alert(
-          '新しい写真はNASに保存されましたが、登録確認ができなかったため、古い写真は残しました。画面を再読み込みしてください。'
-        );
-        return;
-      }
+        const photos = await loadNasMeasurementPhotos(clientId);
 
-      if (currentStudent?.supabaseClientId === clientId) {
-        setNasMeasurementPhotos(photos);
-        setIsLoadingNasMeasurementPhotos(false);
-      }
-
-      // DB上でも新しい写真を確認できた場合だけ、古い写真を削除する。
-      const newPhoto = photos.find(photo =>
-        photo.id === saved.id &&
-        photo.client_id === clientId &&
-        photo.taken_date === takenDate &&
-        photo.category === category &&
-        photo.photo_type === photoType &&
-        photo.storage_path === saved.storagePath
-      );
-
-      if (!newPhoto) {
-        alert(
-          '新しい写真はNASに保存されましたが、登録確認ができなかったため、古い写真は残しました。'
-        );
-        return;
-      }
-
-      if (!previousPhoto || previousPhoto.id === newPhoto.id) {
-        alert('写真をNASに保存しました。');
-        return;
-      }
-
-      // 別の顧客・日付・種類の写真は削除しない。
-      if (
-        previousPhoto.client_id !== newPhoto.client_id ||
-        previousPhoto.taken_date !== newPhoto.taken_date ||
-        previousPhoto.category !== newPhoto.category ||
-        previousPhoto.photo_type !== newPhoto.photo_type
-      ) {
-        alert('新しい写真を保存しました。古い写真は安全のため残しました。');
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/nas-client-media/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mediaId: previousPhoto.id,
-            clientId,
-          }),
-        });
-
-        const result = await response.json().catch(() => null);
-
-        if (!response.ok || !result?.ok) {
-          throw new Error(result?.error || '古い写真の削除に失敗しました。');
+        if (currentStudent?.supabaseClientId === clientId) {
+          setNasMeasurementPhotos(photos);
+          setIsLoadingNasMeasurementPhotos(false);
         }
-      } catch (deleteError) {
-        console.error('古いNAS写真の削除エラー:', deleteError);
+
+        const newPhoto = photos.find(photo =>
+          photo.id === saved.id &&
+          photo.client_id === clientId &&
+          photo.taken_date === takenDate &&
+          photo.category === category &&
+          photo.photo_type === photoType &&
+          photo.storage_path === saved.storagePath
+        );
+
+        if (!newPhoto) {
+          alert(
+            '新しい写真は保存されましたが、一覧で確認できませんでした。画面を再読み込みしてください。'
+          );
+          return;
+        }
+      } catch (refreshError) {
+        console.error('写真一覧の取得エラー:', refreshError);
+        alert(
+          '新しい写真はNASに保存されました。表示が更新されない場合は画面を再読み込みしてください。'
+        );
+        return;
+      }
+
+      if (previousPhoto && saved.previousPhotoDeleted) {
+        alert('写真を更新しました。古い写真もNASから削除しました。');
+      } else if (previousPhoto && saved.previousPhotoDeleteWarning) {
         alert(
           '新しい写真は保存できましたが、古い写真の削除は完了していません。'
         );
-        return;
+      } else {
+        alert('写真をNASに保存しました。');
       }
-
-      // 削除成功後、取得済みの一覧から古い写真だけを除外する。
-      // NASやSupabaseへの再取得は行わない。
-      if (currentStudent?.supabaseClientId === clientId) {
-        setNasMeasurementPhotos(
-          photos.filter(photo => photo.id !== previousPhoto.id)
-        );
-      }
-
-      alert('写真を更新しました。古い写真もNASから削除しました。');
     } catch (error) {
       console.error('NAS写真保存エラー:', error);
       alert(
