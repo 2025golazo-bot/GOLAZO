@@ -149,12 +149,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const perfStart = Date.now();
     const client = new UgosClient({ uglinkid, fetch: safeFetch });
     const login = await client.login({ username, password });
 
     if (!login.success) {
       throw new Error("NASログイン失敗");
     }
+
+    const perfLogin = Date.now();
 
     const extension =
       file.type === "image/jpeg" ? ".jpg" :
@@ -175,12 +178,16 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     await client.upload(path, buffer);
+    const perfUpload = Date.now();
 
-    if (!(await client.exists(path))) {
+    const fileExists = await client.exists(path);
+    const perfExists = Date.now();
+    if (!fileExists) {
       throw new Error("NASへの保存を確認できませんでした");
     }
 
     const saved = await client.readFile(path);
+    const perfRead = Date.now();
     const savedBuffer = Buffer.isBuffer(saved)
       ? saved
       : Buffer.from(saved);
@@ -226,6 +233,15 @@ export async function POST(request: Request) {
 
       throw new Error("写真のデータベース登録に失敗しました");
     }
+
+    console.info("[NAS_UPLOAD_TIMING]", JSON.stringify({
+      loginMs: perfLogin - perfStart,
+      uploadMs: perfUpload - perfLogin,
+      existsMs: perfExists - perfUpload,
+      readMs: perfRead - perfExists,
+      dbMs: Date.now() - perfRead,
+      totalMs: Date.now() - perfStart,
+    }));
 
     return NextResponse.json({
       ok: true,
