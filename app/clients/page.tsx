@@ -3324,7 +3324,7 @@ export default function ClientsPage() {
     takenDate: string,
     previousMediaId?: string
   ) => {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(takenDate)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(takenDate)) {
       throw new Error('登録日を確認してください');
     }
 
