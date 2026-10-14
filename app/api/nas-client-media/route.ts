@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       typeof sessionId !== "string" ||
       !sessionId.trim() ||
       typeof takenDate !== "string" ||
-      !/^\\d{4}-\\d{2}-\\d{2}$/.test(takenDate)
+      !/^\d{4}-\d{2}-\d{2}$/.test(takenDate)
     ) {
       return NextResponse.json(
         { ok: false, error: "セッション情報が不正です" },
