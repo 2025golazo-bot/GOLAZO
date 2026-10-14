@@ -56,30 +56,37 @@ export default function ClientMediaManager({
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw new Error('ログイン情報を確認できません');
       for (const file of files) {
-        const isImage = file.type.startsWith('image/');
-        const isVideo = file.type.startsWith('video/');
-        if (!isImage && !isVideo) throw new Error('写真・動画以外のファイルは登録できません');
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = `${clientId}/${crypto.randomUUID()}-${safeName}`;
-        const { error: storageError } = await supabase.storage
-          .from('client-media').upload(path, file, { contentType: file.type, upsert: false });
-        if (storageError) throw storageError;
-        const { error: dbError } = await supabase.from('client_media').insert({
-          client_id: clientId,
-          storage_path: path,
-          file_name: file.name,
-          media_type: isImage ? 'image' : 'video',
-          category: 'session',
-          session_id: session.id,
-          taken_date: session.date,
+        if (file.type.startsWith('video/')) {
+          throw new Error('動画のNAS保存は準備中です。現在、新しい動画は登録できません');
+        }
+
+        if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(file.type)) {
+          throw new Error('対応している写真形式はJPEG・PNG・WebP・HEICです');
+        }
+
+        if (file.size === 0 || file.size > 4 * 1024 * 1024) {
+          throw new Error('写真は1枚4MB以下にしてください');
+        }
+
+        const formData = new FormData();
+        formData.append('clientId', clientId);
+        formData.append('sessionId', session.id);
+        formData.append('takenDate', session.date);
+        formData.append('file', file);
+
+        const response = await fetch('/api/nas-client-media', {
+          method: 'POST',
+          body: formData,
         });
-        if (dbError) {
-          await supabase.storage.from('client-media').remove([path]);
-          throw dbError;
+
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || 'NASへの写真保存に失敗しました');
         }
         completed++;
       }
-      setUploadMessage(`${completed}件の写真・動画を保存しました`);
+      setUploadMessage(`${completed}件の写真をNASに保存しました`);
     } catch (err) {
       setError(`${completed}件保存済み。` + (err instanceof Error ? err.message : 'アップロードに失敗しました'));
     } finally {
@@ -114,6 +121,35 @@ export default function ClientMediaManager({
 
   const deleteItem = async (item: DisplayItem) => {
     if (!clientId || busyId) return;
+
+    if (item.storage_path.startsWith('nas:')) {
+      if (!window.confirm(`「${item.file_name}」を削除しますか？\nNASのゴミ箱へ移動し、カルテから削除します。`)) return;
+
+      setBusyId(item.id);
+      setError('');
+
+      try {
+        const response = await fetch('/api/nas-client-media/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaId: item.id, clientId }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || 'NAS写真の削除に失敗しました');
+        }
+
+        setEditingId(null);
+        setRefreshKey(value => value + 1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '削除に失敗しました');
+      } finally {
+        setBusyId(null);
+      }
+      return;
+    }
     if (!window.confirm(`「${item.file_name}」を削除しますか？\n削除した写真・動画は元に戻せません。`)) return;
     setBusyId(item.id);
     setError('');
@@ -155,6 +191,13 @@ export default function ClientMediaManager({
         if (listError) throw listError;
         const records: DisplayItem[] = [];
         for (const item of (data || []) as MediaItem[]) {
+          if (item.storage_path.startsWith('nas:')) {
+            const url = '/api/nas-client-media/view?path='
+              + encodeURIComponent(item.storage_path);
+            records.push({ ...item, url });
+            continue;
+          }
+
           const { data: signed, error: urlError } = await supabase.storage
             .from('client-media').createSignedUrl(item.storage_path, 3600);
           if (urlError || !signed?.signedUrl) throw urlError || new Error('閲覧URLを取得できません');
