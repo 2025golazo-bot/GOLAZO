@@ -3263,6 +3263,25 @@ export default function ClientsPage() {
     '/api/nas-client-media/view?path=' +
     encodeURIComponent(photo.storage_path);
 
+  const NasPhotoDownloadButton = ({
+    photo,
+  }: {
+    photo: NasMeasurementPhoto;
+  }) => (
+    <a
+      href={
+        '/api/nas-client-media/download?path=' +
+        encodeURIComponent(photo.storage_path)
+      }
+      title="写真をダウンロード"
+      aria-label="写真をダウンロード"
+      download
+      className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm hover:bg-slate-50"
+    >
+      ⬇️
+    </a>
+  );
+
   const deleteNasMeasurementPhoto = async (
     photo: NasMeasurementPhoto
   ): Promise<boolean> => {
@@ -5284,15 +5303,16 @@ export default function ClientsPage() {
                 type="button"
                 disabled={isUploadingMeasurementPhoto}
                 onClick={() => void deleteNasMeasurementPhoto(photo)}
-                className="text-xs font-bold text-rose-600 disabled:opacity-50"
+                title="写真を削除" aria-label="写真を削除" className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
               >
-                写真を削除
+                🗑️
               </button>
+              <NasPhotoDownloadButton photo={photo} />
             </div>
           )}
 
           <label className="mt-3 block cursor-pointer font-bold text-[#5e9bc4]">
-            {photo ? '写真を更新' : '＋ 写真を選択'}
+            {photo ? '🔄' : '＋ 写真を選択'}
             <input
               type="file"
               accept="image/*"
@@ -5363,10 +5383,11 @@ export default function ClientsPage() {
           type="button"
           disabled={isUploadingMeasurementPhoto}
           onClick={() => void deleteNasMeasurementPhoto(photo)}
-          className="mt-2 text-xs font-bold text-rose-600 disabled:opacity-50"
+          title="写真を削除" aria-label="写真を削除" className="mt-2 inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
         >
-          写真を削除
+          🗑️
         </button>
+              <NasPhotoDownloadButton photo={photo} />
       </div>
     ) : null;
   })()}
@@ -5374,13 +5395,13 @@ export default function ClientsPage() {
                               
                               className="block cursor-pointer text-xs font-bold text-[#5e9bc4] mt-2"
                             >
-                              <span className="block font-semibold">{item.label}</span>
+
                               <span className="mt-2 block text-[#5e9bc4]">
                                 {findNasMeasurementPhoto(
                                     sessionPostureDate || newSessionDate,
                                     'posture',
                                     item.key
-                                  ) ? '写真を更新' : '＋ 写真を選択'}
+                                  ) ? '🔄' : '＋ 写真を選択'}
                               </span>
                               <input
                                 type="file"
@@ -5429,10 +5450,11 @@ export default function ClientsPage() {
           type="button"
           disabled={isUploadingMeasurementPhoto}
           onClick={() => void deleteNasMeasurementPhoto(photo)}
-          className="mt-2 text-xs font-bold text-rose-600 disabled:opacity-50"
+          title="写真を削除" aria-label="写真を削除" className="mt-2 inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
         >
-          写真を削除
+          🗑️
         </button>
+              <NasPhotoDownloadButton photo={photo} />
       </div>
     ) : null;
   })()}
@@ -5440,13 +5462,13 @@ export default function ClientsPage() {
                             
                             className="mt-2 block cursor-pointer text-xs font-bold text-[#5e9bc4]"
                           >
-                            <span className="block font-semibold">{item.label}</span>
+
                             <span className="mt-2 block text-[#5e9bc4]">
                               {findNasMeasurementPhoto(
       sessionPostureDate || newSessionDate,
       'measurement',
       item.type
-    ) ? '写真を更新' : '＋ 写真を選択'}
+    ) ? '🔄' : '＋ 写真を選択'}
                             </span>
                             <input
                               type="file"
@@ -5738,9 +5760,9 @@ export default function ClientsPage() {
                                 {displayUrl ? (
                                   <div className="relative">
                                     <img src={displayUrl} alt={`${label} ${item.title}`} className="w-full h-28 object-contain rounded border bg-slate-50" />
-                                    <div className="flex gap-1 mt-2">
-                                      <label className="flex-1 text-center text-[10px] font-bold text-white bg-[#5e9bc4] rounded px-2 py-2 cursor-pointer">
-                                        写真を差し替え
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                      <label title="写真を差し替え" className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm cursor-pointer">
+                                        🔄
                                         <input
                                           type="file"
                                           accept="image/*"
@@ -5764,11 +5786,14 @@ export default function ClientsPage() {
                                           type="button"
                                           disabled={isUploadingMeasurementPhoto}
                                           onClick={() => deleteNasMeasurementPhoto(nasPhoto)}
-                                          className="flex-1 text-[10px] font-bold text-rose-600 border border-rose-200 bg-rose-50 rounded px-2 py-2 disabled:opacity-50"
+                                          title="写真を削除" aria-label="写真を削除" className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
                                         >
-                                          写真を削除
+                                          🗑️
                                         </button>
                                       )}
+                                        {nasPhoto && (
+                                          <NasPhotoDownloadButton photo={nasPhoto} />
+                                        )}
                                     </div>
                                     
                                   </div>
@@ -5824,11 +5849,49 @@ export default function ClientsPage() {
                               </div>
 
                               {(findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey) || beforePhysical?.earAcupuncturePhotos?.[side.beforeKey]) ? (
-                                <img
+                                <>
+<img
                                   src={findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey)!) : (beforePhysical?.earAcupuncturePhotos?.[side.beforeKey] || '')}
                                   alt={`Before ${side.side}耳 施術前`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
+{findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey) && (
+  <div className="mt-2 flex items-center justify-center gap-2">
+    <label
+      title="写真を差し替え"
+      aria-label="写真を差し替え"
+      className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+    >
+      🔄
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={isUploadingMeasurementPhoto}
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          await handleNasMeasurementPhotoUpload(
+            file, 'ear', side.beforeKey, beforeDate
+          );
+        }}
+      />
+    </label>
+    <button
+      type="button"
+      title="写真を削除"
+      aria-label="写真を削除"
+      disabled={isUploadingMeasurementPhoto}
+      onClick={() => void deleteNasMeasurementPhoto(findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey)!)}
+      className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+    >
+      🗑️
+    </button>
+    <NasPhotoDownloadButton photo={findNasMeasurementPhoto(beforeDate, 'ear', side.beforeKey)!} />
+  </div>
+)}
+</>
                               ) : (
                                 <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
                                   未登録
@@ -5850,11 +5913,49 @@ export default function ClientsPage() {
                               </div>
 
                               {(findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey) || beforePhysical?.earAcupuncturePhotos?.[side.afterKey]) ? (
-                                <img
+                                <>
+<img
                                   src={findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey)!) : (beforePhysical?.earAcupuncturePhotos?.[side.afterKey] || '')}
                                   alt={`Before ${side.side}耳 施術後`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
+{findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey) && (
+  <div className="mt-2 flex items-center justify-center gap-2">
+    <label
+      title="写真を差し替え"
+      aria-label="写真を差し替え"
+      className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+    >
+      🔄
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={isUploadingMeasurementPhoto}
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          await handleNasMeasurementPhotoUpload(
+            file, 'ear', side.afterKey, beforeDate
+          );
+        }}
+      />
+    </label>
+    <button
+      type="button"
+      title="写真を削除"
+      aria-label="写真を削除"
+      disabled={isUploadingMeasurementPhoto}
+      onClick={() => void deleteNasMeasurementPhoto(findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey)!)}
+      className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+    >
+      🗑️
+    </button>
+    <NasPhotoDownloadButton photo={findNasMeasurementPhoto(beforeDate, 'ear', side.afterKey)!} />
+  </div>
+)}
+</>
                               ) : (
                                 <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
                                   未登録
@@ -5876,11 +5977,49 @@ export default function ClientsPage() {
                               </div>
 
                               {(findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey) || afterPhysical?.earAcupuncturePhotos?.[side.beforeKey]) ? (
-                                <img
+                                <>
+<img
                                   src={findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey)!) : (afterPhysical?.earAcupuncturePhotos?.[side.beforeKey] || '')}
                                   alt={`After ${side.side}耳 施術前`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
+{findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey) && (
+  <div className="mt-2 flex items-center justify-center gap-2">
+    <label
+      title="写真を差し替え"
+      aria-label="写真を差し替え"
+      className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+    >
+      🔄
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={isUploadingMeasurementPhoto}
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          await handleNasMeasurementPhotoUpload(
+            file, 'ear', side.beforeKey, afterDate
+          );
+        }}
+      />
+    </label>
+    <button
+      type="button"
+      title="写真を削除"
+      aria-label="写真を削除"
+      disabled={isUploadingMeasurementPhoto}
+      onClick={() => void deleteNasMeasurementPhoto(findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey)!)}
+      className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+    >
+      🗑️
+    </button>
+    <NasPhotoDownloadButton photo={findNasMeasurementPhoto(afterDate, 'ear', side.beforeKey)!} />
+  </div>
+)}
+</>
                               ) : (
                                 <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
                                   未登録
@@ -5902,11 +6041,49 @@ export default function ClientsPage() {
                               </div>
 
                               {(findNasMeasurementPhoto(afterDate, 'ear', side.afterKey) || afterPhysical?.earAcupuncturePhotos?.[side.afterKey]) ? (
-                                <img
+                                <>
+<img
                                   src={findNasMeasurementPhoto(afterDate, 'ear', side.afterKey) ? getNasMeasurementPhotoUrl(findNasMeasurementPhoto(afterDate, 'ear', side.afterKey)!) : (afterPhysical?.earAcupuncturePhotos?.[side.afterKey] || '')}
                                   alt={`After ${side.side}耳 施術後`}
                                   className="w-full h-28 object-contain rounded border bg-white"
                                 />
+{findNasMeasurementPhoto(afterDate, 'ear', side.afterKey) && (
+  <div className="mt-2 flex items-center justify-center gap-2">
+    <label
+      title="写真を差し替え"
+      aria-label="写真を差し替え"
+      className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+    >
+      🔄
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={isUploadingMeasurementPhoto}
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          await handleNasMeasurementPhotoUpload(
+            file, 'ear', side.afterKey, afterDate
+          );
+        }}
+      />
+    </label>
+    <button
+      type="button"
+      title="写真を削除"
+      aria-label="写真を削除"
+      disabled={isUploadingMeasurementPhoto}
+      onClick={() => void deleteNasMeasurementPhoto(findNasMeasurementPhoto(afterDate, 'ear', side.afterKey)!)}
+      className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+    >
+      🗑️
+    </button>
+    <NasPhotoDownloadButton photo={findNasMeasurementPhoto(afterDate, 'ear', side.afterKey)!} />
+  </div>
+)}
+</>
                               ) : (
                                 <div className="h-28 flex items-center justify-center text-[9px] text-slate-400 border border-dashed rounded bg-slate-50">
                                   未登録
@@ -5971,6 +6148,41 @@ export default function ClientsPage() {
                                   alt={`${section.title} Before`}
                                   className="w-full h-36 object-contain bg-slate-100"
                                 />
+                                  <div className="mt-2 flex items-center justify-center gap-2">
+
+      <label
+        title="写真を差し替え"
+        className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+      >
+        🔄
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={isUploadingMeasurementPhoto}
+          onChange={async e => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            await handleNasMeasurementPhotoUpload(
+              file, 'measurement', section.type, beforeDate
+            );
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        title="写真を削除"
+        aria-label="写真を削除"
+        disabled={isUploadingMeasurementPhoto}
+        onClick={() => void deleteNasMeasurementPhoto(findNasMeasurementPhoto(beforeDate, 'measurement', section.type)!)}
+        className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+      >
+        🗑️
+      </button>
+      <NasPhotoDownloadButton photo={findNasMeasurementPhoto(beforeDate, 'measurement', section.type)!} />
+
+                                  </div>
                               </div>
                             ) : section.beforeFiles.length > 0 ? (
                               <div className="space-y-2">
@@ -6019,6 +6231,41 @@ export default function ClientsPage() {
                                   alt={`${section.title} After`}
                                   className="w-full h-36 object-contain bg-slate-100"
                                 />
+                                  <div className="mt-2 flex items-center justify-center gap-2">
+
+      <label
+        title="写真を差し替え"
+        className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+      >
+        🔄
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={isUploadingMeasurementPhoto}
+          onChange={async e => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            await handleNasMeasurementPhotoUpload(
+              file, 'measurement', section.type, afterDate
+            );
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        title="写真を削除"
+        aria-label="写真を削除"
+        disabled={isUploadingMeasurementPhoto}
+        onClick={() => void deleteNasMeasurementPhoto(findNasMeasurementPhoto(afterDate, 'measurement', section.type)!)}
+        className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+      >
+        🗑️
+      </button>
+      <NasPhotoDownloadButton photo={findNasMeasurementPhoto(afterDate, 'measurement', section.type)!} />
+
+                                  </div>
                               </div>
                             ) : section.afterFiles.length > 0 ? (
                               <div className="space-y-2">
