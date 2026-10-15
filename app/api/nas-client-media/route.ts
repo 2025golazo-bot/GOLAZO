@@ -282,7 +282,7 @@ export async function POST(request: Request) {
     let perfRead = perfLogin;
 
     try {
-      await client.upload(path, buffer);
+      await client.upload(path, buffer, { changeTime: Math.floor(Date.now() / 1000) });
       perfUpload = Date.now();
 
       const fileExists = await client.exists(path);
