@@ -2225,6 +2225,7 @@ export default function ClientsPage() {
   const handleDeleteChild = (studentId: string) => { const target = students.find(s => s.id === studentId); if (!target || !confirm(`「${target.name}」を削除しますか？\nこの受講生のカルテ・測定・セッション記録も削除されます。`)) return; const remaining = students.filter(s => s.id !== studentId); setStudents(remaining); if (remaining.length) setSelectedStudentId(remaining[0].id); alert('受講生を削除しました。'); };
 
   const [retryingSessionPhotos, setRetryingSessionPhotos] = useState(false);
+  const [sessionPhotoRetryMessage, setSessionPhotoRetryMessage] = useState('');
 
   const handleRetrySessionPhotos = async () => {
     if (!pendingPhotoSessionId || pendingSessionPhotos.length === 0 || retryingSessionPhotos) return;
@@ -2239,7 +2240,9 @@ export default function ClientsPage() {
     }
 
     setRetryingSessionPhotos(true);
+    setSessionPhotoRetryMessage('写真を再送しています...');
     const failedPhotos: File[] = [];
+    const failureReasons: string[] = [];
     let savedCount = 0;
 
     try {
@@ -2274,6 +2277,9 @@ export default function ClientsPage() {
           savedCount++;
         } catch (error) {
           console.error('NAS写真再送エラー:', file.name, error);
+          failureReasons.push(
+            error instanceof Error ? error.message : '原因不明の保存エラー'
+          );
           failedPhotos.push(file);
         }
       }
@@ -2282,10 +2288,16 @@ export default function ClientsPage() {
 
       if (failedPhotos.length === 0) {
         setPendingPhotoSessionId(null);
-        alert(`写真${savedCount}枚をNASに保存しました！`);
+        setSessionPhotoRetryMessage(`写真${savedCount}枚をNASに保存しました！`);
       } else {
-        alert(`写真${savedCount}枚保存、${failedPhotos.length}枚未保存です。再送できます。`);
+        setSessionPhotoRetryMessage(
+          `写真${savedCount}枚保存、${failedPhotos.length}枚未保存。原因: ${failureReasons.join(' / ')}`
+        );
       }
+    } catch (error) {
+      setSessionPhotoRetryMessage(
+        `再送処理エラー: ${error instanceof Error ? error.message : '原因不明のエラー'}`
+      );
     } finally {
       setRetryingSessionPhotos(false);
     }
@@ -5206,6 +5218,12 @@ export default function ClientsPage() {
                         ? '写真を再送しています...'
                         : `📸 未保存の写真${pendingSessionPhotos.length}枚を再送する`}
                     </button>
+                  )}
+
+                  {sessionPhotoRetryMessage && (
+                    <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-slate-800 whitespace-pre-wrap">
+                      {sessionPhotoRetryMessage}
+                    </p>
                   )}
 
                   {/* 新規セッション内の定期測定入力欄 */}
