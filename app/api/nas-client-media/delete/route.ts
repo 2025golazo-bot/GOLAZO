@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { UgosClient } from "ug-file";
+import { parseNasClientMediaPath } from "@/lib/nas/client-media-path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NAS_FOLDER =
-  "/volume1/GOLAZO(アプリ)/files/golazo-photos/golazo-client-media";
 
 const safeFetch: typeof fetch = (input, init = {}) => {
   const headers = new Headers(init.headers);
@@ -91,11 +89,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const match = media.storage_path.match(
-      /^nas:([0-9a-f-]{36}-[0-9a-f-]{36}\.(jpg|png|webp|heic))$/i
-    );
+    const parsed = parseNasClientMediaPath(media.storage_path);
 
-    if (!match) {
+    if (
+      !parsed ||
+      parsed.clientId !== clientId.toLowerCase() ||
+      media.client_id.toLowerCase() !== parsed.clientId
+    ) {
       return NextResponse.json(
         { error: "NAS写真以外は削除できません" },
         { status: 400 }
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     await client.login({ username, password });
     const perfLogin = Date.now();
 
-    const nasPath = `${NAS_FOLDER}/${match[1]}`;
+    const nasPath = parsed.absolutePath;
 
     const fileExists = await client.exists(nasPath);
     const perfExists = Date.now();

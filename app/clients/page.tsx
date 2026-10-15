@@ -2254,6 +2254,7 @@ export default function ClientsPage() {
 
           const formData = new FormData();
           formData.append('clientId', currentStudent.supabaseClientId);
+    formData.append('clientName', currentStudent.name.trim());
           formData.append('sessionId', session.id);
           formData.append('takenDate', session.date);
           formData.append('file', file);
@@ -2490,6 +2491,7 @@ export default function ClientsPage() {
 
           const formData = new FormData();
           formData.append('clientId', supabaseClientId!);
+    formData.append('clientName', currentStudent.name.trim());
           formData.append('sessionId', localSessionId);
           formData.append('takenDate', newSessionDate);
           formData.append('file', file);
@@ -3352,6 +3354,7 @@ export default function ClientsPage() {
 
     const formData = new FormData();
     formData.append('clientId', clientId);
+    formData.append('clientName', currentStudent.name.trim());
     formData.append('category', category);
     formData.append('photoType', photoType);
     formData.append('takenDate', takenDate);

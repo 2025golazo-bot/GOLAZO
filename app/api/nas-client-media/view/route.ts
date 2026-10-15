@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { UgosClient } from "ug-file";
+import { parseNasClientMediaPath } from "@/lib/nas/client-media-path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NAS_FOLDER =
-  "/volume1/GOLAZO(アプリ)/files/golazo-photos/golazo-client-media";
 
 const safeFetch: typeof fetch = (input, init = {}) => {
   const headers = new Headers(init.headers);
@@ -60,19 +58,17 @@ export async function GET(request: NextRequest) {
 
     const storagePath = request.nextUrl.searchParams.get("path");
 
-    const match = storagePath?.match(
-      /^nas:([0-9a-f-]{36}-[0-9a-f-]{36}\.(jpg|png|webp|heic))$/i
-    );
+    const parsed = storagePath ? parseNasClientMediaPath(storagePath) : null;
 
-    if (!match) {
+    if (!parsed) {
       return NextResponse.json(
         { error: "ファイル指定が不正です" },
         { status: 400 }
       );
     }
 
-    const filename = match[1];
-    const extension = match[2].toLowerCase();
+    const filename = parsed.filename;
+    const extension = parsed.extension;
 
     // NASに存在するだけでは閲覧を許可しない。
     // 顧客カルテに登録済みの写真だけを取得する。
@@ -82,7 +78,11 @@ export async function GET(request: NextRequest) {
       .eq("storage_path", storagePath!)
       .maybeSingle();
 
-    if (mediaError || !media) {
+    if (
+      mediaError ||
+      !media ||
+      media.client_id.toLowerCase() !== parsed.clientId
+    ) {
       return NextResponse.json(
         { error: "登録された写真が見つかりません" },
         { status: 404 }
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       throw new Error("NASログイン失敗");
     }
 
-    const path = `${NAS_FOLDER}/${filename}`;
+    const path = parsed.absolutePath;
 
     if (!(await client.exists(path))) {
       return NextResponse.json(

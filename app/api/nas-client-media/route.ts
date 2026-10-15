@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { UgosClient } from "ug-file";
+import { parseNasClientMediaPath, safeNasClientName } from "@/lib/nas/client-media-path";
 import { createHash, randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
@@ -175,8 +176,10 @@ export async function POST(request: Request) {
         previousMedia.category !== category ||
         previousMedia.photo_type !== photoType ||
         previousMedia.taken_date !== takenDate ||
-        !/^nas:[0-9a-f-]{36}-[0-9a-f-]{36}\.(jpg|png|webp|heic)$/i.test(
-          previousMedia.storage_path
+        !(
+          typeof previousMedia.storage_path === "string" &&
+          parseNasClientMediaPath(previousMedia.storage_path)?.clientId ===
+            clientId.toLowerCase()
         )
       ) {
         return NextResponse.json(
@@ -188,6 +191,22 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    const clientNameInput = form.get("clientName");
+
+    if (
+      typeof clientNameInput !== "string" ||
+      !clientNameInput.trim() ||
+      clientNameInput.length > 100
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "顧客名を確認できません。写真の登録を中止しました" },
+        { status: 400 }
+      );
+    }
+
+    const nasCustomerFolder =
+      `${safeNasClientName(clientNameInput)}_${clientId.toLowerCase()}`;
 
     const uglinkid = process.env.NAS_UGLINK_ID;
     const username = process.env.NAS_USERNAME;
@@ -224,33 +243,72 @@ export async function POST(request: Request) {
       );
     }
 
-    const filename = `${clientId}-${randomUUID()}${extension}`;
-    const path = `${NAS_FOLDER}/${filename}`;
+    const filename = `${clientId.toLowerCase()}-${randomUUID()}${extension}`;
+    const relativeFolder = `${nasCustomerFolder}/${category}`;
+    const folderPath = `${NAS_FOLDER}/${relativeFolder}`;
+    const relativePath = `${relativeFolder}/${filename}`;
+    const path = `${NAS_FOLDER}/${relativePath}`;
+    const parsedNewPhoto = parseNasClientMediaPath(`nas:${relativePath}`);
+
+    if (
+      !parsedNewPhoto ||
+      parsedNewPhoto.clientId !== clientId.toLowerCase() ||
+      parsedNewPhoto.absolutePath !== path
+    ) {
+      throw new Error("写真の新しい保存先を安全に確認できませんでした");
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    await client.upload(path, buffer);
-    const perfUpload = Date.now();
-
-    const fileExists = await client.exists(path);
-    const perfExists = Date.now();
-    if (!fileExists) {
-      throw new Error("NASへの保存を確認できませんでした");
+    if (!(await client.exists(folderPath))) {
+      await client.mkdir(folderPath, true);
     }
 
-    const saved = await client.readFile(path);
-    const perfRead = Date.now();
-    const savedBuffer = Buffer.isBuffer(saved)
-      ? saved
-      : Buffer.from(saved);
+    let perfUpload = perfLogin;
+    let perfExists = perfLogin;
+    let perfRead = perfLogin;
 
-    const hash = (data: Buffer) =>
-      createHash("sha256").update(data).digest("hex");
+    try {
+      await client.upload(path, buffer);
+      perfUpload = Date.now();
 
-    if (hash(buffer) !== hash(savedBuffer)) {
-      throw new Error("NAS保存後の内容確認に失敗しました");
+      const fileExists = await client.exists(path);
+      perfExists = Date.now();
+      if (!fileExists) {
+        throw new Error("NASへの保存を確認できませんでした");
+      }
+
+      const saved = await client.readFile(path);
+      perfRead = Date.now();
+      const savedBuffer = Buffer.isBuffer(saved)
+        ? saved
+        : Buffer.from(saved);
+
+      const hash = (data: Buffer) =>
+        createHash("sha256").update(data).digest("hex");
+
+      if (hash(buffer) !== hash(savedBuffer)) {
+        throw new Error("NAS保存後の内容確認に失敗しました");
+      }
+    } catch (saveError) {
+      try {
+        if (await client.exists(path)) {
+          await client.trash(path);
+        }
+      } catch (cleanupError) {
+        console.error(
+          "NAS new-photo cleanup failed:",
+          cleanupError instanceof Error ? cleanupError.message : "unknown"
+        );
+        throw new Error(
+          "写真の保存確認と後片付けに失敗しました。管理者に確認してください"
+        );
+      }
+
+      throw saveError;
     }
 
-    const storagePath = `nas:${filename}`;
+    const storagePath = `nas:${relativePath}`;
 
     const { data: record, error: dbError } = await supabase
       .from("client_media")
@@ -299,17 +357,16 @@ export async function POST(request: Request) {
           .eq("client_id", clientId)
           .maybeSingle();
 
-        const match =
+        const parsedPrevious =
           typeof previous?.storage_path === "string"
-            ? previous.storage_path.match(
-                /^nas:([0-9a-f-]{36}-[0-9a-f-]{36}\.(jpg|png|webp|heic))$/i
-              )
+            ? parseNasClientMediaPath(previous.storage_path)
             : null;
 
         if (
           previousError ||
           !previous ||
-          !match ||
+          !parsedPrevious ||
+          parsedPrevious.clientId !== clientId.toLowerCase() ||
           previous.category !== category ||
           previous.photo_type !== photoType ||
           previous.taken_date !== takenDate ||
@@ -317,7 +374,7 @@ export async function POST(request: Request) {
         ) {
           previousPhotoDeleteWarning = true;
         } else {
-          const oldPath = `${NAS_FOLDER}/${match[1]}`;
+          const oldPath = parsedPrevious.absolutePath;
 
           // 新しい写真とは別ファイルであることを確認。
           if (oldPath === path) {
