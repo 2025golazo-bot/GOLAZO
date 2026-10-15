@@ -1258,6 +1258,7 @@ export default function ClientsPage() {
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
   const [newSessionPhotoUrl, setNewSessionPhotoUrl] = useState<string | null>(null);
   const [pendingSessionPhotos, setPendingSessionPhotos] = useState<File[]>([]);
+  const [sessionMediaRefresh, setSessionMediaRefresh] = useState(0);
   const [pendingPhotoSessionId, setPendingPhotoSessionId] = useState<string | null>(null);
   const [isSavingSession, setIsSavingSession] = useState(false);
   const savingSessionRef = useRef(false);
@@ -2285,6 +2286,7 @@ export default function ClientsPage() {
       }
 
       setPendingSessionPhotos(failedPhotos);
+      if (savedCount > 0) setSessionMediaRefresh(v => v + 1);
 
       if (failedPhotos.length === 0) {
         setPendingPhotoSessionId(null);
@@ -2526,6 +2528,7 @@ export default function ClientsPage() {
       }
 
       setPendingSessionPhotos(failedPhotos);
+      if (savedCount > 0) setSessionMediaRefresh(v => v + 1);
       setPendingPhotoSessionId(failedPhotos.length > 0 ? localSessionId : null);
 
       if (failedPhotos.length > 0) {
@@ -5593,6 +5596,7 @@ export default function ClientsPage() {
                 {/* 顧客別写真・動画管理 */}
                 <ClientMediaManager
                   clientId={currentStudent.supabaseClientId}
+                  externalRefreshKey={sessionMediaRefresh}
                   onEnable={resolvePhotoClientId}
                   sessions={currentStudent.sessions.map(session => ({
                     id: session.id,

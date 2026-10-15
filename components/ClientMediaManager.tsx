@@ -20,10 +20,12 @@ export default function ClientMediaManager({
   clientId,
   onEnable,
   sessions = [],
+  externalRefreshKey = 0,
 }: {
   clientId?: string;
   onEnable?: () => Promise<string>;
   sessions?: SessionOption[];
+  externalRefreshKey?: number;
 }) {
   const [items, setItems] = useState<DisplayItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -212,7 +214,7 @@ export default function ClientMediaManager({
     };
     void load();
     return () => { cancelled = true; };
-  }, [clientId, refreshKey]);
+  }, [clientId, refreshKey, externalRefreshKey]);
 
   return (
     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
