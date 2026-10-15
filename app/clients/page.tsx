@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef} from 'react';
 import Header from '@/components/Header';
 import MeasurementTrendChart from '@/components/MeasurementTrendChart';
 import ClientMediaManager from '@/components/ClientMediaManager';
+import SessionPhotoPreview from '@/components/SessionPhotoPreview';
 import { createClient } from '@/lib/supabase/client';
 import { heicTo } from 'heic-to';
 
@@ -5191,15 +5192,27 @@ export default function ClientsPage() {
                       <span className="hidden text-[#5e9bc4] group-open:inline">▲ 閉じる</span>
                     </summary>
                     <div className="mt-4 space-y-2">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/heic"
-                        multiple
-                        onChange={e => {
-                          const files = Array.from(e.target.files || []);
-                          setPendingSessionPhotos(files);
-                        }}
-                        className="block w-full text-xs text-slate-600"
+                      <label className="inline-flex cursor-pointer items-center rounded-lg bg-[#5e9bc4] px-4 py-2 text-xs font-bold text-white">
+                        ＋ 写真を選択・変更
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,.heic,.heif"
+                          multiple
+                          className="sr-only"
+                          onChange={e => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = '';
+                            setPendingSessionPhotos(files);
+                          }}
+                        />
+                      </label>
+                      <SessionPhotoPreview
+                        files={pendingSessionPhotos}
+                        onRemove={index =>
+                          setPendingSessionPhotos(previous =>
+                            previous.filter((_, i) => i !== index)
+                          )
+                        }
                       />
                       <p className="text-[11px] text-slate-500">
                         写真は1枚4MB以下。動画はNAS保存対応後に追加できます。
