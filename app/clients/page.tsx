@@ -2245,10 +2245,11 @@ export default function ClientsPage() {
     try {
       for (const file of pendingSessionPhotos) {
         try {
-          if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(file.type)) {
+          const uploadFile = await prepareImageForUpload(file);
+          if (!['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
             throw new Error('対応していない写真形式です');
           }
-          if (file.size === 0 || file.size > 4 * 1024 * 1024) {
+          if (uploadFile.size === 0 || uploadFile.size > 4 * 1024 * 1024) {
             throw new Error('写真は1枚4MB以下にしてください');
           }
 
@@ -2257,7 +2258,7 @@ export default function ClientsPage() {
     formData.append('clientName', currentStudent.name.trim());
           formData.append('sessionId', session.id);
           formData.append('takenDate', session.date);
-          formData.append('file', file);
+          formData.append('file', uploadFile);
 
           const response = await fetch('/api/nas-client-media', {
             method: 'POST',
@@ -2482,10 +2483,11 @@ export default function ClientsPage() {
 
       for (const file of pendingSessionPhotos) {
         try {
-          if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(file.type)) {
+          const uploadFile = await prepareImageForUpload(file);
+          if (!['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
             throw new Error('対応していない写真形式です');
           }
-          if (file.size === 0 || file.size > 4 * 1024 * 1024) {
+          if (uploadFile.size === 0 || uploadFile.size > 4 * 1024 * 1024) {
             throw new Error('写真は1枚4MB以下にしてください');
           }
 
@@ -2494,7 +2496,7 @@ export default function ClientsPage() {
     formData.append('clientName', currentStudent.name.trim());
           formData.append('sessionId', localSessionId);
           formData.append('takenDate', newSessionDate);
-          formData.append('file', file);
+          formData.append('file', uploadFile);
 
           const response = await fetch('/api/nas-client-media', {
             method: 'POST',
