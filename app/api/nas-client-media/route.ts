@@ -260,7 +260,20 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    if (!(await client.exists(folderPath))) {
+    let folderExists = false;
+
+    try {
+      folderExists = await client.exists(folderPath);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+
+      if (!/Path does not exist/i.test(message)) {
+        throw error;
+      }
+    }
+
+    if (!folderExists) {
       await client.mkdir(folderPath, true);
     }
 
