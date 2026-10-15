@@ -5299,7 +5299,26 @@ export default function ClientsPage() {
                 alt={item.label}
                 className="mx-auto h-28 w-full rounded border object-contain"
               />
-              <button
+              <div className="flex items-center justify-center gap-2"><label title="写真を差し替え" className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm">
+            🔄
+            <input
+              type="file"
+              accept="image/*"
+              disabled={isUploadingMeasurementPhoto}
+              className="hidden"
+              onChange={async e => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                await handleNasMeasurementPhotoUpload(
+                  file,
+                  'ear',
+                  item.key,
+                  sessionPostureDate || newSessionDate
+                );
+              }}
+            />
+          </label><button
                 type="button"
                 disabled={isUploadingMeasurementPhoto}
                 onClick={() => void deleteNasMeasurementPhoto(photo)}
@@ -5307,11 +5326,11 @@ export default function ClientsPage() {
               >
                 🗑️
               </button>
-              <NasPhotoDownloadButton photo={photo} />
+              <NasPhotoDownloadButton photo={photo} /></div>
             </div>
           )}
 
-          <label className="mt-3 block cursor-pointer font-bold text-[#5e9bc4]">
+          {!photo && (<label className="mt-3 block cursor-pointer font-bold text-[#5e9bc4]">
             {photo ? '🔄' : '＋ 写真を選択'}
             <input
               type="file"
@@ -5330,7 +5349,7 @@ export default function ClientsPage() {
                 );
               }}
             />
-          </label>
+          </label>)}
         </div>
       );
     })}
@@ -5379,15 +5398,38 @@ export default function ClientsPage() {
           alt={item.label}
           className="mx-auto h-28 w-full rounded border object-contain"
         />
-        <button
+        <div className="mt-2 flex items-center justify-center gap-2">
+<label
+  title="写真を差し替え"
+  className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+>
+  🔄
+  <input
+    type="file"
+    accept="image/*"
+    className="hidden"
+    disabled={isUploadingMeasurementPhoto}
+    onChange={async e => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      await handleNasMeasurementPhotoUpload(
+        file, 'posture', item.key,
+        sessionPostureDate || newSessionDate
+      );
+    }}
+  />
+</label>
+<button
           type="button"
           disabled={isUploadingMeasurementPhoto}
           onClick={() => void deleteNasMeasurementPhoto(photo)}
-          title="写真を削除" aria-label="写真を削除" className="mt-2 inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+          title="写真を削除" aria-label="写真を削除" className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
         >
           🗑️
         </button>
               <NasPhotoDownloadButton photo={photo} />
+</div>
       </div>
     ) : null;
   })()}
@@ -5401,7 +5443,7 @@ export default function ClientsPage() {
                                     sessionPostureDate || newSessionDate,
                                     'posture',
                                     item.key
-                                  ) ? '🔄' : '＋ 写真を選択'}
+                                  ) ? null : '＋ 写真を選択'}
                               </span>
                               <input
                                 type="file"
@@ -5446,15 +5488,38 @@ export default function ClientsPage() {
           alt={item.label}
           className="mx-auto h-28 w-full rounded border object-contain"
         />
-        <button
+        <div className="mt-2 flex items-center justify-center gap-2">
+<label
+  title="写真を差し替え"
+  className="inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-sm"
+>
+  🔄
+  <input
+    type="file"
+    accept="image/*"
+    className="hidden"
+    disabled={isUploadingMeasurementPhoto}
+    onChange={async e => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      await handleNasMeasurementPhotoUpload(
+        file, 'measurement', item.type,
+        sessionPostureDate || newSessionDate
+      );
+    }}
+  />
+</label>
+<button
           type="button"
           disabled={isUploadingMeasurementPhoto}
           onClick={() => void deleteNasMeasurementPhoto(photo)}
-          title="写真を削除" aria-label="写真を削除" className="mt-2 inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
+          title="写真を削除" aria-label="写真を削除" className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-rose-200 bg-white text-sm disabled:opacity-50"
         >
           🗑️
         </button>
               <NasPhotoDownloadButton photo={photo} />
+</div>
       </div>
     ) : null;
   })()}
@@ -5468,7 +5533,7 @@ export default function ClientsPage() {
       sessionPostureDate || newSessionDate,
       'measurement',
       item.type
-    ) ? '🔄' : '＋ 写真を選択'}
+    ) ? null : '＋ 写真を選択'}
                             </span>
                             <input
                               type="file"
