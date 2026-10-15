@@ -2248,7 +2248,7 @@ export default function ClientsPage() {
     try {
       for (const file of pendingSessionPhotos) {
         try {
-          const uploadFile = await prepareImageForUpload(file);
+          const uploadFile = await prepareImageForUpload(file, 'posture');
           if (!['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
             throw new Error('対応していない写真形式です');
           }
@@ -2495,7 +2495,7 @@ export default function ClientsPage() {
 
       for (const file of pendingSessionPhotos) {
         try {
-          const uploadFile = await prepareImageForUpload(file);
+          const uploadFile = await prepareImageForUpload(file, 'posture');
           if (!['image/jpeg', 'image/png', 'image/webp'].includes(uploadFile.type)) {
             throw new Error('対応していない写真形式です');
           }
