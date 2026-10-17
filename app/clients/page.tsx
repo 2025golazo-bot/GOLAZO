@@ -6,6 +6,7 @@ import MeasurementTrendChart from '@/components/MeasurementTrendChart';
 import ClientMediaManager from '@/components/ClientMediaManager';
 import SessionPhotoPreview from '@/components/SessionPhotoPreview';
 import { createClient } from '@/lib/supabase/client';
+import { uploadClientVideo } from '@/lib/video/upload-client';
 import { heicTo } from 'heic-to';
 
 // HEIC / HEIFだけJPEGへ変換し、それ以外は元ファイルをそのまま返す
@@ -1259,6 +1260,7 @@ export default function ClientsPage() {
   const [newSessionHomework, setNewSessionHomework] = useState<string>('');
   const [newSessionPhotoUrl, setNewSessionPhotoUrl] = useState<string | null>(null);
   const [pendingSessionPhotos, setPendingSessionPhotos] = useState<File[]>([]);
+  const [pendingSessionVideos, setPendingSessionVideos] = useState<File[]>([]);
   const [sessionMediaRefresh, setSessionMediaRefresh] = useState(0);
   const [pendingPhotoSessionId, setPendingPhotoSessionId] = useState<string | null>(null);
   const [isSavingSession, setIsSavingSession] = useState(false);
@@ -2541,7 +2543,42 @@ export default function ClientsPage() {
         alert(`セッションと写真${savedCount}枚をNASに保存しました！`);
       }
     } else {
-      alert('セッションを登録しました！');
+      if (pendingSessionVideos.length === 0) {
+        alert('セッションを登録しました！');
+      }
+    }
+
+    if (pendingSessionVideos.length > 0) {
+      const failedVideos: File[] = [];
+      let savedVideos = 0;
+
+      for (const file of pendingSessionVideos) {
+        try {
+          await uploadClientVideo(
+            file,
+            supabaseClientId!,
+            localSessionId,
+            message => setSessionPhotoRetryMessage(message)
+          );
+          savedVideos++;
+        } catch (error) {
+          console.error('NAS動画保存エラー:', file.name, error);
+          failedVideos.push(file);
+          alert(
+            'セッションは登録済みですが、動画の保存に失敗しました。' +
+            '\\n同じ動画を再送せず、エラーを確認してください。' +
+            '\\n' +
+            (error instanceof Error ? error.message : '原因不明')
+          );
+        }
+      }
+
+      setPendingSessionVideos(failedVideos);
+      if (savedVideos > 0) {
+        setSessionMediaRefresh(value => value + 1);
+        alert('動画' + savedVideos + '本をNASに保存しました！');
+      }
+      setSessionPhotoRetryMessage('');
     }
     } finally {
       savingSessionRef.current = false;
@@ -5206,6 +5243,26 @@ export default function ClientsPage() {
                           }}
                         />
                       </label>
+                      <label className="inline-flex cursor-pointer items-center rounded-lg bg-[#5e9bc4] px-4 py-2 text-xs font-bold text-white">
+                        ＋ 動画を選択・変更
+                        <input
+                          type="file"
+                          accept="video/quicktime,video/mp4,.mov,.mp4"
+                          multiple
+                          className="sr-only"
+                          onChange={e => {
+                            const files = Array.from(e.target.files || []);
+                            e.target.value = '';
+                            setPendingSessionVideos(files);
+                          }}
+                        />
+                      </label>
+                      {pendingSessionVideos.length > 0 && (
+                        <p className="text-xs text-slate-600">
+                          動画{pendingSessionVideos.length}本選択中：
+                          {pendingSessionVideos.map(f => f.name).join('、')}
+                        </p>
+                      )}
                       <SessionPhotoPreview
                         files={pendingSessionPhotos}
                         onRemove={index =>
