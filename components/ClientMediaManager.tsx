@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { uploadClientVideo } from '@/lib/video/upload-client';
 
 type SessionOption = { id: string; date: string; staff: string; content: string };
 type MediaItem = {
@@ -43,7 +44,7 @@ export default function ClientMediaManager({
     b.date.localeCompare(a.date)
   );
   const sessionLabel = (session: SessionOption) =>
-    `${session.date} / ${session.staff} / ${session.content.slice(0, 35)}`;
+    session.date;
 
   const uploadFiles = useCallback(async (files: File[], sessionId: string) => {
     if (!clientId || files.length === 0 || uploading) return;
@@ -58,8 +59,15 @@ export default function ClientMediaManager({
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw new Error('ログイン情報を確認できません');
       for (const file of files) {
-        if (file.type.startsWith('video/')) {
-          throw new Error('動画のNAS保存は準備中です。現在、新しい動画は登録できません');
+        if (file.type.startsWith('video/') || /\.(mov|mp4)$/i.test(file.name)) {
+          await uploadClientVideo(
+            file,
+            clientId,
+            session.id,
+            message => setUploadMessage(message)
+          );
+          completed++;
+          continue;
         }
 
         if (!['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(file.type)) {
@@ -88,7 +96,7 @@ export default function ClientMediaManager({
         }
         completed++;
       }
-      setUploadMessage(`${completed}件の写真をNASに保存しました`);
+      setUploadMessage(`${completed}件の写真・動画をNASに保存しました`);
     } catch (err) {
       setError(`${completed}件保存済み。` + (err instanceof Error ? err.message : 'アップロードに失敗しました'));
     } finally {
@@ -123,6 +131,11 @@ export default function ClientMediaManager({
 
   const deleteItem = async (item: DisplayItem) => {
     if (!clientId || busyId) return;
+
+    if (item.media_type === 'video' && item.storage_path.startsWith('nas:')) {
+      setError('NAS動画の削除機能は準備中です。動画は削除されていません');
+      return;
+    }
 
     if (item.storage_path.startsWith('nas:')) {
       if (!window.confirm(`「${item.file_name}」を削除しますか？\nNASのゴミ箱へ移動し、カルテから削除します。`)) return;
@@ -194,8 +207,11 @@ export default function ClientMediaManager({
         const records: DisplayItem[] = [];
         for (const item of (data || []) as MediaItem[]) {
           if (item.storage_path.startsWith('nas:')) {
-            const url = '/api/nas-client-media/view?path='
-              + encodeURIComponent(item.storage_path);
+            const url = item.media_type === 'video'
+              ? '/api/nas-client-video/view?mediaId='
+                + encodeURIComponent(item.id)
+              : '/api/nas-client-media/view?path='
+                + encodeURIComponent(item.storage_path);
             records.push({ ...item, url });
             continue;
           }
