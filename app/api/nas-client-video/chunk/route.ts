@@ -135,7 +135,16 @@ export async function POST(request: Request) {
         throw new Error("動画の作成日時が不正です");
       }
 
+      const nasLoginStart = Date.now();
       const nas = await connectVideoNas();
+
+      console.info(
+        "[VIDEO_TIMING] NAS login:",
+        Date.now() - nasLoginStart,
+        "ms",
+        "offset:",
+        offset
+      );
 
       const folder = await ensureVideoNasFolder(
         nas,
@@ -193,6 +202,8 @@ export async function POST(request: Request) {
         );
       }
 
+      const nasSendStart = Date.now();
+
       await sendVideoNasChunk(
         nas,
         folder,
@@ -203,6 +214,16 @@ export async function POST(request: Request) {
         bytes,
         changeTime
       );
+
+      console.info(
+        "[VIDEO_TIMING] NAS chunk send:",
+        Date.now() - nasSendStart,
+        "ms",
+        "offset:",
+        offset
+      );
+
+      const nasVerifyStart = Date.now();
 
       if (offset + bytes.length === upload.file_size) {
         // 最終チャンクではNASの一時アップロード情報が
@@ -233,6 +254,14 @@ export async function POST(request: Request) {
           offset + bytes.length
         );
       }
+
+      console.info(
+        "[VIDEO_TIMING] NAS chunk verify:",
+        Date.now() - nasVerifyStart,
+        "ms",
+        "offset:",
+        offset
+      );
 
       const { data: completed, error: completeError } =
         await adminSupabase.rpc("complete_client_video_chunk", {
