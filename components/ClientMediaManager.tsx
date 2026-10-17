@@ -253,7 +253,7 @@ export default function ClientMediaManager({
             <label className={`inline-block rounded-lg px-4 py-2 text-sm font-bold text-white ${uploading || !selectedSessionId ? 'cursor-not-allowed bg-slate-300' : 'cursor-pointer bg-[#5e9bc4]'}`}>
               {uploading ? 'アップロード中...' : '＋ 写真・動画を追加'}
               <input
-                type="file" accept="image/*,video/*" multiple
+                type="file" accept="image/*,video/*,.mov,.mp4,video/quicktime,video/mp4" multiple
                 disabled={uploading || !selectedSessionId} className="hidden"
                 onChange={event => {
                   const files = Array.from(event.target.files || []);
