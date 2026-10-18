@@ -136,7 +136,9 @@ export async function POST(request: Request) {
       }
 
       const nasLoginStart = Date.now();
+      const timingStart = Date.now();
       const nas = await connectVideoNas();
+      const timingLoginMs = Date.now() - timingStart;
 
       console.info(
         "[VIDEO_TIMING] NAS login:",
@@ -204,6 +206,8 @@ export async function POST(request: Request) {
 
       const nasSendStart = Date.now();
 
+      const timingBeforeSend = Date.now();
+
       await sendVideoNasChunk(
         nas,
         folder,
@@ -263,6 +267,8 @@ export async function POST(request: Request) {
         offset
       );
 
+      const timingBeforeDb = Date.now();
+
       const { data: completed, error: completeError } =
         await adminSupabase.rpc("complete_client_video_chunk", {
           p_upload_id: uploadId,
@@ -277,6 +283,14 @@ export async function POST(request: Request) {
           "NASへの送信後に進行状況の更新が失敗しました。管理者の確認が必要です"
         );
       }
+
+      console.info("Video chunk timing", {
+        chunkMB: Math.round(bytes.length / 1024 / 1024 * 100) / 100,
+        nasLoginMs: timingLoginMs,
+        nasPreparationMs: timingBeforeSend - timingStart - timingLoginMs,
+        nasSendAndVerifyMs: timingBeforeDb - timingBeforeSend,
+        totalMs: Date.now() - timingStart,
+      });
 
       return NextResponse.json({
         ok: true,
