@@ -29,10 +29,10 @@ export async function ensureVideoNasFolder(
 
   if (!exists) {
     await client.mkdir(folder, true);
-  }
 
-  if (!(await client.exists(folder))) {
-    throw new Error("NASの動画保存先フォルダを確認できません");
+    if (!(await client.exists(folder))) {
+      throw new Error("NASの動画保存先フォルダを確認できません");
+    }
   }
 
   return folder;
