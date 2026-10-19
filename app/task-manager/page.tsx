@@ -1324,6 +1324,100 @@ export default function TaskManagerPage() {
         {/* タブ1: タスク管理 */}
         {activeTab === 'task' && (
           <div className="space-y-4">
+            {(() => {
+              const now = new Date();
+              const today = [
+                now.getFullYear(),
+                String(now.getMonth() + 1).padStart(2, '0'),
+                String(now.getDate()).padStart(2, '0'),
+              ].join('-');
+
+              const sections = [
+                {
+                  title: '☀️ 本日のタスク',
+                  empty: '✨ 本日のタスクなし',
+                  items: tasks.filter(
+                    task => !task.completed && task.dueDate === today
+                  ),
+                },
+                {
+                  title: '⏰ 期限切れタスク',
+                  empty: '✨ 期限切れなし',
+                  items: tasks.filter(
+                    task =>
+                      !task.completed &&
+                      !!task.dueDate &&
+                      task.dueDate < today
+                  ),
+                },
+              ];
+
+              return (
+                <div className="space-y-4">
+                  {sections.map(section => (
+                    <section
+                      key={section.title}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <h3 className="mb-3 text-base font-bold text-slate-800">
+                        {section.title}
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {(['TAKA', 'NANA'] as const).map(assignee => {
+                          const personTasks = section.items
+                            .filter(task => task.assignee === assignee)
+                            .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+                          return (
+                            <div
+                              key={assignee}
+                              className="rounded-xl bg-slate-50 p-4"
+                            >
+                              <div className="mb-3 flex items-center justify-between">
+                                <span className="font-bold text-slate-800">
+                                  {assignee === 'TAKA' ? '💪 TAKA' : '🌻 NANA'}
+                                </span>
+                                <span className="rounded-full bg-[#5e9bc4]/10 px-3 py-1 text-xs font-bold text-[#4d85ab]">
+                                  {personTasks.length}件
+                                </span>
+                              </div>
+
+                              {personTasks.length === 0 ? (
+                                <p className="text-xs text-slate-500">
+                                  {section.empty}
+                                </p>
+                              ) : (
+                                <ul className="space-y-2">
+                                  {personTasks.map(task => (
+                                    <li
+                                      key={task.id}
+                                      className="rounded-lg border border-slate-100 bg-white p-2 text-sm text-slate-700"
+                                    >
+                                      <span className="mr-2">☐</span>
+                                      {task.title}
+                                      {task.priority && (
+                                        <span className="ml-2 text-xs font-bold text-red-500">
+                                          🔥 重要
+                                        </span>
+                                      )}
+                                      {task.dueDate < today && (
+                                        <p className="mt-1 text-xs text-red-500">
+                                          期限：{task.dueDate}
+                                        </p>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3 justify-between items-center">
               <div className="w-full md:w-80">
                 <input
