@@ -84,6 +84,7 @@ export async function uploadClientVideo(
     throw new Error('動画の分割サイズが不正です');
   }
 
+  try {
   for (let offset = 0; offset < file.size; offset += chunkSize) {
     const end = Math.min(offset + chunkSize, file.size);
     const chunk = file.slice(offset, end);
@@ -131,4 +132,17 @@ export async function uploadClientVideo(
   onProgress('動画の保存が完了しました');
 
   return finishResult.mediaId;
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : '動画の送信状況を確認できません';
+
+    if (message.includes(`動画アップロードID: ${uploadId}`)) {
+      throw error;
+    }
+
+    throw uploadFailure(
+      `${message}。保存状態を確認するまで再送しないでください`
+    );
+  }
 }

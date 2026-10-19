@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { uploadClientVideo } from '@/lib/video/upload-client';
+import {
+  extractVideoUploadId,
+  checkVideoUploadStatus,
+} from '@/lib/video/check-upload-status';
 
 type SessionOption = { id: string; date: string; staff: string; content: string };
 type MediaItem = {
@@ -31,6 +35,8 @@ export default function ClientMediaManager({
   const [items, setItems] = useState<DisplayItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [videoStatusMessage, setVideoStatusMessage] = useState('');
+  const [checkingVideoStatus, setCheckingVideoStatus] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -395,6 +401,38 @@ export default function ClientMediaManager({
         </div>
       )}
       {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
+      {extractVideoUploadId(error) && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            disabled={checkingVideoStatus}
+            onClick={async () => {
+              const uploadId = extractVideoUploadId(error);
+              if (!uploadId) return;
+              setCheckingVideoStatus(true);
+              setVideoStatusMessage('');
+              try {
+                setVideoStatusMessage(await checkVideoUploadStatus(uploadId));
+              } catch (err) {
+                setVideoStatusMessage(
+                  (err instanceof Error ? err.message : '状態を確認できません') +
+                  '。再送せず管理者に確認してください。'
+                );
+              } finally {
+                setCheckingVideoStatus(false);
+              }
+            }}
+            className="rounded-lg border border-[#5e9bc4] px-3 py-2 text-xs font-bold text-[#4d85ab] disabled:opacity-50"
+          >
+            {checkingVideoStatus ? '確認中...' : '🔍 動画の保存状態を確認'}
+          </button>
+          {videoStatusMessage && (
+            <p role="status" className="text-xs text-slate-700">
+              {videoStatusMessage}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

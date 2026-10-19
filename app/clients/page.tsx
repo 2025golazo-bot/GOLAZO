@@ -7,6 +7,10 @@ import ClientMediaManager from '@/components/ClientMediaManager';
 import SessionPhotoPreview from '@/components/SessionPhotoPreview';
 import { createClient } from '@/lib/supabase/client';
 import { uploadClientVideo } from '@/lib/video/upload-client';
+import {
+  extractVideoUploadId,
+  checkVideoUploadStatus,
+} from '@/lib/video/check-upload-status';
 import { heicTo } from 'heic-to';
 
 // HEIC / HEIFだけJPEGへ変換し、それ以外は元ファイルをそのまま返す
@@ -2230,6 +2234,8 @@ export default function ClientsPage() {
 
   const [retryingSessionPhotos, setRetryingSessionPhotos] = useState(false);
   const [sessionPhotoRetryMessage, setSessionPhotoRetryMessage] = useState('');
+  const [sessionVideoStatusMessage, setSessionVideoStatusMessage] = useState('');
+  const [checkingSessionVideoStatus, setCheckingSessionVideoStatus] = useState(false);
 
   const handleRetrySessionPhotos = async () => {
     if (!pendingPhotoSessionId || pendingSessionPhotos.length === 0 || retryingSessionPhotos) return;
@@ -2551,6 +2557,7 @@ export default function ClientsPage() {
     if (pendingSessionVideos.length > 0) {
       const failedVideos: File[] = [];
       let savedVideos = 0;
+      let lastVideoError = '';
 
       for (const file of pendingSessionVideos) {
         try {
@@ -2564,6 +2571,7 @@ export default function ClientsPage() {
         } catch (error) {
           console.error('NAS動画保存エラー:', file.name, error);
           failedVideos.push(file);
+          lastVideoError = error instanceof Error ? error.message : '原因不明';
           alert(
             'セッションは登録済みですが、動画の保存に失敗しました。' +
             '\\n同じ動画を再送せず、エラーを確認してください。' +
@@ -2578,7 +2586,14 @@ export default function ClientsPage() {
         setSessionMediaRefresh(value => value + 1);
         alert('動画' + savedVideos + '本をNASに保存しました！');
       }
-      setSessionPhotoRetryMessage('');
+      if (failedVideos.length > 0) {
+        setSessionPhotoRetryMessage(
+          '⚠️ 動画の保存状態を確認してください。自動再送はしません。\n' +
+          lastVideoError
+        );
+      } else {
+        setSessionPhotoRetryMessage('');
+      }
     }
     } finally {
       savingSessionRef.current = false;
@@ -5317,6 +5332,44 @@ export default function ClientsPage() {
                               width: `${Math.min(100, Number(sessionPhotoRetryMessage.match(/(\d+)%$/)?.[1] ?? 0))}%`,
                             }}
                           />
+                        </div>
+                      )}
+                      {extractVideoUploadId(sessionPhotoRetryMessage) && (
+                        <div className="space-y-2">
+                          <button
+                            type="button"
+                            disabled={checkingSessionVideoStatus}
+                            onClick={async () => {
+                              const uploadId = extractVideoUploadId(sessionPhotoRetryMessage);
+                              if (!uploadId) return;
+
+                              setCheckingSessionVideoStatus(true);
+                              setSessionVideoStatusMessage('');
+
+                              try {
+                                setSessionVideoStatusMessage(
+                                  await checkVideoUploadStatus(uploadId)
+                                );
+                              } catch (err) {
+                                setSessionVideoStatusMessage(
+                                  (err instanceof Error ? err.message : '状態を確認できません') +
+                                  '。再送せず管理者に確認してください。'
+                                );
+                              } finally {
+                                setCheckingSessionVideoStatus(false);
+                              }
+                            }}
+                            className="rounded-lg border border-[#5e9bc4] px-3 py-2 text-xs font-bold text-[#4d85ab] disabled:opacity-50"
+                          >
+                            {checkingSessionVideoStatus
+                              ? '確認中...'
+                              : '🔍 動画の保存状態を確認'}
+                          </button>
+                          {sessionVideoStatusMessage && (
+                            <p role="status" className="text-xs text-slate-700">
+                              {sessionVideoStatusMessage}
+                            </p>
+                          )}
                         </div>
                       )}
                       {sessionPhotoRetryMessage.includes('検証・登録') && (
