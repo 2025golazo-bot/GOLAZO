@@ -137,7 +137,7 @@ export async function POST(request: Request) {
 
       const nasLoginStart = Date.now();
       const timingStart = Date.now();
-      const nas = await connectVideoNas();
+      const nas = await connectVideoNas(true);
       const timingLoginMs = Date.now() - timingStart;
 
       console.info(

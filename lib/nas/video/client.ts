@@ -8,7 +8,59 @@ const safeFetch: typeof fetch = (input, init = {}) => {
   return fetch(input, { ...init, headers });
 };
 
-export async function connectVideoNas() {
+let cachedNas: UgosClient | null = null;
+let cachedAt = 0;
+let pendingConnection: Promise<UgosClient> | null = null;
+const NAS_CACHE_MS = 60_000;
+
+export async function connectVideoNas(
+  reuseSession = false
+): Promise<UgosClient> {
+  if (!reuseSession) {
+    return loginVideoNas();
+  }
+
+  if (pendingConnection) {
+    return pendingConnection;
+  }
+
+  const connection = (async (): Promise<UgosClient> => {
+    const candidate = cachedNas;
+
+    if (candidate && Date.now() - cachedAt < NAS_CACHE_MS) {
+      try {
+        if (await candidate.checkLogin()) {
+          console.info("[VIDEO_TIMING] NAS session reused");
+          return candidate;
+        }
+      } catch {
+        // 認証確認に失敗した場合は通常ログインへ戻す
+      }
+    }
+
+    if (cachedNas === candidate) {
+      cachedNas = null;
+      cachedAt = 0;
+    }
+
+    const client = await loginVideoNas();
+    cachedNas = client;
+    cachedAt = Date.now();
+    return client;
+  })();
+
+  pendingConnection = connection;
+
+  try {
+    return await connection;
+  } finally {
+    if (pendingConnection === connection) {
+      pendingConnection = null;
+    }
+  }
+}
+
+async function loginVideoNas(): Promise<UgosClient> {
   const uglinkid = process.env.NAS_UGLINK_ID;
   const username = process.env.NAS_USERNAME;
   const password = process.env.NAS_PASSWORD;
