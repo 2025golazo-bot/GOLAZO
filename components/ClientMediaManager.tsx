@@ -133,7 +133,31 @@ export default function ClientMediaManager({
     if (!clientId || busyId) return;
 
     if (item.media_type === 'video' && item.storage_path.startsWith('nas:')) {
-      setError('NAS動画の削除機能は準備中です。動画は削除されていません');
+      if (!window.confirm(`「${item.file_name}」を削除しますか？\nNASのゴミ箱へ移動し、カルテから削除します。`)) return;
+
+      setBusyId(item.id);
+      setError('');
+
+      try {
+        const response = await fetch('/api/nas-client-video/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaId: item.id, clientId }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || 'NAS動画の削除に失敗しました');
+        }
+
+        setEditingId(null);
+        setRefreshKey(value => value + 1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '動画の削除に失敗しました');
+      } finally {
+        setBusyId(null);
+      }
       return;
     }
 
