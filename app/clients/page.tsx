@@ -5294,9 +5294,37 @@ export default function ClientsPage() {
                   )}
 
                   {sessionPhotoRetryMessage && (
-                    <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-slate-800 whitespace-pre-wrap">
-                      {sessionPhotoRetryMessage}
-                    </p>
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3"
+                    >
+                      <p className="text-xs text-slate-800 whitespace-pre-wrap">
+                        {sessionPhotoRetryMessage}
+                      </p>
+                      {/^(動画の準備中|NASへ動画を送信中) \d+%$/.test(sessionPhotoRetryMessage) && (
+                        <div
+                          role="progressbar"
+                          aria-label="セッション動画のアップロード進捗"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.min(100, Number(sessionPhotoRetryMessage.match(/(\d+)%$/)?.[1] ?? 0))}
+                          className="h-3 w-full overflow-hidden rounded-full bg-slate-200"
+                        >
+                          <div
+                            className="h-full rounded-full bg-[#5e9bc4] transition-all duration-300"
+                            style={{
+                              width: `${Math.min(100, Number(sessionPhotoRetryMessage.match(/(\d+)%$/)?.[1] ?? 0))}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      {sessionPhotoRetryMessage.includes('検証・登録') && (
+                        <p className="text-xs font-semibold text-[#4d85ab]">
+                          送信完了。NASで保存確認中です。このままお待ちください。
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   {/* 新規セッション内の定期測定入力欄 */}

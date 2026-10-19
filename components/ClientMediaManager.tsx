@@ -290,7 +290,35 @@ export default function ClientMediaManager({
           {orderedSessions.length === 0 && (
             <p className="text-xs text-slate-500">先にセッション履歴を登録してください。</p>
           )}
-          {uploadMessage && <p className="text-xs text-green-700">{uploadMessage}</p>}
+          {uploadMessage && (
+            <div className="space-y-2" aria-live="polite">
+              <p className="text-xs font-semibold text-slate-700">
+                {uploadMessage}
+              </p>
+              {uploading && /^(動画の準備中|NASへ動画を送信中) \d+%$/.test(uploadMessage) && (
+                <div
+                  className="h-3 w-full overflow-hidden rounded-full bg-slate-200"
+                  role="progressbar"
+                  aria-label="動画アップロードの進捗"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.min(100, Number(uploadMessage.match(/(\d+)%$/)?.[1] ?? 0))}
+                >
+                  <div
+                    className="h-full rounded-full bg-[#5e9bc4] transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, Number(uploadMessage.match(/(\d+)%$/)?.[1] ?? 0))}%`,
+                    }}
+                  />
+                </div>
+              )}
+              {uploading && uploadMessage.includes('検証・登録') && (
+                <p className="text-xs text-[#4d85ab]">
+                  送信完了。保存確認中です。このままお待ちください。
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
       {!clientId ? (
